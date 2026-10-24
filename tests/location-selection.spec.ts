@@ -274,7 +274,7 @@ test('disambiguates same-name manual history only while both rows are visible, a
   const first = {
     ...original, id: 'geonames:9110001', cityId: 9110001, selection: 'city',
     name: 'Киров, Новый, Регион А, Россия', cityName: 'Киров, Новый',
-    region: { code: 'RU.48', name: 'Регион А' },
+    region: { code: 'RU.48', name: 'Регион А' }, coverage: 'outside',
     latitude: 55.5, longitude: 49.5, timestamp: 10,
   }
   const second = {
