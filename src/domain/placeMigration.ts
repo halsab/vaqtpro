@@ -25,6 +25,7 @@ function validNearbyCity(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const city = value as Record<string, unknown>
   if (!Number.isInteger(city.id) || typeof city.name !== 'string'
+    || (city.cityName !== undefined && typeof city.cityName !== 'string')
     || typeof city.distanceKm !== 'number' || !Number.isFinite(city.distanceKm)
     || city.distanceKm < 0) return false
   return true
@@ -36,7 +37,8 @@ export function isRestorablePlace(value: unknown): value is RestorablePlace {
   const selection = (value as { selection?: unknown }).selection
   const legacyOverride = (value as { timeZoneOverride?: unknown }).timeZoneOverride
   return Boolean(restoreSavedCoordinates(value) && typeof place.id === 'string' && place.id
-    && typeof place.name === 'string' && ['gps', 'city', 'official'].includes(String(selection))
+    && typeof place.name === 'string' && (place.cityName === undefined || typeof place.cityName === 'string')
+    && ['gps', 'city', 'official'].includes(String(selection))
     && ['inside', 'outside', 'uncertain', 'unavailable'].includes(place.coverage ?? '')
     && (place.region === null || (place.region && typeof place.region.code === 'string' && typeof place.region.name === 'string'))
     && (place.nearbyCity === undefined || validNearbyCity(place.nearbyCity))
