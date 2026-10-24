@@ -65,7 +65,8 @@ describe('collision-only recent manual labels', () => {
 
   it('retains full legacy manual labels with commas rather than making up a city name', () => {
     const original = city(100, 'Регион, Север', 55, 49)
-    const legacy = { ...original, cityName: undefined }
+    const legacy = { ...original }
+    delete legacy.cityName
     expect(recentManualTitle(legacy, 'ru')).toBe('Киров, Новый, Регион, Север, Россия')
     expect(recentManualDisambiguation(legacy, [legacy], 'ru')).toBeNull()
   })
