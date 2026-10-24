@@ -200,3 +200,60 @@ test('GPS refinement retains its snapshot identity across tab changes and offlin
     await context.setOffline(false)
   }
 })
+
+
+test('restores a GPS city name containing commas from local history while offline', async ({ context, page }) => {
+  await page.goto('./')
+  await choosePlace(page)
+  const history = await readSavedSetting(page, 'recentPlaces') as Array<Record<string, unknown>>
+  expect(history).toHaveLength(1)
+  const point = {
+    ...history[0],
+    id: 'gps:history:55.750000:37.610000',
+    selection: 'gps',
+    name: 'Остров, Северный',
+    latitude: 55.75, longitude: 37.61, accuracy: 20, timestamp: Date.now(),
+    nearbyCity: {
+      id: 123, name: 'Остров, Северный, Регион, Россия',
+      cityName: 'Остров, Северный', distanceKm: 0,
+      countryCode: 'RU', latitude: 55.75, longitude: 37.61,
+    },
+    automaticTimeZone: { id: 'Europe/Moscow', source: 'device' },
+    timeZone: 'Europe/Moscow',
+  }
+  // Seed exactly the persisted shape. No catalog request or live location acquisition
+  // should be needed to restore the metadata.
+  await page.evaluate(async entries => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('salah')
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const db = request.result
+        const transaction = db.transaction('settings', 'readwrite')
+        transaction.objectStore('settings').put({ key: 'recentPlaces', value: entries })
+        transaction.oncomplete = () => { db.close(); resolve() }
+        transaction.onabort = () => { db.close(); reject(transaction.error) }
+      }
+    })
+  }, [history[0], point])
+
+  await page.evaluate(async () => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+  await context.setOffline(true)
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.locator('#home-location').click()
+    const row = page.getByRole('button', { name: 'Остров, Северный · GPS, 55.7500, 37.6100' })
+    await expect(row).toBeVisible()
+    await row.focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
+      place: { id: 'gps:history:55.750000:37.610000', selection: 'gps',
+        latitude: 55.75, longitude: 37.61,
+        nearbyCity: { cityName: 'Остров, Северный' } },
+    })
+  } finally {
+    await context.setOffline(false)
+  }
+})
