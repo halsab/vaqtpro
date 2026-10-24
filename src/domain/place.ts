@@ -165,7 +165,10 @@ export function gpsCountryCode(place: Pick<Place, 'selection'> & Partial<Pick<Pl
 
 export function homePlaceLabel(place: Place | null, unknownLabel = 'Местоположение не определено'): string {
   if (!place || !validPosition(place)) return unknownLabel
-  const name = place.name.replace(/^Рядом:\s*/u, '').split(',')[0]?.trim()
+  // Structured names preserve legitimate commas both after direct selection and offline recall.
+  // Legacy unstructured labels remain complete rather than being truncated ambiguously.
+  const structuredName = place.selection === 'gps' ? place.nearbyCity?.cityName : place.cityName
+  const name = (structuredName || place.name.replace(/^Рядом:\s*/u, '')).trim()
   if (name && name !== 'Моё местоположение') return name
   return `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`
 }
