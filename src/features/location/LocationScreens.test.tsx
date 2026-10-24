@@ -1,8 +1,9 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { failure, success } from '../../domain/result'
 import { createCityPlace, createGpsPlace, createLocalityPlace, withNearbyCity } from '../../domain/place'
+import { restoreRecentPlaces } from '../../domain/recentPlaces'
 import type { CitySearchResult } from '../../data/cityCatalog'
 import { LocationScreen, SearchScreen } from './LocationScreens'
 const location = { id: 'kazan', name: 'Казань', latitude: 55.79, longitude: 49.11 }
@@ -147,6 +148,57 @@ describe('экраны локации', () => {
     expect(onSelectRecent).toHaveBeenCalledWith(gpsWithLegacyName)
     expect(namedGps.latitude).toBe(55.7231)
     expect(namedGps.longitude).toBe(49.1742)
+  })
+  it('preserves comma-containing names for both restored manual and GPS history including keyboard access', async () => {
+    const compoundName = 'Остров, Северный'
+    const manual = createCityPlace({ ...city, id: 42, name: compoundName, admin1Name: 'Регион, Восток' }, 100)
+    const gps = withNearbyCity(createGpsPlace({ latitude: 55.75, longitude: 37.61, accuracy: 40, timestamp: 200 },
+      'Europe/Moscow', null, 'gps:history:compound'), { ...city, id: 42, name: compoundName, admin1Name: 'Регион, Восток' })
+    const restored = restoreRecentPlaces([manual, gps])
+    const onSelectRecent = vi.fn()
+    render(<LocationScreen place={createLocalityPlace(location, 0)} recentPlaces={restored}
+      onSelectRecent={onSelectRecent} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
+    const history = screen.getByRole('region', { name: 'Недавние места' })
+    const manualRow = within(history).getByRole('button', { name: compoundName })
+    const gpsRow = within(history).getByRole('button', { name: 'Остров, Северный · GPS, 55.7500, 37.6100' })
+    expect(manualRow).toHaveTextContent(compoundName)
+    expect(manualRow).not.toHaveTextContent('Регион, Восток')
+    expect(gpsRow).toHaveTextContent(compoundName + ' · GPS')
+    expect(gpsRow).toHaveTextContent('55.7500, 37.6100')
+    manualRow.focus()
+    expect(manualRow).toHaveFocus()
+    await userEvent.keyboard('{Enter}')
+    expect(onSelectRecent).toHaveBeenCalledWith(restored[0])
+    gpsRow.focus()
+    await userEvent.keyboard(' ')
+    expect(onSelectRecent).toHaveBeenCalledWith(restored[1])
+    expect(restored[0]).toMatchObject({ cityName: compoundName, cityId: 42 })
+    expect(restored[1]).toMatchObject({ nearbyCity: { cityName: compoundName }, latitude: 55.75, longitude: 37.61 })
+  })
+  it('preserves full legacy labels when structured metadata is absent rather than truncating at commas', () => {
+    const original = createCityPlace({ ...city, id: 88, name: 'Порт, Старый' }, 10)
+    const gps = withNearbyCity(createGpsPlace({ latitude: city.latitude, longitude: city.longitude, accuracy: 20, timestamp: 20 },
+      'Europe/Moscow', null, 'gps:history:legacy'), { ...city, name: 'Порт, Старый' })
+    const old = restoreRecentPlaces([{ ...original, cityName: undefined },
+      { ...gps, nearbyCity: { ...gps.nearbyCity, cityName: undefined } }])
+    render(<LocationScreen place={createLocalityPlace(location, 0)} recentPlaces={old}
+      onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
+    const rows = within(screen.getByRole('region', { name: 'Недавние места' })).getAllByRole('button')
+    expect(rows[0]).toHaveTextContent('Порт, Старый, Москва, Россия')
+    expect(rows[1]).toHaveTextContent('Порт, Старый, Москва, Россия · GPS')
+  })
+  it('keeps equal-name GeoNames rows as distinct selectable identities; visual disambiguation needs product approval', async () => {
+    const a = createCityPlace({ ...city, id: 201, name: 'Киров', admin1Name: 'Регион А' }, 100)
+    const b = createCityPlace({ ...city, id: 202, name: 'Киров', admin1Name: 'Регион Б', longitude: 48 }, 200)
+    const restored = restoreRecentPlaces([a, b])
+    const onSelectRecent = vi.fn()
+    render(<LocationScreen place={createLocalityPlace(location, 0)} recentPlaces={restored}
+      onSelectRecent={onSelectRecent} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
+    const rows = within(screen.getByRole('region', { name: 'Недавние места' })).getAllByRole('button', { name: 'Киров' })
+    expect(rows).toHaveLength(2)
+    expect(restored.map(item => item.id)).toEqual(['geonames:201', 'geonames:202'])
+    await userEvent.click(rows[1]!)
+    expect(onSelectRecent).toHaveBeenCalledWith(restored[1])
   })
   it('не показывает текущую GPS history row дважды и не ограничивает список тремя строками', () => {
     const current = createGpsPlace({ latitude: 40, longitude: -73, accuracy: 20, timestamp: 100 }, 'Europe/Moscow', null, 'gps:runtime')
