@@ -433,6 +433,22 @@ describe('one-shot GPS operations', () => {
     expect(h.services.cities.findNearest).not.toHaveBeenCalled()
     expect(h.services.getPosition).not.toHaveBeenCalled()
   })
+  it('commits a late nearby-city name as an in-place refinement for the accepted GPS fix', async () => {
+    const h = setup()
+    let pending!: Promise<void>
+    act(() => { pending = h.result.current.locate() })
+    await act(async () => { h.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    expect(h.persist.mock.calls.some(([, change]) => change === 'selection')).toBe(true)
+    await act(async () => {
+      h.lookup.resolve(success({ ...city, name: 'Казань', latitude: goodCoarseFix.latitude, longitude: goodCoarseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place).toMatchObject({ name: 'Казань', ...goodCoarseFix })
+    expect(h.persist.mock.calls.some(([choice, change]) =>
+      change === 'refinement' && choice?.place?.name === 'Казань'
+      && choice.place.latitude === goodCoarseFix.latitude && choice.place.longitude === goodCoarseFix.longitude)).toBe(true)
+    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await pending })
+  })
   it('ignores an obsolete nearest-city result after GPS refinement starts a newer lookup', async () => {
     const first = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
     const second = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()

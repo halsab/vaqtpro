@@ -121,7 +121,7 @@ export function rememberPlace(recent: Place[], selected: Place): Place[] {
 /** Обогащает GPS-снимок только после подтверждения его связи с принятой операцией. */
 export function updateRecentPlace(recent: Place[], selected: Place, historyId?: string): Place[] {
   if (selected.selection !== 'gps') return recent
-  const matched = historyId ? recent.find(place => place.id === historyId) : findGpsMatch(recent, selected)
+  const matched = historyId ? recent.find(place => place.selection === 'gps' && place.id === historyId) : findGpsMatch(recent, selected)
   if (!matched) return recent
   const normalized = canonicalPlace({ ...selected, id: matched.id })
   return recent.flatMap(place => {

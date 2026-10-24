@@ -40,7 +40,6 @@ function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
       const past = live && !active && event.instant <= now.getTime()
       return <li key={event.key} className={`event-row${past ? ' event-past' : ''}${active ? ' event-current' : ''}`} aria-current={active || undefined}>
         <div className="event-name"><span>{t(LABELS[event.key])}</span>
-          {event.key === 'zenith' ? <small className="event-provenance">{t('calculatedZenith')}</small> : null}
           {event.dayOffset ? <small className="event-day">{formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale)}</small> : null}
         </div>
         <time dateTime={new Date(event.instant).toISOString()}>{estimated(event, [schedule])

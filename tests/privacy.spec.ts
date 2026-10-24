@@ -21,7 +21,7 @@ test('геопозиция остаётся локальной и не отпр�
   await context.setOffline(true)
   try {
     await page.locator('#home-location').click()
-    const savedPoint = page.getByRole('button', { name: `Сохранённая точка, ${latitude.toFixed(4)}, ${longitude.toFixed(4)}` })
+    const savedPoint = page.getByRole('button', { name: new RegExp(`(?:Точка|· GPS), ${latitude.toFixed(4)}, ${longitude.toFixed(4)}$`) })
     await expect(savedPoint).toBeVisible()
     await savedPoint.click()
     await page.locator('#home-location').click()

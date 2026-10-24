@@ -32,6 +32,16 @@ describe('calculated schedule view', () => {
     expect(screen.getByRole('button', { name: 'Сегодня' })).toBeVisible()
   })
 
+  it('renders solar zenith without redundant calculated label while preserving its time and event semantics', () => {
+    render(<ScheduleContent {...base} />)
+    const zenith = screen.getByText('Зенит').closest('li')
+    expect(zenith).not.toBeNull()
+    expect(zenith).toHaveTextContent(day.entries.zenith.time)
+    expect(zenith).not.toHaveTextContent('расчётное')
+    expect(zenith?.querySelector('.event-provenance')).toBeNull()
+    expect(screen.getAllByRole('listitem')).toHaveLength(7)
+    expect(zenith?.querySelector('time')).toHaveAttribute('datetime', new Date(day.entries.zenith.instant).toISOString())
+  })
   it('shows calculated prayers without obsolete congregation times', () => {
     render(<ScheduleContent {...base} />)
     expect(screen.getByRole('list')).toBeVisible()

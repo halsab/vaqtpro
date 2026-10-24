@@ -14,6 +14,7 @@ import type { SupportedLocale } from '../../localization/locale'
 import { localizedCityLabel, localizedCityRegion } from '../../localization/place'
 import { getUtcOffset } from '../../domain/locationTime'
 import { isSameRecentPlace } from '../../domain/recentPlaces'
+import { recentManualDisambiguation, recentManualTitle } from './recentPlaceLabels'
 
 const idleGpsState: GpsUiState = { status: 'idle' }
 
@@ -60,10 +61,26 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
       {error ? <p className="note" role="alert">{error}</p> : null}
     </div>
     {recent.length ? <section className="screen-space" aria-label={t('recentPlaces')}><p className="screen-heading">{t('recent')}</p><div className="screen-stack screen-space">
-      {recent.map(item => item.selection === 'gps'
-        ? <ActionRow key={item.id} title={t('savedPoint')} secondary={<span className="note">{formatCoordinates(item.latitude, item.longitude)}</span>}
-            aria-label={`${t('savedPoint')}, ${formatCoordinates(item.latitude, item.longitude)}`} onClick={() => onSelectRecent(item)} />
-        : <ActionRow key={item.id} title={compactPlaceLabel(item.name, locale)} onClick={() => onSelectRecent(item)} />)}
+      {recent.map(item => {
+        if (item.selection === 'gps') {
+          // Название nearby city — только подпись снимка, координаты остаются исходными GPS.
+          const cityName = item.nearbyCity && item.nearbyCity.distanceKm <= 25
+            ? (item.nearbyCity.cityName?.trim() || item.nearbyCity.name.trim())
+            : ''
+          const title = cityName ? t('recentGpsCity', { name: cityName }) : t('recentPoint')
+          const coordinates = formatCoordinates(item.latitude, item.longitude)
+          return <ActionRow key={item.id} title={title} secondary={<span className="note">{coordinates}</span>}
+            aria-label={`${title}, ${coordinates}`} onClick={() => onSelectRecent(item)} />
+        }
+        const title = recentManualTitle(item, locale)
+        const disambiguation = recentManualDisambiguation(item, recent, locale)
+        return <ActionRow key={item.id} title={title}
+          {...(disambiguation ? {
+            secondary: <span className="note">{disambiguation}</span>,
+            'aria-label': `${title}, ${disambiguation}`,
+          } : {})}
+          onClick={() => onSelectRecent(item)} />
+      })}
     </div></section> : null}
     {notice}
   </Screen>

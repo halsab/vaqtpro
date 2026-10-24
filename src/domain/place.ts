@@ -8,12 +8,16 @@ export interface Place extends SavedCoordinates {
   id: string
   selection: 'gps' | 'city'
   name: string
+  /** Unformatted catalog name; never derive it by splitting a display label. */
+  cityName?: string
   region: { code: string; name: string } | null
   coverage: Coverage
   automaticTimeZone: { id: string; source: 'city' | 'device' | 'legacy' }
   nearbyCity?: {
     id: number
     name: string
+    /** Original unformatted nearby-city name, which can itself contain commas. */
+    cityName?: string
     distanceKm: number
     countryCode?: string
     latitude?: number
@@ -52,7 +56,7 @@ export function createCityPlace(city: City, timestamp: number): Place {
       : null
   return {
     id: `geonames:${city.id}`, selection: 'city', cityId: city.id,
-    name: formatCityLabel(city), latitude: city.latitude, longitude: city.longitude,
+    name: formatCityLabel(city), cityName: city.name, latitude: city.latitude, longitude: city.longitude,
     accuracy: null, timestamp, timeZone: city.timeZone,
     automaticTimeZone: { id: city.timeZone, source: 'city' },
     region,
@@ -83,7 +87,7 @@ export function refineGpsPlace(place: Place, fix: Fix, deviceZone: string, geome
 }
 
 export function withNearbyCity(place: Place, city: City | null): Place {
-  if (!city) return place
+  if (!city || !city.name.trim()) return place
   const distanceKm = haversineDistanceKm(place.latitude, place.longitude, city.latitude, city.longitude)
   if (distanceKm > 25) return place
   const countryCode = /^[A-Z]{2}$/.test(city.countryCode)
@@ -96,6 +100,7 @@ export function withNearbyCity(place: Place, city: City | null): Place {
     nearbyCity: {
       id: city.id,
       name: formatCityLabel(city),
+      cityName: city.name,
       distanceKm,
       // Храним координаты города, чтобы перепроверить country hint при восстановлении и GPS refinement.
       ...(countryCode ? { countryCode, latitude: city.latitude, longitude: city.longitude } : {}),
@@ -160,7 +165,10 @@ export function gpsCountryCode(place: Pick<Place, 'selection'> & Partial<Pick<Pl
 
 export function homePlaceLabel(place: Place | null, unknownLabel = 'Местоположение не определено'): string {
   if (!place || !validPosition(place)) return unknownLabel
-  const name = place.name.replace(/^Рядом:\s*/u, '').split(',')[0]?.trim()
+  // Structured names preserve legitimate commas both after direct selection and offline recall.
+  // Legacy unstructured labels remain complete rather than being truncated ambiguously.
+  const structuredName = place.selection === 'gps' ? place.nearbyCity?.cityName : place.cityName
+  const name = (structuredName || place.name.replace(/^Рядом:\s*/u, '')).trim()
   if (name && name !== 'Моё местоположение') return name
   return `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`
 }

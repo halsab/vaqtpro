@@ -191,11 +191,138 @@ test('GPS refinement retains its snapshot identity across tab changes and offlin
   await context.setOffline(true)
   try {
     await page.locator('#home-location').click()
-    await page.getByRole('button', { name: 'Сохранённая точка, 41.0300, 28.9500' }).click()
+    await page.getByRole('button', { name: /(?:Точка|· GPS), 41\.0300, 28\.9500$/ }).click()
     await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({ place: {
       id: 'gps:history:41.010000:28.950000', latitude: 41.03, longitude: 28.95, accuracy: 10, timestamp: capturedAt + 1,
     } })
     expect(await page.evaluate(() => (window as Window & { __gpsCallbacks: unknown[] }).__gpsCallbacks.length)).toBe(4)
+  } finally {
+    await context.setOffline(false)
+  }
+})
+
+
+test('restores a GPS city name containing commas from local history while offline', async ({ context, page }) => {
+  await page.goto('./')
+  await choosePlace(page)
+  await expect.poll(async () => (await readSavedSetting(page, 'recentPlaces') as unknown[] | undefined)?.length).toBe(1)
+  const history = await readSavedSetting(page, 'recentPlaces') as Array<Record<string, unknown>>
+  expect(history).toHaveLength(1)
+  const point = {
+    ...history[0],
+    id: 'gps:history:55.750000:37.610000',
+    selection: 'gps',
+    name: 'Остров, Северный',
+    region: null, coverage: 'unavailable',
+    latitude: 55.75, longitude: 37.61, accuracy: 20, timestamp: Date.now(),
+    nearbyCity: {
+      id: 123, name: 'Остров, Северный, Регион, Россия',
+      cityName: 'Остров, Северный', distanceKm: 0,
+      countryCode: 'RU', latitude: 55.75, longitude: 37.61,
+    },
+    automaticTimeZone: { id: 'Europe/Moscow', source: 'device' },
+    timeZone: 'Europe/Moscow',
+  }
+  // GPS captures must not inherit a selected city's catalog identity.
+  delete point.cityId
+  delete point.cityName
+  // Seed exactly the persisted shape. No catalog request or live location acquisition
+  // should be needed to restore the metadata.
+  await page.evaluate(async entries => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('salah')
+      request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'))
+      request.onsuccess = () => {
+        const db = request.result
+        const transaction = db.transaction('settings', 'readwrite')
+        transaction.objectStore('settings').put({ key: 'recentPlaces', value: entries })
+        transaction.oncomplete = () => { db.close(); resolve() }
+        transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error('IndexedDB write failed')) }
+      }
+    })
+  }, [history[0], point])
+
+  await page.evaluate(async () => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+  await context.setOffline(true)
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.locator('#home-location').click()
+    const row = page.getByRole('button', { name: 'Остров, Северный · GPS, 55.7500, 37.6100' })
+    await expect(row).toBeVisible()
+    await row.focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
+      place: { id: 'gps:history:55.750000:37.610000', selection: 'gps',
+        latitude: 55.75, longitude: 37.61,
+        nearbyCity: { cityName: 'Остров, Северный' } },
+    })
+  } finally {
+    await context.setOffline(false)
+  }
+})
+
+
+test('disambiguates same-name manual history only while both rows are visible, at 320px and offline', async ({ context, page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.goto('./')
+  await choosePlace(page)
+  await expect.poll(async () => (await readSavedSetting(page, 'recentPlaces') as unknown[] | undefined)?.length).toBe(1)
+  const history = await readSavedSetting(page, 'recentPlaces') as Array<Record<string, unknown>>
+  const original = history[0]
+  const first = {
+    ...original, id: 'geonames:9110001', cityId: 9110001, selection: 'city',
+    name: 'Киров, Новый, Регион А, Россия', cityName: 'Киров, Новый',
+    region: { code: 'RU.48', name: 'Регион А' }, coverage: 'outside',
+    latitude: 55.5, longitude: 49.5, timestamp: 10,
+  }
+  const second = {
+    ...original, id: 'geonames:9110002', cityId: 9110002, selection: 'city',
+    name: 'Киров, Новый, Регион Б, Россия', cityName: 'Киров, Новый',
+    region: { code: 'RU.48', name: 'Регион Б' }, coverage: 'outside',
+    latitude: 56.5, longitude: 48.5, timestamp: 20,
+  }
+  await page.evaluate(async entries => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('salah')
+      request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'))
+      request.onsuccess = () => {
+        const db = request.result
+        const transaction = db.transaction('settings', 'readwrite')
+        transaction.objectStore('settings').put({ key: 'recentPlaces', value: entries })
+        transaction.oncomplete = () => { db.close(); resolve() }
+        transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error('IndexedDB write failed')) }
+      }
+    })
+  }, [original, first, second])
+  await page.evaluate(async () => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+
+  await context.setOffline(true)
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.locator('#home-location').click()
+    const recent = page.getByRole('region', { name: 'Недавние места' })
+    const a = recent.getByRole('button', { name: 'Киров, Новый, Регион А' })
+    const b = recent.getByRole('button', { name: 'Киров, Новый, Регион Б' })
+    await expect(a).toBeVisible()
+    await expect(b).toBeVisible()
+    await expect(recent.getByRole('button', { name: 'Казань' })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await b.focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
+      place: { id: 'geonames:9110002', cityId: 9110002, cityName: 'Киров, Новый',
+        latitude: 56.5, longitude: 48.5 },
+    })
+    await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+    await page.locator('#home-location').click()
+    const historyAfter = page.getByRole('region', { name: 'Недавние места' })
+    // Collision is gone because the newly selected place is excluded.
+    await expect(historyAfter.getByRole('button', { name: 'Киров, Новый', exact: true })).toBeVisible()
+    await expect(historyAfter.getByRole('button', { name: 'Киров, Новый, Регион А' })).toHaveCount(0)
   } finally {
     await context.setOffline(false)
   }

@@ -1075,7 +1075,7 @@ describe('VaqtPro', () => {
       await act(async () => { optional.resolve(loaded); await optional.promise })
       await chooseCity('Москва', /Москва/, 'Стамбул')
       await userEvent.click(screen.getByRole('button', { name: 'Москва' }))
-      await userEvent.click(within(screen.getByRole('region', { name: 'Недавние места' })).getByRole('button', { name: 'Сохранённая точка, 41.0300, 28.9500' }))
+      await userEvent.click(within(screen.getByRole('region', { name: 'Недавние места' })).getByRole('button', { name: 'Стамбул · GPS, 41.0300, 28.9500' }))
       expect(services.getPosition).toHaveBeenCalledTimes(2)
       await waitFor(async () => expect(await getLocationChoice()).toMatchObject({ value: { source: 'manual', place: {
         latitude: 41.03, longitude: 28.95, accuracy: 10, timestamp: 200,
@@ -1177,7 +1177,7 @@ describe('VaqtPro', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Казань' }))
     await userEvent.click(screen.getByRole('button', { name: 'По геопозиции' }))
     await act(async () => { coarse.resolve(success({ ...savedGps, timestamp: 200 })); await Promise.resolve() })
-    expect(await screen.findByRole('button', { name: 'Сохранённая точка, 41.0100, 28.9500' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Точка, 41.0100, 28.9500' })).toBeVisible()
     expect(saveSettings.mock.calls.flatMap(([patch]) => selectedPlaces(patch))).not.toContainEqual(expect.objectContaining({ timestamp: 200 }))
   })
 
