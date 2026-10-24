@@ -21,7 +21,30 @@ test('геопозиция остаётся локальной и не отпр�
   await context.setOffline(true)
   try {
     await page.locator('#home-location').click()
-    const savedPoint = page.getByRole('button', { name: `Сохранённая точка, ${latitude.toFixed(4)}, ${longitude.toFixed(4)}` })
+    const savedPoint = page.getByRole('button', { name: new RegExp(`(?:Точка|· GPS), ${latitude.toFixed(4)}, ${longitude.toFixed(4)}import { choosePlace, expectSchedule, readSavedSetting, expect, test } from './fixtures'
+
+test('геопозиция остаётся локальной и не отправляет координаты', async ({ context, page }) => {
+  const latitude = 55.812345
+  const longitude = 49.123456
+  const requests: { url: string; body: string }[] = []
+  context.on('request', request => requests.push({ url: request.url(), body: request.postData() ?? '' }))
+  await context.grantPermissions(['geolocation'])
+  await context.setGeolocation({ latitude, longitude, accuracy: 15 })
+
+  await page.goto('./')
+  await page.getByRole('button', { name: 'По геопозиции' }).click()
+  await expectSchedule(page)
+  await expect.poll(() => readSavedSetting(page, 'locationChoice'))
+    .toMatchObject({ place: { selection: 'gps', latitude, longitude, accuracy: 15 } })
+
+  await choosePlace(page, 'Казань', /Казань/)
+  const recentBeforeRecall = await readSavedSetting(page, 'recentPlaces')
+  expect(recentBeforeRecall).toEqual(expect.arrayContaining([expect.objectContaining({ selection: 'gps', latitude, longitude, accuracy: 15 })]))
+  await page.evaluate(async () => navigator.serviceWorker.ready)
+  await context.setOffline(true)
+  try {
+    await page.locator('#home-location').click()
+    ) })
     await expect(savedPoint).toBeVisible()
     await savedPoint.click()
     await page.locator('#home-location').click()
