@@ -226,13 +226,13 @@ test('restores a GPS city name containing commas from local history while offlin
   await page.evaluate(async entries => {
     await new Promise<void>((resolve, reject) => {
       const request = indexedDB.open('salah')
-      request.onerror = () => reject(request.error)
+      request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'))
       request.onsuccess = () => {
         const db = request.result
         const transaction = db.transaction('settings', 'readwrite')
         transaction.objectStore('settings').put({ key: 'recentPlaces', value: entries })
         transaction.oncomplete = () => { db.close(); resolve() }
-        transaction.onabort = () => { db.close(); reject(transaction.error) }
+        transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error('IndexedDB write failed')) }
       }
     })
   }, [history[0], point])
