@@ -64,14 +64,16 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
         if (item.selection === 'gps') {
           // Название nearby city — только подпись снимка, координаты остаются исходными GPS.
           const cityName = item.nearbyCity && item.nearbyCity.distanceKm <= 25
-            ? item.nearbyCity.name.split(',')[0]?.trim()
+            ? (item.nearbyCity.cityName?.trim() || item.nearbyCity.name.trim())
             : ''
           const title = cityName ? t('recentGpsCity', { name: cityName }) : t('recentPoint')
           const coordinates = formatCoordinates(item.latitude, item.longitude)
           return <ActionRow key={item.id} title={title} secondary={<span className="note">{coordinates}</span>}
             aria-label={`${title}, ${coordinates}`} onClick={() => onSelectRecent(item)} />
         }
-        const title = item.id.startsWith('geonames:') ? item.name.split(',')[0]?.trim() || item.name
+        // Older entries without structured metadata retain their complete label;
+        // never truncate a real city name at an embedded comma.
+        const title = item.id.startsWith('geonames:') ? (item.cityName?.trim() || item.name)
           : compactPlaceLabel(item.name, locale)
         return <ActionRow key={item.id} title={title} onClick={() => onSelectRecent(item)} />
       })}
