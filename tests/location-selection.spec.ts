@@ -213,6 +213,7 @@ test('restores a GPS city name containing commas from local history while offlin
     id: 'gps:history:55.750000:37.610000',
     selection: 'gps',
     name: 'Остров, Северный',
+    region: null, coverage: 'unavailable',
     latitude: 55.75, longitude: 37.61, accuracy: 20, timestamp: Date.now(),
     nearbyCity: {
       id: 123, name: 'Остров, Северный, Регион, Россия',
@@ -222,6 +223,9 @@ test('restores a GPS city name containing commas from local history while offlin
     automaticTimeZone: { id: 'Europe/Moscow', source: 'device' },
     timeZone: 'Europe/Moscow',
   }
+  // GPS captures must not inherit a selected city's catalog identity.
+  delete point.cityId
+  delete point.cityName
   // Seed exactly the persisted shape. No catalog request or live location acquisition
   // should be needed to restore the metadata.
   await page.evaluate(async entries => {
