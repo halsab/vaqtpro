@@ -280,7 +280,7 @@ test('disambiguates same-name manual history only while both rows are visible, a
   const second = {
     ...original, id: 'geonames:9110002', cityId: 9110002, selection: 'city',
     name: 'Киров, Новый, Регион Б, Россия', cityName: 'Киров, Новый',
-    region: { code: 'RU.48', name: 'Регион Б' },
+    region: { code: 'RU.48', name: 'Регион Б' }, coverage: 'outside',
     latitude: 56.5, longitude: 48.5, timestamp: 20,
   }
   await page.evaluate(async entries => {
