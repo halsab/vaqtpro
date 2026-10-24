@@ -205,6 +205,7 @@ test('GPS refinement retains its snapshot identity across tab changes and offlin
 test('restores a GPS city name containing commas from local history while offline', async ({ context, page }) => {
   await page.goto('./')
   await choosePlace(page)
+  await expect.poll(async () => (await readSavedSetting(page, 'recentPlaces') as unknown[] | undefined)?.length).toBe(1)
   const history = await readSavedSetting(page, 'recentPlaces') as Array<Record<string, unknown>>
   expect(history).toHaveLength(1)
   const point = {
