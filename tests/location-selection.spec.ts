@@ -191,7 +191,7 @@ test('GPS refinement retains its snapshot identity across tab changes and offlin
   await context.setOffline(true)
   try {
     await page.locator('#home-location').click()
-    await page.getByRole('button', { name: 'Точка, 41.0300, 28.9500' }).click()
+    await page.getByRole('button', { name: /(?:Точка|· GPS), 41\.0300, 28\.9500$/ }).click()
     await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({ place: {
       id: 'gps:history:41.010000:28.950000', latitude: 41.03, longitude: 28.95, accuracy: 10, timestamp: capturedAt + 1,
     } })
