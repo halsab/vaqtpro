@@ -197,7 +197,9 @@ describe('экраны локации', () => {
     const rows = within(screen.getByRole('region', { name: 'Недавние места' })).getAllByRole('button', { name: 'Киров' })
     expect(rows).toHaveLength(2)
     expect(restored.map(item => item.id)).toEqual(['geonames:201', 'geonames:202'])
-    await userEvent.click(rows[1]!)
+    const secondRow = rows.at(1)
+    if (!secondRow) throw new Error('Expected distinct recent-place row')
+    await userEvent.click(secondRow)
     expect(onSelectRecent).toHaveBeenCalledWith(restored[1])
   })
   it('не показывает текущую GPS history row дважды и не ограничивает список тремя строками', () => {
