@@ -175,6 +175,14 @@ describe('экраны локации', () => {
     expect(restored[0]).toMatchObject({ cityName: compoundName, cityId: 42 })
     expect(restored[1]).toMatchObject({ nearbyCity: { cityName: compoundName }, latitude: 55.75, longitude: 37.61 })
   })
+  it('does not abbreviate a legitimate locality name ending in a country-like suffix', () => {
+    const name = 'Посёлок, Россия'
+    render(<LocationScreen place={createLocalityPlace(location, 0)}
+      recentPlaces={[createLocalityPlace({ ...location, id: 'compound-locality', name }, 100)]}
+      onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
+    expect(within(screen.getByRole('region', { name: 'Недавние места' }))
+      .getByRole('button', { name })).toHaveTextContent(name)
+  })
   it('preserves full legacy labels when structured metadata is absent rather than truncating at commas', () => {
     const original = createCityPlace({ ...city, id: 88, name: 'Порт, Старый' }, 10)
     const gps = withNearbyCity(createGpsPlace({ latitude: city.latitude, longitude: city.longitude, accuracy: 20, timestamp: 20 },
