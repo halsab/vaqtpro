@@ -14,6 +14,7 @@ import type { SupportedLocale } from '../../localization/locale'
 import { localizedCityLabel, localizedCityRegion } from '../../localization/place'
 import { getUtcOffset } from '../../domain/locationTime'
 import { isSameRecentPlace } from '../../domain/recentPlaces'
+import { recentManualDisambiguation, recentManualTitle } from './recentPlaceLabels'
 
 const idleGpsState: GpsUiState = { status: 'idle' }
 
@@ -71,11 +72,14 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
           return <ActionRow key={item.id} title={title} secondary={<span className="note">{coordinates}</span>}
             aria-label={`${title}, ${coordinates}`} onClick={() => onSelectRecent(item)} />
         }
-        // Older entries without structured metadata retain their complete label;
-        // never truncate a real city name at an embedded comma.
-        const title = item.id.startsWith('geonames:') ? (item.cityName?.trim() || item.name)
-          : item.id.startsWith('locality:') ? item.name : compactPlaceLabel(item.name, locale)
-        return <ActionRow key={item.id} title={title} onClick={() => onSelectRecent(item)} />
+        const title = recentManualTitle(item, locale)
+        const disambiguation = recentManualDisambiguation(item, recent, locale)
+        return <ActionRow key={item.id} title={title}
+          {...(disambiguation ? {
+            secondary: <span className="note">{disambiguation}</span>,
+            'aria-label': `${title}, ${disambiguation}`,
+          } : {})}
+          onClick={() => onSelectRecent(item)} />
       })}
     </div></section> : null}
     {notice}
