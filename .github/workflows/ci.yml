@@ -114,6 +114,10 @@ jobs:
       - name: Проверить lint
         run: npm run lint
 
+      - name: Отдельно проверить типы TypeScript
+        if: github.event_name != 'schedule'
+        run: npm run typecheck
+
       - name: Запустить модульные тесты
         if: github.event_name != 'schedule'
         run: npm test
@@ -171,11 +175,11 @@ jobs:
         run: npm run license:check
 
       - name: Проверить запуск production-сайта
-        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        if: github.event_name == 'push'
         run: npx playwright test tests/smoke.spec.ts --project=chromium
 
-      - name: Проверить критический браузерный набор
-        if: inputs.full_quality_gate
+      - name: Проверить полный браузерный набор PR и релиза
+        if: github.event_name == 'pull_request' || inputs.full_quality_gate
         run: npm run test:e2e
 
       - name: Загрузить артефакт GitHub Pages
