@@ -74,7 +74,7 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
         // Older entries without structured metadata retain their complete label;
         // never truncate a real city name at an embedded comma.
         const title = item.id.startsWith('geonames:') ? (item.cityName?.trim() || item.name)
-          : compactPlaceLabel(item.name, locale)
+          : item.id.startsWith('locality:') ? item.name : compactPlaceLabel(item.name, locale)
         return <ActionRow key={item.id} title={title} onClick={() => onSelectRecent(item)} />
       })}
     </div></section> : null}
