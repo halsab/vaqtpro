@@ -19,6 +19,23 @@ describe('place identity and timezone', () => {
     expect(homePlaceLabel(named)).toBe('Казань')
     expect(homePlaceLabel(null)).toBe('Местоположение не определено')
   })
+  it('keeps embedded commas in actual selected city names on home and after GPS enrichment', () => {
+    const name = 'Сан, Хосе'
+    const city = { id: 101, name, countryCode: 'RU', admin1Code: '73', admin1Name: 'Район, Восток',
+      latitude: 55.5, longitude: 49.5, population: 1, timeZone: 'Europe/Moscow' }
+    const manual = createCityPlace(city, 100)
+    const namedGps = withNearbyCity(gps(), city)
+    expect(manual.cityName).toBe(name)
+    expect(namedGps.nearbyCity?.cityName).toBe(name)
+    expect(homePlaceLabel(manual)).toBe(name)
+    expect(homePlaceLabel(namedGps)).toBe(name)
+    expect(homePlaceLabel(placeFromChoice({
+      mode: 'calculated', source: 'manual', coordinates: manual, place: manual,
+    }, []))).toBe(name)
+    expect(homePlaceLabel(placeFromChoice({
+      mode: 'calculated', source: 'automatic', coordinates: namedGps, place: namedGps,
+    }, []))).toBe(name)
+  })
   it('uses the current device timezone after GPS refinement, including inside official coverage', () => {
     const refined = refineGpsPlace(gps(), { ...position, accuracy: 10, timestamp: 200 }, 'Asia/Tokyo', geometry)
     expect(refined.timeZone).toBe('Asia/Tokyo')
