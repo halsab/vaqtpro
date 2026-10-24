@@ -262,3 +262,68 @@ test('restores a GPS city name containing commas from local history while offlin
     await context.setOffline(false)
   }
 })
+
+
+test('disambiguates same-name manual history only while both rows are visible, at 320px and offline', async ({ context, page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.goto('./')
+  await choosePlace(page)
+  await expect.poll(async () => (await readSavedSetting(page, 'recentPlaces') as unknown[] | undefined)?.length).toBe(1)
+  const history = await readSavedSetting(page, 'recentPlaces') as Array<Record<string, unknown>>
+  const original = history[0]
+  const first = {
+    ...original, id: 'geonames:9110001', cityId: 9110001, selection: 'city',
+    name: 'Киров, Новый, Регион А, Россия', cityName: 'Киров, Новый',
+    region: { code: 'RU.48', name: 'Регион А' },
+    latitude: 55.5, longitude: 49.5, timestamp: 10,
+  }
+  const second = {
+    ...original, id: 'geonames:9110002', cityId: 9110002, selection: 'city',
+    name: 'Киров, Новый, Регион Б, Россия', cityName: 'Киров, Новый',
+    region: { code: 'RU.48', name: 'Регион Б' },
+    latitude: 56.5, longitude: 48.5, timestamp: 20,
+  }
+  await page.evaluate(async entries => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('salah')
+      request.onerror = () => reject(request.error ?? new Error('IndexedDB open failed'))
+      request.onsuccess = () => {
+        const db = request.result
+        const transaction = db.transaction('settings', 'readwrite')
+        transaction.objectStore('settings').put({ key: 'recentPlaces', value: entries })
+        transaction.oncomplete = () => { db.close(); resolve() }
+        transaction.onabort = () => { db.close(); reject(transaction.error ?? new Error('IndexedDB write failed')) }
+      }
+    })
+  }, [original, first, second])
+  await page.evaluate(async () => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+
+  await context.setOffline(true)
+  try {
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await page.locator('#home-location').click()
+    const recent = page.getByRole('region', { name: 'Недавние места' })
+    const a = recent.getByRole('button', { name: 'Киров, Новый, Регион А' })
+    const b = recent.getByRole('button', { name: 'Киров, Новый, Регион Б' })
+    await expect(a).toBeVisible()
+    await expect(b).toBeVisible()
+    await expect(recent.getByRole('button', { name: 'Казань' })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await b.focus()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
+      place: { id: 'geonames:9110002', cityId: 9110002, cityName: 'Киров, Новый',
+        latitude: 56.5, longitude: 48.5 },
+    })
+    await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+    await page.locator('#home-location').click()
+    const historyAfter = page.getByRole('region', { name: 'Недавние места' })
+    // Collision is gone because the newly selected place is excluded.
+    await expect(historyAfter.getByRole('button', { name: 'Киров, Новый', exact: true })).toBeVisible()
+    await expect(historyAfter.getByRole('button', { name: 'Киров, Новый, Регион А' })).toHaveCount(0)
+  } finally {
+    await context.setOffline(false)
+  }
+})
