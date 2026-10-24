@@ -8,12 +8,16 @@ export interface Place extends SavedCoordinates {
   id: string
   selection: 'gps' | 'city'
   name: string
+  /** Unformatted catalog name; never derive it by splitting a display label. */
+  cityName?: string
   region: { code: string; name: string } | null
   coverage: Coverage
   automaticTimeZone: { id: string; source: 'city' | 'device' | 'legacy' }
   nearbyCity?: {
     id: number
     name: string
+    /** Original unformatted nearby-city name, which can itself contain commas. */
+    cityName?: string
     distanceKm: number
     countryCode?: string
     latitude?: number
@@ -52,7 +56,7 @@ export function createCityPlace(city: City, timestamp: number): Place {
       : null
   return {
     id: `geonames:${city.id}`, selection: 'city', cityId: city.id,
-    name: formatCityLabel(city), latitude: city.latitude, longitude: city.longitude,
+    name: formatCityLabel(city), cityName: city.name, latitude: city.latitude, longitude: city.longitude,
     accuracy: null, timestamp, timeZone: city.timeZone,
     automaticTimeZone: { id: city.timeZone, source: 'city' },
     region,
@@ -96,6 +100,7 @@ export function withNearbyCity(place: Place, city: City | null): Place {
     nearbyCity: {
       id: city.id,
       name: formatCityLabel(city),
+      cityName: city.name,
       distanceKm,
       // Храним координаты города, чтобы перепроверить country hint при восстановлении и GPS refinement.
       ...(countryCode ? { countryCode, latitude: city.latitude, longitude: city.longitude } : {}),
