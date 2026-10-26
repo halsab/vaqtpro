@@ -117,13 +117,14 @@ export function SettingsScreens({ screen, preferences, sourceLabel, effectiveSou
   </Screen>
   if (screen === 'privacy') return <Screen label={t('privacy')} top={top} bottom={<ScreenFooter><ActionButton variant="primary" id="reset-trigger" onClick={() => onOpen('reset')}>{t('deleteData')}</ActionButton></ScreenFooter>}>
     <div className="screen-stack">
+      <MarkdownArticle content={privacyContent.status === 'resolved' ? privacyContent.content : ''} />
+      {notice}
       {isCloudflareAnalyticsAvailableHere() ? <>
         <ActionRow className="fasting-mode-toggle" title={t('analyticsVisits')} role="switch" aria-label={t('analyticsVisits')} aria-checked={analyticsPreference.enabled}
           aria-describedby="analytics-visits-description" onClick={() => { saveAnalyticsPreference(!analyticsPreference.enabled) }} />
         <p id="analytics-visits-description" className="note">{t('analyticsVisitsDescription')}</p>
         {analyticsPreference.error ? <p className="note" role="alert">{t(analyticsPreference.error === 'read' ? 'analyticsPreferenceReadFailed' : analyticsPreference.enabled ? 'analyticsPreferenceFailed' : 'analyticsEnableFailed')}</p> : null}
       </> : <p className="note" role="status">{t('analyticsUnavailable')}</p>}
-      <MarkdownArticle content={privacyContent.status === 'resolved' ? privacyContent.content : ''} />{notice}
     </div>
   </Screen>
   if (screen === 'about') return <Screen label={t('about')} top={top}><MarkdownArticle content={aboutContent.status === 'resolved' ? aboutContent.content : ''} /></Screen>

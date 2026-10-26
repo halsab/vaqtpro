@@ -2,11 +2,6 @@ import { markdownText } from '../ui/markdownContent'
 
 export const PRIVACY_ARTICLE = `# Конфиденциальность
 
-Дата вступления в силу: 26 октября 2026 года.
-
-Владелец VaqtPro: Халиль Сабиров, физическое лицо, Россия.
-Контакт по вопросам конфиденциальности: win32.hs@gmail.com.
-
 ## Какие данные используются
 
 VaqtPro — бесплатное веб-приложение для определения времени намаза на https://vaqt.pro/. Приложение не требует аккаунта и не создаёт серверную базу личных профилей.
@@ -52,7 +47,14 @@ VaqtPro — бесплатное веб-приложение для опреде
 Актуальная версия политики доступна в разделе «Данные и конфиденциальность». Мы обновляем её при изменении обработки данных и используемых сервисов.
 
 - [Политика GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)
-- [Политика Cloudflare](https://www.cloudflare.com/privacypolicy/)`
+- [Политика Cloudflare](https://www.cloudflare.com/privacypolicy/)
+
+## Сведения о документе
+
+Дата вступления в силу: 26 октября 2026 года.
+
+Владелец VaqtPro: Халиль Сабиров, физическое лицо, Россия.
+Контакт по вопросам конфиденциальности: win32.hs@gmail.com.`
 
 export function aboutArticle(version?: string): string {
   return `# О приложении
