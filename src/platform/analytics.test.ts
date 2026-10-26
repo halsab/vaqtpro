@@ -11,12 +11,7 @@ function memoryStorage(initial: string | null = null) {
 }
 
 function mockRuntime() {
-  const resourceEntries = [
-    { name: 'https://vaqt.pro/data/cities/827fbdd55f3dd27a865d/RU-4.json' },
-    { name: 'https://vaqt.pro/data/cities/827fbdd55f3dd27a865d/index.json' },
-    { name: 'https://vaqt.pro/assets/index.js' },
-  ] as PerformanceEntry[]
-  const getEntriesByType = vi.fn((type: string) => type === 'resource' ? resourceEntries : [{ name: 'navigation' }] as PerformanceEntry[])
+  const getEntriesByType = vi.fn(() => [] as PerformanceEntry[])
   const script = {
     type: '', src: '', async: false, dataset: {} as Record<string, string>,
     setAttribute: vi.fn(), remove: vi.fn(),
@@ -32,7 +27,7 @@ function mockRuntime() {
     performance: { getEntriesByType },
     addEventListener: vi.fn((type: string, handler: (event: Event) => void) => handlers.set(type, handler)),
   }
-  return { script, page, target, handlers, resourceEntries, getEntriesByType }
+  return { script, page, target, handlers }
 }
 
 describe('Cloudflare Web Analytics preference and bootstrap', () => {
@@ -76,21 +71,42 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     expect(runtime.page.createElement).toHaveBeenCalledOnce()
   })
 
-  it('hides country-coded city shards from Cloudflare resource timing while preserving other measurements', async () => {
+  it('leaves the browser Performance API untouched while loading the official beacon', async () => {
     vi.stubGlobal('localStorage', memoryStorage())
     const analytics = await import('./analytics')
     const runtime = mockRuntime()
+    const nativeMethod = runtime.target.performance.getEntriesByType
     analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
       productionBuild: true, siteToken: 'public-token' })
 
-    const visible = runtime.target.performance.getEntriesByType('resource')
-    expect(visible.map(entry => entry.name)).toEqual([
-      'https://vaqt.pro/data/cities/827fbdd55f3dd27a865d/index.json',
-      'https://vaqt.pro/assets/index.js',
-    ])
-    expect(runtime.target.performance.getEntriesByType('navigation')).toEqual([{ name: 'navigation' }])
-    expect(runtime.getEntriesByType).toHaveBeenCalledWith('resource')
-    expect(runtime.resourceEntries).toHaveLength(3)
+    expect(runtime.target.performance.getEntriesByType).toBe(nativeMethod)
+    expect(runtime.page.head.append).toHaveBeenCalledOnce()
+  })
+
+  it('loads analytics when Performance API methods are unsupported', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    const analytics = await import('./analytics')
+    const runtime = mockRuntime()
+    delete (runtime.target.performance as Partial<Performance>).getEntriesByType
+
+    expect(() => analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window,
+      document: runtime.page as unknown as Document, productionBuild: true, siteToken: 'public-token' })).not.toThrow()
+    expect(runtime.page.head.append).toHaveBeenCalledOnce()
+  })
+
+  it('loads analytics when the native Performance method is non-configurable', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    const analytics = await import('./analytics')
+    const runtime = mockRuntime()
+    const nativeMethod = runtime.target.performance.getEntriesByType
+    Object.defineProperty(runtime.target.performance, 'getEntriesByType', {
+      configurable: false, writable: false, value: nativeMethod,
+    })
+
+    expect(() => analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window,
+      document: runtime.page as unknown as Document, productionBuild: true, siteToken: 'public-token' })).not.toThrow()
+    expect(runtime.target.performance.getEntriesByType).toBe(nativeMethod)
+    expect(runtime.page.head.append).toHaveBeenCalledOnce()
   })
 
   it.each([
