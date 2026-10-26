@@ -40,16 +40,16 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     const storage = memoryStorage()
     vi.stubGlobal('localStorage', storage)
     const analytics = await import('./analytics')
-    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: true, error: false })
+    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: true, error: null })
     storage.getItem.mockReturnValue('true')
-    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: true, error: false })
+    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: true, error: null })
     storage.getItem.mockReturnValue('false')
-    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: false, error: false })
+    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: false, error: null })
     storage.getItem.mockReturnValue('yes')
-    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: false, error: true })
+    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: false, error: 'read' })
     storage.getItem.mockImplementation(() => { throw new Error('storage denied') })
-    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: false, error: true })
-    expect(analytics.readAnalyticsPreference(null)).toEqual({ enabled: false, error: true })
+    expect(analytics.readAnalyticsPreference()).toEqual({ enabled: false, error: 'read' })
+    expect(analytics.readAnalyticsPreference(null)).toEqual({ enabled: false, error: 'read' })
   })
 
   it('automatically loads one official beacon on a normal production build when preference is unset', async () => {
@@ -79,7 +79,7 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
       productionBuild: true, siteToken: 'public-token' })
     expect(runtime.page.createElement).not.toHaveBeenCalled()
-    if (storedValue === 'enabled') expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: true })
+    if (storedValue === 'enabled') expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: 'read' })
   })
 
   it.each([
@@ -104,7 +104,7 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     const analytics = await import('./analytics')
     expect(analytics.saveAnalyticsPreference(false)).toBe(true)
     expect(storage.setItem).toHaveBeenLastCalledWith(PREFERENCE_KEY, 'false')
-    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: false })
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: null })
     expect(runtime.target.location.reload).toHaveBeenCalledOnce()
     expect(analytics.saveAnalyticsPreference(true)).toBe(true)
     expect(storage.setItem).toHaveBeenLastCalledWith(PREFERENCE_KEY, 'true')
@@ -120,10 +120,63 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
       productionBuild: true, siteToken: 'public-token' })
     expect(analytics.saveAnalyticsPreference(false)).toBe(false)
-    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: true, error: true })
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: true, error: 'write' })
     expect(runtime.page.head.append).toHaveBeenCalledOnce()
     expect(runtime.script.remove).not.toHaveBeenCalled()
     expect(runtime.target.location.reload).not.toHaveBeenCalled()
+  })
+
+  it('keeps analytics OFF when saving ON fails', async () => {
+    const storage = memoryStorage('false')
+    vi.stubGlobal('localStorage', storage)
+    const runtime = mockRuntime()
+    vi.stubGlobal('window', runtime.target)
+    const analytics = await import('./analytics')
+    analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
+      productionBuild: true, siteToken: 'public-token' })
+    storage.setItem.mockImplementation(() => { throw new Error('quota exceeded') })
+
+    expect(analytics.saveAnalyticsPreference(true)).toBe(false)
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: 'write' })
+    expect(runtime.target.location.reload).not.toHaveBeenCalled()
+    expect(runtime.page.head.append).not.toHaveBeenCalled()
+  })
+
+  it('keeps read failure fail-closed and retries preference synchronization on BFCache restore', async () => {
+    const storage = memoryStorage('true')
+    vi.stubGlobal('localStorage', storage)
+    const channels: { closed: boolean; handlers: Map<string, (event: MessageEvent) => void> }[] = []
+    class FakeBroadcastChannel {
+      readonly handlers = new Map<string, (event: MessageEvent) => void>()
+      closed = false
+      constructor() { channels.push(this) }
+      addEventListener(type: string, handler: (event: MessageEvent) => void) { this.handlers.set(type, handler) }
+      postMessage() {}
+      close() { this.closed = true }
+    }
+    vi.stubGlobal('BroadcastChannel', FakeBroadcastChannel)
+    const runtime = mockRuntime()
+    const analytics = await import('./analytics')
+    analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
+      productionBuild: true, siteToken: 'public-token' })
+    expect(runtime.page.head.append).toHaveBeenCalledOnce()
+
+    runtime.handlers.get('pagehide')?.(new PageTransitionEvent('pagehide', { persisted: true }))
+    expect(channels[0]?.closed).toBe(true)
+    storage.getItem.mockReturnValue('false')
+    runtime.handlers.get('pageshow')?.(new PageTransitionEvent('pageshow', { persisted: true }))
+    expect(channels).toHaveLength(2)
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: null })
+    expect(runtime.target.location.reload).toHaveBeenCalledOnce()
+
+    vi.resetModules()
+    storage.getItem.mockImplementation(() => { throw new Error('storage denied') })
+    const reloadedAnalytics = await import('./analytics')
+    const failedRuntime = mockRuntime()
+    reloadedAnalytics.initializeCloudflareAnalytics({ window: failedRuntime.target as unknown as Window, document: failedRuntime.page as unknown as Document,
+      productionBuild: true, siteToken: 'public-token' })
+    expect(reloadedAnalytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: 'read' })
+    expect(failedRuntime.page.head.append).not.toHaveBeenCalled()
   })
 
   it('persists OFF and reloads after a failed write is retried successfully', async () => {
@@ -136,17 +189,17 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     const analytics = await import('./analytics')
 
     expect(analytics.saveAnalyticsPreference(false)).toBe(false)
-    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: true, error: true })
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: true, error: 'write' })
     storage.setItem.mockImplementation(writePreference ?? (() => undefined))
 
     expect(analytics.saveAnalyticsPreference(false)).toBe(true)
     expect(storage.getItem()).toBe('false')
-    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: false })
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: null })
     expect(runtime.target.location.reload).toHaveBeenCalledOnce()
   })
 
   it('reloads an open tab when another tab broadcasts a changed preference', async () => {
-    const storage = memoryStorage('false')
+    const storage = memoryStorage('true')
     vi.stubGlobal('localStorage', storage)
     const handlers: Record<string, (event: MessageEvent) => void> = {}
     class FakeBroadcastChannel {
@@ -161,10 +214,11 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
       productionBuild: true, siteToken: 'public-token' })
     const onMessage = handlers.message
     expect(onMessage).toBeDefined()
+    storage.getItem.mockReturnValue('false')
     onMessage?.(new MessageEvent('message', { data: { type: 'preference-changed', enabled: false } }))
     expect(runtime.target.location.reload).toHaveBeenCalledOnce()
-    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: false })
-    expect(runtime.page.createElement).not.toHaveBeenCalled()
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: null })
+    expect(runtime.page.createElement).toHaveBeenCalledOnce()
   })
 
   it('reloads an open tab on a cross-tab storage update and reads the persisted value', async () => {
@@ -178,6 +232,6 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     storage.getItem.mockReturnValue('false')
     onStorage?.(new StorageEvent('storage', { key: PREFERENCE_KEY, oldValue: 'true', newValue: 'false' }))
     expect(runtime.target.location.reload).toHaveBeenCalledOnce()
-    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: false })
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: null })
   })
 })

@@ -68,7 +68,7 @@ describe('новые настройки', () => {
   it('показывает доступный переключатель только в production-origin и сохраняет выбор', async () => {
     const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
     const save = vi.spyOn(analytics, 'saveAnalyticsPreference').mockReturnValue(true)
-    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue({ enabled: true, error: false })
+    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue({ enabled: true, error: null })
     try {
       const props = { ...defaults, preferences: automaticPreferences(), onChange: vi.fn() }
       const { rerender } = render(<SettingsScreens {...props} screen="settings" />)
@@ -84,7 +84,7 @@ describe('новые настройки', () => {
       expect(toggle.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       await userEvent.click(toggle)
       expect(save).toHaveBeenCalledWith(false)
-      snapshot.mockReturnValue({ enabled: false, error: false })
+      snapshot.mockReturnValue({ enabled: false, error: null })
       rerender(<SettingsScreens {...props} screen="privacy" />)
       expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', 'false')
     } finally {
@@ -96,11 +96,26 @@ describe('новые настройки', () => {
 
   it('keeps the switch ON and shows an error when OFF could not be persisted', () => {
     const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
-    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue({ enabled: true, error: true })
+    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue({ enabled: true, error: 'write' })
     try {
       render(<SettingsScreens {...defaults} screen="privacy" preferences={automaticPreferences()} onChange={vi.fn()} />)
       expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', 'true')
-      expect(screen.getByRole('alert')).toHaveTextContent('Браузер не разрешает сохранить отключение. Аналитика остаётся включённой и продолжает работать.')
+      expect(screen.getByRole('alert')).toHaveTextContent('Аналитика остаётся включённой и продолжает работать.')
+    } finally {
+      available.mockRestore()
+      snapshot.mockRestore()
+    }
+  })
+  it.each([
+    [{ enabled: false, error: 'write' as const }, 'Не удалось включить аналитику', 'false'],
+    [{ enabled: false, error: 'read' as const }, 'Не удалось прочитать сохранённую настройку', 'false'],
+  ])('explains the actual analytics state for preference error %s', (state, message, checked) => {
+    const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
+    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue(state)
+    try {
+      render(<SettingsScreens {...defaults} screen="privacy" preferences={automaticPreferences()} onChange={vi.fn()} />)
+      expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', checked)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
     } finally {
       available.mockRestore()
       snapshot.mockRestore()

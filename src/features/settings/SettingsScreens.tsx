@@ -121,7 +121,7 @@ export function SettingsScreens({ screen, preferences, sourceLabel, effectiveSou
         <ActionRow className="fasting-mode-toggle" title={t('analyticsVisits')} role="switch" aria-label={t('analyticsVisits')} aria-checked={analyticsPreference.enabled}
           aria-describedby="analytics-visits-description" onClick={() => { saveAnalyticsPreference(!analyticsPreference.enabled) }} />
         <p id="analytics-visits-description" className="note">{t('analyticsVisitsDescription')}</p>
-        {analyticsPreference.error ? <p className="note" role="alert">{t('analyticsPreferenceFailed')}</p> : null}
+        {analyticsPreference.error ? <p className="note" role="alert">{t(analyticsPreference.error === 'read' ? 'analyticsPreferenceReadFailed' : analyticsPreference.enabled ? 'analyticsPreferenceFailed' : 'analyticsEnableFailed')}</p> : null}
       </> : <p className="note" role="status">{t('analyticsUnavailable')}</p>}
       <MarkdownArticle content={privacyContent.status === 'resolved' ? privacyContent.content : ''} />{notice}
     </div>

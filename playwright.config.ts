@@ -25,6 +25,7 @@ export default defineConfig({
         '**/smoke.spec.ts',
         '**/offline.spec.ts',
         '**/privacy.spec.ts',
+        '**/analytics.spec.ts',
         '**/location-selection.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',

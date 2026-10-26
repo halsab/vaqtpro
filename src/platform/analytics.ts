@@ -5,7 +5,7 @@ const SITE_TOKEN = '15bf5313136244258ca53033e848e00a'
 
 export interface AnalyticsPreferenceState {
   enabled: boolean
-  error: boolean
+  error: 'read' | 'write' | null
 }
 
 type AnalyticsRuntime = {
@@ -16,7 +16,7 @@ type AnalyticsRuntime = {
 }
 
 const listeners = new Set<() => void>()
-let state: AnalyticsPreferenceState = { enabled: true, error: false }
+let state: AnalyticsPreferenceState = { enabled: true, error: null }
 let initialized = false
 let reloadRequested = false
 let channel: BroadcastChannel | null = null
@@ -32,14 +32,14 @@ function browserStorage(): Storage | null {
 }
 
 export function readAnalyticsPreference(storage: Pick<Storage, 'getItem'> | null = browserStorage()): AnalyticsPreferenceState {
-  if (!storage) return { enabled: false, error: true }
+  if (!storage) return { enabled: false, error: 'read' }
   try {
     const value = storage.getItem(PREFERENCE_KEY)
-    if (value === null || value === 'true') return { enabled: true, error: false }
-    if (value === 'false') return { enabled: false, error: false }
-    return { enabled: false, error: true }
+    if (value === null || value === 'true') return { enabled: true, error: null }
+    if (value === 'false') return { enabled: false, error: null }
+    return { enabled: false, error: 'read' }
   } catch {
-    return { enabled: false, error: true }
+    return { enabled: false, error: 'read' }
   }
 }
 
@@ -68,8 +68,9 @@ function requestReload(target: Window) {
 
 function reloadForChangedPreference(target: Window) {
   const fresh = readAnalyticsPreference()
+  const changed = fresh.enabled !== state.enabled || fresh.error !== state.error
   publish(fresh)
-  requestReload(target)
+  if (changed) requestReload(target)
 }
 
 export function initializeCloudflareAnalytics(runtime: AnalyticsRuntime | null = getRuntime()): void {
@@ -83,7 +84,8 @@ export function initializeCloudflareAnalytics(runtime: AnalyticsRuntime | null =
     if (event.key === PREFERENCE_KEY || event.key === null) reloadForChangedPreference(target)
   })
 
-  if (typeof BroadcastChannel !== 'undefined') {
+  const openChannel = () => {
+    if (channel || typeof BroadcastChannel === 'undefined') return
     try {
       channel = new BroadcastChannel(CHANNEL_NAME)
       channel.addEventListener('message', (event: MessageEvent<unknown>) => {
@@ -92,9 +94,16 @@ export function initializeCloudflareAnalytics(runtime: AnalyticsRuntime | null =
       })
     } catch { channel = null }
   }
+  const closeChannel = () => { channel?.close(); channel = null }
+  target.addEventListener('pagehide', closeChannel)
+  target.addEventListener('pageshow', (event: Event) => {
+    openChannel()
+    if ((event as PageTransitionEvent).persisted) reloadForChangedPreference(target)
+  })
+  openChannel()
 
   if (!canLoadCloudflareAnalytics({ productionBuild, protocol: target.location.protocol,
-    hostname: target.location.hostname, enabled: initial.enabled, preferenceError: initial.error, siteToken })) return
+    hostname: target.location.hostname, enabled: initial.enabled, preferenceError: initial.error !== null, siteToken })) return
   if (page.querySelector('script[data-vaqtpro-cloudflare-analytics]')) return
 
   const script = page.createElement('script')
@@ -118,18 +127,18 @@ export function subscribeToAnalyticsPreference(listener: () => void): () => void
 export function saveAnalyticsPreference(enabled: boolean): boolean {
   const storage = browserStorage()
   if (!storage) {
-    publish({ enabled: state.enabled, error: true })
+    publish({ enabled: state.enabled, error: 'write' })
     return false
   }
 
   try {
     storage.setItem(PREFERENCE_KEY, String(enabled))
   } catch {
-    publish({ enabled: state.enabled, error: true })
+    publish({ enabled: state.enabled, error: 'write' })
     return false
   }
 
-  publish({ enabled, error: false })
+  publish({ enabled, error: null })
   try { channel?.postMessage({ type: 'preference-changed', enabled }) } catch { /* Перезагрузка текущей вкладки сохраняет выбранное значение. */ }
   if (typeof window !== 'undefined') requestReload(window)
   return true
