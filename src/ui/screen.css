@@ -1,15 +1,15 @@
 @import './theme.css';
 
 html, body { background: var(--app-shell-background); color: var(--text-primary); }
-:root[data-theme='seasonal'] { --seasonal-pattern-opacity: 0.2; }
+:root[data-theme='seasonal'] { --seasonal-pattern-opacity: 0.12; }
 :root[data-theme='seasonal'][data-season='spring'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-spring-transparent-seamless.png'); }
 :root[data-theme='seasonal'][data-season='summer'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-summer-transparent-seamless.png'); }
 :root[data-theme='seasonal'][data-season='autumn'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-autumn-transparent-seamless.png'); }
 :root[data-theme='seasonal'][data-season='winter'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-winter-transparent-seamless.png'); }
-:root[data-theme='seasonal'][data-season='spring'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.6; }
-:root[data-theme='seasonal'][data-season='summer'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.4; }
-:root[data-theme='seasonal'][data-season='autumn'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.55; }
-:root[data-theme='seasonal'][data-season='winter'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.45; }
+:root[data-theme='seasonal'][data-season='spring'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.3; }
+:root[data-theme='seasonal'][data-season='summer'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.2; }
+:root[data-theme='seasonal'][data-season='autumn'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.275; }
+:root[data-theme='seasonal'][data-season='winter'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.225; }
 .execution-owner { display: contents; }
 .app-bottom-surface { display: none; }
 @media (display-mode: browser) {
