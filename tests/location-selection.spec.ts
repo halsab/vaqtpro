@@ -67,6 +67,66 @@ test('prepaints the Seasonal default and an explicitly cached Classic theme befo
   expect(classic).toEqual({ background: '#000000', secondary: '#282828', themeColor: '#000000' })
 })
 
+test('prepaints the light Seasonal palette when matchMedia is missing or throws', async ({ page }) => {
+  for (const behavior of ['missing', 'throws'] as const) {
+    const casePage = behavior === 'missing' ? page : await page.context().newPage()
+    await casePage.route('**/assets/index-*.js', route => route.abort())
+    await casePage.addInitScript(mode => {
+      if (mode === 'missing') Object.defineProperty(window, 'matchMedia', { configurable: true, value: undefined })
+      else Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => { throw new Error('unsupported') } })
+      localStorage.removeItem('salah-theme-preference-v1')
+    }, behavior)
+    const errors: string[] = []
+    casePage.on('pageerror', error => errors.push(error.message))
+    await casePage.goto('./')
+    const prepaint = await casePage.locator('html').evaluate(element => ({
+      family: element.dataset.theme,
+      tone: element.dataset.themeTone,
+      palette: {
+        background: getComputedStyle(element).getPropertyValue('--background-primary').trim(),
+        secondary: getComputedStyle(element).getPropertyValue('--background-secondary').trim(),
+        tertiary: getComputedStyle(element).getPropertyValue('--background-tertiary').trim(),
+        text: getComputedStyle(element).getPropertyValue('--text-primary').trim(),
+        secondaryText: getComputedStyle(element).getPropertyValue('--text-secondary').trim(),
+        countdown: getComputedStyle(element).getPropertyValue('--accent-countdown').trim(),
+      },
+      themeColor: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
+    }))
+    expect(prepaint).toEqual({
+      family: 'seasonal',
+      tone: 'light',
+      palette: {
+        background: '#D6B29B',
+        secondary: '#F7F1EC',
+        tertiary: '#DFD0C5',
+        text: '#2E2622',
+        secondaryText: '#655750',
+        countdown: '#8A5033',
+      },
+      themeColor: '#D6B29B',
+    })
+    expect(errors).toEqual([])
+  }
+})
+
+test('keeps initial location keyboard clearance when returning from city search in a constrained viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 480 })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Найти город' }).click()
+  await page.getByRole('searchbox').focus()
+  await page.locator('.app-layout').evaluate(element => element.style.setProperty('--app-keyboard-inset', '240px'))
+  await page.getByRole('button', { name: 'Отмена' }).click()
+  const geometry = await page.locator('.initial-location-content').evaluate(element => ({
+    bottomPadding: getComputedStyle(element).paddingBottom,
+    contentHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+  expect(geometry.bottomPadding).toBe('256px')
+  expect(geometry.scrollHeight).toBeGreaterThan(geometry.contentHeight)
+  expect(geometry.viewportWidth).toBe(320)
+})
+
 test('initial low-accuracy GPS stays provisional until explicit acceptance', async ({ context, page }) => {
   await context.grantPermissions(['geolocation'])
   await context.setGeolocation({ latitude: 41.01, longitude: 28.95, accuracy: 2400 })

@@ -124,7 +124,7 @@ html[data-input='pointer'] .select-field { outline: none; }
 .screen-stack { display: grid; gap: 16px; }
 .screen-space { margin-top: 16px !important; }
 .screen-center { display: flex; flex-direction: column; justify-content: safe center; gap: 16px; }
-.initial-location-content { justify-content: safe center; gap: 24px; padding: 24px 0 var(--screen-content-bottom-inset); }
+.initial-location-content { justify-content: safe center; gap: 24px; padding-top: 24px; padding-inline: 0; }
 .initial-location-brand { display: grid; justify-items: center; gap: 10px; text-align: center; }
 .initial-location-brand picture, .initial-location-brand img { display: block; width: 64px; height: 64px; }
 .initial-location-wordmark { font: var(--font-emphasis); }
