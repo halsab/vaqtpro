@@ -188,9 +188,21 @@ export function App({
   }, [persistence.status, themeFamily, themeEditedLocally])
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return
-    const channel = new BroadcastChannel('salah-theme-preference-v1')
-    themeChannel.current = channel
-    return () => { themeChannel.current = null; channel.close() }
+    const openChannel = () => {
+      if (!themeChannel.current) themeChannel.current = new BroadcastChannel('salah-theme-preference-v1')
+    }
+    const closeChannel = () => {
+      themeChannel.current?.close()
+      themeChannel.current = null
+    }
+    openChannel()
+    window.addEventListener('pagehide', closeChannel)
+    window.addEventListener('pageshow', openChannel)
+    return () => {
+      window.removeEventListener('pagehide', closeChannel)
+      window.removeEventListener('pageshow', openChannel)
+      closeChannel()
+    }
   }, [])
   const [recentPlaces, setRecentPlaces] = useState<Place[]>([])
   const editedPreferences = useRef(false)

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { automaticPreferences, manualCalculation, restoreSourcePreferences, type SourcePreferences } from '../../domain/sourcePreferences'
 import { resolvePrayerTimeSource } from '../../domain/prayerSource'
 import { createLocalityPlace } from '../../domain/place'
+import * as analytics from '../../platform/analytics'
 import { SettingsScreens } from './SettingsScreens'
 import type { AppScreen } from '../../ui/useAppNavigation'
 const defaults = { onBack: vi.fn(), onOpen: vi.fn(), sourceLabel: 'Татарстан', themeFamily: 'classic' as const, onThemeFamilyChange: vi.fn(), getCapability: () => ({ supported: true as const }), onReset: vi.fn(), version: 'v26.4' }
@@ -45,9 +46,12 @@ describe('новые настройки', () => {
     const { rerender } = render(<SettingsScreens {...props} screen="privacy" />)
     const privacy = screen.getByRole('region', { name: 'Данные и конфиденциальность' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Конфиденциальность' })).toBeVisible()
-    expect(privacy).toHaveTextContent('До десяти недавно выбранных мест, включая сохранённые GPS-координаты, могут храниться локально')
-    expect(privacy).toHaveTextContent('Пассивная история перемещений и поисковых запросов не ведётся')
+    expect(privacy).toHaveTextContent('до десяти недавно выбранных мест, включая GPS-координаты, хранятся в браузере пользователя')
+    expect(privacy).toHaveTextContent('Постоянная история перемещений и поисковых запросов не ведётся')
     expect(privacy).toHaveTextContent('GitHub Pages')
+    expect(privacy).toHaveTextContent('Cloudflare Web Analytics')
+    expect(privacy).toHaveTextContent('win32.hs@gmail.com')
+    expect(privacy).toHaveTextContent('Дата вступления в силу: 26 октября 2026 года.')
     expect(screen.queryByRole('link', { name: 'Конфиденциальность' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Удалить данные' })).toBeVisible()
     rerender(<SettingsScreens {...props} screen="about" />)
@@ -60,6 +64,62 @@ describe('новые настройки', () => {
     expect(within(sources as HTMLElement).getByRole('link', { name: 'SIL Open Font License 1.1' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Все источники и лицензии' })).toBeVisible()
     expect(document.querySelector('details')).toBeNull()
+  })
+  it('показывает доступный переключатель только в production-origin и сохраняет выбор', async () => {
+    const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
+    const save = vi.spyOn(analytics, 'saveAnalyticsPreference').mockReturnValue(true)
+    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue({ enabled: true, error: null })
+    try {
+      const props = { ...defaults, preferences: automaticPreferences(), onChange: vi.fn() }
+      const { rerender } = render(<SettingsScreens {...props} screen="settings" />)
+      const fastingToggle = screen.getByRole('switch', { name: 'Режим поста' })
+      rerender(<SettingsScreens {...props} screen="privacy" />)
+      const toggle = screen.getByRole('switch', { name: 'Аналитика посещений' })
+      expect(toggle).toHaveAttribute('aria-checked', 'true')
+      expect(toggle).toHaveClass('fasting-mode-toggle')
+      expect(toggle.className).toBe(fastingToggle.className)
+      expect(toggle).toHaveAttribute('aria-describedby', 'analytics-visits-description')
+      expect(screen.getByText('Помогает оценивать посещаемость и скорость работы. Выбранное место, расписание и настройки не передаются в аналитику.')).toBeVisible()
+      const heading = await screen.findByRole('heading', { name: 'Конфиденциальность' })
+      expect(toggle.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      await userEvent.click(toggle)
+      expect(save).toHaveBeenCalledWith(false)
+      snapshot.mockReturnValue({ enabled: false, error: null })
+      rerender(<SettingsScreens {...props} screen="privacy" />)
+      expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', 'false')
+    } finally {
+      available.mockRestore()
+      save.mockRestore()
+      snapshot.mockRestore()
+    }
+  })
+
+  it('keeps the switch ON and shows an error when OFF could not be persisted', () => {
+    const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
+    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue({ enabled: true, error: 'write' })
+    try {
+      render(<SettingsScreens {...defaults} screen="privacy" preferences={automaticPreferences()} onChange={vi.fn()} />)
+      expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', 'true')
+      expect(screen.getByRole('alert')).toHaveTextContent('Аналитика остаётся включённой и продолжает работать.')
+    } finally {
+      available.mockRestore()
+      snapshot.mockRestore()
+    }
+  })
+  it.each([
+    [{ enabled: false, error: 'write' as const }, 'Не удалось включить аналитику', 'false'],
+    [{ enabled: false, error: 'read' as const }, 'Не удалось прочитать сохранённую настройку', 'false'],
+  ])('explains the actual analytics state for preference error %s', (state, message, checked) => {
+    const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
+    const snapshot = vi.spyOn(analytics, 'getAnalyticsPreferenceSnapshot').mockReturnValue(state)
+    try {
+      render(<SettingsScreens {...defaults} screen="privacy" preferences={automaticPreferences()} onChange={vi.fn()} />)
+      expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', checked)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+    } finally {
+      available.mockRestore()
+      snapshot.mockRestore()
+    }
   })
   it.each<[SourcePreferences, string]>([
     [automaticPreferences(), 'В автоматическом режиме расписание рассчитывается по региональному профилю и местной часовой зоне.'],

@@ -4,13 +4,13 @@ const CSP = [
   "default-src 'none'",
   "base-uri 'none'",
   "object-src 'none'",
-  "script-src 'self'",
+  "script-src 'self' https://static.cloudflareinsights.com",
   "style-src 'self'",
   "style-src-elem 'self'",
   "style-src-attr 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self'",
-  "connect-src 'self'",
+  "connect-src 'self' https://cloudflareinsights.com",
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-src 'none'",
@@ -48,6 +48,8 @@ test('production CSP allows the app and blocks a third-party connection', async 
   await page.goto('./')
   await expect(page.locator('meta[http-equiv="Content-Security-Policy"]'))
     .toHaveAttribute('content', CSP)
+  expect(CSP).toContain('script-src \'self\' https://static.cloudflareinsights.com')
+  expect(CSP).toContain('connect-src \'self\' https://cloudflareinsights.com')
   await expect(page.getByRole('button', { name: 'По геопозиции' })).toBeVisible()
 
   const blockedUrl = 'https://example.invalid/csp-probe'

@@ -25,6 +25,7 @@ export default defineConfig({
         '**/smoke.spec.ts',
         '**/offline.spec.ts',
         '**/privacy.spec.ts',
+        '**/analytics.spec.ts',
         '**/location-selection.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
@@ -49,6 +50,11 @@ export default defineConfig({
     {
       name: 'webkit-execution-gate',
       testMatch: ['**/execution-gate.spec.ts'],
+      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
+    },
+    {
+      name: 'webkit-analytics-bfcache',
+      testMatch: ['**/analytics-bfcache.spec.ts'],
       use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
     },
     // Обновление service worker меняет dist/sw.js; запускается строго после остальных.

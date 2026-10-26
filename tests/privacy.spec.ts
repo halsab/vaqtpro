@@ -34,6 +34,7 @@ test('геопозиция остаётся локальной и не отпр�
 
   const appOrigin = new URL(page.url()).origin
   expect(requests.filter(({ url }) => new URL(url).origin !== appOrigin)).toEqual([])
+  expect(requests.some(({ url }) => /cloudflareinsights\.com/.test(url))).toBe(false)
   const payloads = requests.map(({ url, body }) => `${url} ${body}`).join('\n')
   for (const coordinate of [latitude, longitude]) {
     for (const value of [String(coordinate), coordinate.toFixed(3), coordinate.toFixed(4)]) {

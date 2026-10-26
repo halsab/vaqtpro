@@ -316,6 +316,7 @@ describe('VaqtPro', () => {
 
   it('игнорирует необязательные настройки, прочитанные до успешного сброса', async () => {
     localStorage.setItem(THEME_PREFERENCE_CACHE_KEY, JSON.stringify({ version: 1, themeFamily: 'classic' }))
+    localStorage.setItem('vaqtpro.analytics.enabled', 'false')
     const optional = deferred<Awaited<ReturnType<NonNullable<AppServices['loadOptionalSettings']>>>>()
     const clearAppData = vi.fn().mockResolvedValue(success(undefined))
     const loadOptionalSettings = vi.fn(() => optional.promise)
@@ -334,6 +335,7 @@ describe('VaqtPro', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Удалить данные' }))
     await waitFor(() => expect(clearAppData).toHaveBeenCalledTimes(1))
     expect(localStorage.getItem(THEME_PREFERENCE_CACHE_KEY)).toBeNull()
+    expect(localStorage.getItem('vaqtpro.analytics.enabled')).toBe('false')
 
     await act(async () => {
       optional.resolve(success({ recentPlaces: [], recentPlacesMigrated: false, calendarPreferences: { calendar: 'hijri', correction: 1 },
@@ -341,6 +343,7 @@ describe('VaqtPro', () => {
       await optional.promise
     })
     expect(localStorage.getItem(THEME_PREFERENCE_CACHE_KEY)).toBeNull()
+    expect(localStorage.getItem('vaqtpro.analytics.enabled')).toBe('false')
     expect(document.documentElement.dataset.theme).toBe('classic')
   })
 
