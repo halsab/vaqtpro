@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { themePalettes } from './src/ui/themePalette.ts'
 
 const packageMetadata = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
@@ -21,11 +22,14 @@ for (const theme of ICON_DIRECTORIES) {
 const ICON_VERSION = ICON_VERSION_HASH.digest('hex').slice(0, 12)
 const iconUrl = (theme: string, file: string) => `icons/${theme}/${file}?v=${ICON_VERSION}`
 
+// Синхронная bootstrap-палитра устраняет prepaint flash без ожидания IndexedDB или сети.
+const INITIAL_THEME_BOOTSTRAP = `(()=>{const root=document.documentElement;let family='seasonal';try{const value=JSON.parse(localStorage.getItem('salah-theme-preference-v1')||'null');if(value&&value.version===1&&(value.themeFamily==='classic'||value.themeFamily==='seasonal'))family=value.themeFamily}catch{}const month=new Date().getMonth()+1;const season=month===12||month<=2?'winter':month<=5?'spring':month<=8?'summer':'autumn';let tone='light';try{tone=typeof matchMedia==='function'&&matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'}catch{}const palettes=${JSON.stringify(themePalettes)};const key=family==='classic'?'classic-'+tone:season+'-'+tone;const palette=palettes[key];for(const [name,property] of Object.entries({backgroundPrimary:'--background-primary',backgroundSecondary:'--background-secondary',backgroundTertiary:'--background-tertiary',textPrimary:'--text-primary',textSecondary:'--text-secondary',accentCountdown:'--accent-countdown'}))root.style.setProperty(property,palette[name]);root.style.colorScheme=tone;root.dataset.theme=family;root.dataset.themeTone=tone;root.dataset.season=season;const meta=document.querySelector('meta[name="theme-color"]')||document.createElement('meta');meta.name='theme-color';meta.content=palette.backgroundPrimary;if(!meta.isConnected)document.head.append(meta)})()`
+const INITIAL_THEME_HASH = createHash('sha256').update(INITIAL_THEME_BOOTSTRAP).digest('base64')
 const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "base-uri 'none'",
   "object-src 'none'",
-  "script-src 'self' https://static.cloudflareinsights.com",
+  `script-src 'self' https://static.cloudflareinsights.com 'sha256-${INITIAL_THEME_HASH}'`,
   "style-src 'self'",
   "style-src-elem 'self'",
   // AppShell обновляет CSS-переменные видимой области при открытии клавиатуры.
@@ -65,7 +69,19 @@ export default defineConfig({
             content: CONTENT_SECURITY_POLICY,
           },
           injectTo: 'head-prepend',
+        }, {
+          tag: 'script',
+          children: INITIAL_THEME_BOOTSTRAP,
+          injectTo: 'head-prepend',
         }],
+      },
+    },
+    {
+      name: 'development-initial-theme-bootstrap',
+      apply: 'serve',
+      transformIndexHtml: {
+        order: 'pre',
+        handler: () => [{ tag: 'script', children: INITIAL_THEME_BOOTSTRAP, injectTo: 'head-prepend' }],
       },
     },
     {

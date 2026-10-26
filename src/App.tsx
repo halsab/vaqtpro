@@ -58,11 +58,11 @@ import {
 import type { LocationChoice, SettingsPatch } from './storage/database'
 import { AppShell } from './ui/AppShell'
 import { AppHeader } from './ui/AppHeader'
-import { ActionButton, IconActionButton, ScreenFooter } from './ui/controls'
+import { ActionButton, IconActionButton } from './ui/controls'
 import { useDataReset } from './features/settings/useDataReset'
 import { BackButton, Screen } from './ui/Screen'
 import { useAppNavigation, type AppScreen } from './ui/useAppNavigation'
-import { restoreThemeFamily, type ThemeFamily } from './domain/theme'
+import { DEFAULT_THEME_FAMILY, restoreThemeFamily, type ThemeFamily } from './domain/theme'
 import { applyTheme, resolveTheme } from './ui/theme'
 import { clearThemePreferenceCache, readThemePreferenceCache, writeThemePreferenceCache } from './ui/themePreferenceCache'
 import { useSystemAppearance } from './ui/useSystemAppearance'
@@ -341,16 +341,21 @@ export function App({
     clearThemePreferenceCache()
     setThemeEditedLocally(false)
     return reset(cleared => {
-      if (!cleared) {
-        pendingFastIdentityWrite.current = false
-        setFastCacheReady(true)
+      if (cleared) {
+        persistedThemeFamily.current = DEFAULT_THEME_FAMILY
         themePreferenceRevision.current += 1
         editedTheme.current = false
-        setThemeEditedLocally(false)
-        setThemeFamily(persistedThemeFamily.current)
-        writeThemePreferenceCache(persistedThemeFamily.current)
-        retryOptionalSettings.current()
+        setThemeFamily(DEFAULT_THEME_FAMILY)
+        return
       }
+      pendingFastIdentityWrite.current = false
+      setFastCacheReady(true)
+      themePreferenceRevision.current += 1
+      editedTheme.current = false
+      setThemeEditedLocally(false)
+      setThemeFamily(persistedThemeFamily.current)
+      writeThemePreferenceCache(persistedThemeFamily.current)
+      retryOptionalSettings.current()
     })
   }, [invalidateFastCache, reset])
   const capabilities = useMemo(() => CALCULATION_PROFILES.filter(p => services.getCalculationProfileCapability(p.id).supported).map(p => p.id), [services])
@@ -668,7 +673,7 @@ export function App({
           {!place ? <LocationScreen initial place={gpsPreview} activePlace={place} recentPlaces={recentPlaces} onSelectRecent={selectRecent}
             onBack={backScreen} onSearch={() => { cancelInteractiveGps(); flushSync(() => openScreen('search')); document.querySelector<HTMLInputElement>('input[type="search"]')?.focus() }} onLocate={locateAutomatically}
             gpsState={gpsState} nameLookupState={nameLookupState} onAcceptGps={acceptGps}
-            notice={<>{persistenceNotice}{recoveryNotices}</>} bottom={<ScreenFooter align="end"><ActionButton variant="auxiliary" id="home-settings" onClick={openSettingsDialog}>{t('settings')}</ActionButton></ScreenFooter>} /> : <ScheduleContent
+            notice={<>{persistenceNotice}{recoveryNotices}</>} /> : <ScheduleContent
             schedule={schedule}
             schedules={schedules}
             scheduleLoading={scheduleLoading}

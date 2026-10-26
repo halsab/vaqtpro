@@ -49,7 +49,7 @@ test('the production-like beacon stays silent after another tab saves OFF and hi
   await context.grantPermissions(['geolocation'], { origin: 'https://vaqt.pro' })
   await context.setGeolocation({ latitude, longitude, accuracy: 15 })
   await page.goto('https://vaqt.pro/')
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   await expect(page.locator('script[data-vaqtpro-cloudflare-analytics]')).toHaveCount(1)
   await expect.poll(() => rumRequests.length).toBeGreaterThan(0)
   await page.getByRole('button', { name: 'По геопозиции' }).click()

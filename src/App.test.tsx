@@ -145,6 +145,9 @@ describe('VaqtPro', () => {
     const view = render(<App services={services} />)
 
     expect(screen.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
+    expect(document.documentElement.dataset.theme).toBe('seasonal')
+    expect(screen.queryByRole('button', { name: 'Настройки' })).not.toBeInTheDocument()
+    expect(services.getPosition).not.toHaveBeenCalled()
     expect(services.initialize).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
 
@@ -344,7 +347,7 @@ describe('VaqtPro', () => {
     })
     expect(localStorage.getItem(THEME_PREFERENCE_CACHE_KEY)).toBeNull()
     expect(localStorage.getItem('vaqtpro.analytics.enabled')).toBe('false')
-    expect(document.documentElement.dataset.theme).toBe('classic')
+    expect(document.documentElement.dataset.theme).toBe('seasonal')
   })
 
   it('не повторяет инициализацию и не сбрасывает текущий экран при смене языкового предпочтения', async () => {
@@ -1114,7 +1117,7 @@ describe('VaqtPro', () => {
     expect(saveSettings.mock.calls.some(([patch]) => patch.locationChoice?.place?.selection === 'gps')).toBe(true)
   })
 
-  it('cancels pending GPS from the initial selection when opening Settings', async () => {
+  it('cancels pending GPS from the initial selection when opening city search', async () => {
     const coarse = deferred<Awaited<ReturnType<AppServices['getPosition']>>>()
     const precise = deferred<Awaited<ReturnType<AppServices['getPosition']>>>()
     const saveSettings = vi.fn<AppServices['saveSettings']>().mockResolvedValue(success(undefined))
@@ -1129,12 +1132,12 @@ describe('VaqtPro', () => {
     expect(await screen.findByText('41.0100, 28.9500')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Настройки' }))
-    expect(await screen.findByRole('region', { name: 'Настройки' })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    expect(await screen.findByRole('region', { name: 'Поиск города' })).toBeVisible()
     const writesAfterNavigation = saveSettings.mock.calls.length
     await act(async () => { precise.resolve(success({ latitude: 41.011, longitude: 28.951, accuracy: 10, timestamp: 200 })); await Promise.resolve() })
 
-    expect(screen.getByRole('region', { name: 'Настройки' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Поиск города' })).toBeVisible()
     expect(screen.queryByRole('region', { name: 'Главная' })).not.toBeInTheDocument()
     expect(saveSettings.mock.calls).toHaveLength(writesAfterNavigation)
     expect(saveSettings.mock.calls.flatMap(([patch]) => patch.recentPlaces ?? []).some(place => place.selection === 'gps')).toBe(false)
@@ -1494,14 +1497,14 @@ describe('VaqtPro', () => {
   })
 
   it('применяет закешированное семейство в первом React-коммите до ответа IndexedDB', async () => {
-    localStorage.setItem(THEME_PREFERENCE_CACHE_KEY, JSON.stringify({ version: 1, themeFamily: 'seasonal' }))
+    localStorage.setItem(THEME_PREFERENCE_CACHE_KEY, JSON.stringify({ version: 1, themeFamily: 'classic' }))
     const initialization = deferred<Awaited<ReturnType<AppServices['initialize']>>>()
     const services = createServices({ initialize: vi.fn(() => initialization.promise) })
     render(<App services={services} />)
 
-    expect(document.documentElement.dataset.theme).toBe('seasonal')
+    expect(document.documentElement.dataset.theme).toBe('classic')
     expect(document.documentElement.dataset.season).toBe('autumn')
-    expect(document.documentElement.style.getPropertyValue('--background-primary')).toBe('#D6B29B')
+    expect(document.documentElement.style.getPropertyValue('--background-primary')).toBe('#000000')
     await act(async () => { initialization.resolve(initialized({ themeFamily: 'classic' })); await initialization.promise })
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('classic'))
   })

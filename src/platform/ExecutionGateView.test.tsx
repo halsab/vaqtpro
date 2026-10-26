@@ -134,7 +134,7 @@ describe('execution gate presentation', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'salah-theme-preference-v1', newValue: null }))
     })
 
-    expect(document.documentElement.dataset.theme).toBe('classic')
+    expect(document.documentElement.dataset.theme).toBe('seasonal')
     expect(storage.getItem('salah-theme-preference-v1')).toBeNull()
   })
 

@@ -1,4 +1,5 @@
 import { expect, test } from './fixtures'
+import { createHash } from 'node:crypto'
 
 const CSP = [
   "default-src 'none'",
@@ -29,6 +30,13 @@ test('production CSP allows the app and blocks a third-party connection', async 
   const html = await response.text()
   const tags = html.match(/<meta\b[^>]*http-equiv=["']Content-Security-Policy["'][^>]*>/gi) ?? []
   expect(tags).toHaveLength(1)
+  const bootstrap = html.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+  expect(bootstrap).toBeTruthy()
+  const bootstrapHash = createHash('sha256').update(bootstrap ?? '').digest('base64')
+  const expectedCsp = CSP.replace(
+    "script-src 'self' https://static.cloudflareinsights.com",
+    `script-src 'self' https://static.cloudflareinsights.com 'sha256-${bootstrapHash}'`,
+  )
   const firstResourceTag = html.search(/<(?:script|link)\b/i)
   expect(html.indexOf(tags[0])).toBeLessThan(firstResourceTag)
 
@@ -47,7 +55,7 @@ test('production CSP allows the app and blocks a third-party connection', async 
   page.on('pageerror', error => pageErrors.push(error.message))
   await page.goto('./')
   await expect(page.locator('meta[http-equiv="Content-Security-Policy"]'))
-    .toHaveAttribute('content', CSP)
+    .toHaveAttribute('content', expectedCsp)
   expect(CSP).toContain('script-src \'self\' https://static.cloudflareinsights.com')
   expect(CSP).toContain('connect-src \'self\' https://cloudflareinsights.com')
   await expect(page.getByRole('button', { name: 'По геопозиции' })).toBeVisible()

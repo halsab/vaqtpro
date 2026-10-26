@@ -47,6 +47,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 .screen-top, .screen-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--button-height); flex-shrink: 0; flex-wrap: wrap; }
 .screen-top { padding-inline: var(--screen-navigation-inset-left) var(--screen-navigation-inset-right); }
 .screen-panel {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
@@ -58,6 +59,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
   gap: 0;
   overflow: hidden;
 }
+.screen-panel--no-top { border-top-left-radius: 0; border-top-right-radius: 0; }
 .screen-content { flex: 1; min-height: 0; padding-top: var(--content-inset); padding-bottom: max(var(--screen-content-bottom-inset), calc(var(--app-keyboard-inset, 0px) + var(--content-inset))); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; view-transition-name: vaqtpro-screen-content; }
 .screen-bottom { padding-bottom: var(--screen-bottom-inset); }
 .screen-content.home-content {
@@ -122,6 +124,13 @@ html[data-input='pointer'] .select-field { outline: none; }
 .screen-stack { display: grid; gap: 16px; }
 .screen-space { margin-top: 16px !important; }
 .screen-center { display: flex; flex-direction: column; justify-content: safe center; gap: 16px; }
+.initial-location-content { justify-content: safe center; gap: 24px; padding-top: 24px; padding-inline: 0; }
+.initial-location-brand { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.initial-location-brand picture, .initial-location-brand img { display: block; width: 64px; height: 64px; }
+.initial-location-wordmark { font: var(--font-emphasis); }
+.initial-location-brand .screen-title { margin-top: 8px; }
+.initial-location-brand .note { max-width: 34ch; }
+.initial-location-permission { text-align: center; }
 .screen-heading { font: var(--font-footnote); color: var(--text-secondary); }
 .screen-title { font: var(--font-title); overflow-wrap: anywhere; }
 .screen-copy { font: var(--font-body); }

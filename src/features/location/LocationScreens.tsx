@@ -41,8 +41,15 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
   const lowAccuracy = gpsState.status === 'ready' && gpsState.lowAccuracy
   const status = locationStatus(gpsState, nameLookupState, gpsPlace, locale, t)
   const error = gpsState.status === 'error' ? geolocationFailureMessage(gpsState.reason, locale) : null
-  return <Screen label={initial ? t('selectPlace') : t('location')} top={initial ? undefined : <BackButton onClick={onBack} />} bottom={bottom} contentClassName={initial ? 'screen-center' : ''}>
-    {initial ? <h1 className="screen-title">{t('selectPlace')}</h1> : null}
+  return <Screen label={initial ? t('selectPlace') : t('location')} top={initial ? undefined : <BackButton onClick={onBack} />} bottom={initial ? undefined : bottom}
+    contentClassName={initial ? 'screen-center initial-location-content' : ''}>
+    {initial ? <div className="initial-location-brand">
+      <picture><source media="(prefers-color-scheme: dark)" srcSet="/icons/dark/icon.svg" />
+        <img src="/icons/light/icon.svg" width="64" height="64" alt="" /></picture>
+      <p className="initial-location-wordmark">{t('appBrand')}</p>
+      <h1 className="screen-title">{t('selectPlace')}</h1>
+      <p className="note">{t('locationPrayerTimesIntro')}</p>
+    </div> : null}
     {place ? <div className="location-current"><p className="screen-title">{gpsPlace
       ? place.nearbyCity ? t('nearestPlace', { name: compactPlaceLabel(place.nearbyCity.name, locale) }) : t('nearestPlaceUnknown')
       : compactPlaceLabel(place.name, locale)}</p>
@@ -55,7 +62,7 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
     <div className="screen-stack">
       <ActionButton variant="field" id="location-search" onClick={onSearch}>{t('locationSearch')}</ActionButton>
       <ActionButton variant="primary" onClick={() => void onLocate()} disabled={busy}>{lowAccuracy || gpsState.status === 'error' ? t('retry') : t('geolocation')}</ActionButton>
-      {initial ? <p className="note">{t('locationPermissionNotice')}</p> : null}
+      {initial ? <p className="note initial-location-permission">{t('locationPermissionNotice')}</p> : null}
       {gpsPlace && (gpsState.status === 'refining' || lowAccuracy) ? <ActionButton variant="primary" onClick={onAcceptGps}>{t('useThisPoint')}</ActionButton> : null}
       {status ? <p className="note" role="status" aria-live="polite">{status}</p> : null}
       {error ? <p className="note" role="alert">{error}</p> : null}

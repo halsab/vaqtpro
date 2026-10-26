@@ -58,10 +58,14 @@ async function openPrivacy(page: Page) {
 test('HTTPS production build defaults ON and a saved OFF remains silent after reload', async ({ context, page }) => {
   await useProductionOrigin(context)
   await page.goto('https://vaqt.pro/')
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   await expect.poll(() => page.locator('script[data-vaqtpro-cloudflare-analytics]').count()).toBe(1)
   await expect.poll(() => productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js')).length).toBe(1)
   await expect.poll(() => productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum')).length).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Найти город' }).click()
+  await page.getByRole('searchbox').fill('Казань')
+  await page.getByRole('button', { name: 'Казань Татарстан' }).click()
+  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
   const rumRequestsBeforeOptOut = productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum')).length
 
   const toggle = await openPrivacy(page)
@@ -85,9 +89,13 @@ test('failed OFF save stays ON and collecting, while CSP permits only the approv
   })
   await useProductionOrigin(context)
   await page.goto('https://vaqt.pro/')
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   await expect.poll(() => productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js')).length).toBe(1)
   await expect.poll(() => productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum')).length).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Найти город' }).click()
+  await page.getByRole('searchbox').fill('Казань')
+  await page.getByRole('button', { name: 'Казань Татарстан' }).click()
+  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
   const toggle = await openPrivacy(page)
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-checked', 'true')
@@ -121,7 +129,7 @@ test('failed OFF save stays ON and collecting, while CSP permits only the approv
 test('a preference change from another tab reloads with analytics OFF', async ({ context, page }) => {
   await useProductionOrigin(context)
   await page.goto('https://vaqt.pro/')
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   const otherTab = await context.newPage()
   await otherTab.goto('https://vaqt.pro/away.html')
   const reload = page.waitForEvent('load')
@@ -132,7 +140,7 @@ test('a preference change from another tab reloads with analytics OFF', async ({
     channel.close()
   })
   await reload
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('vaqtpro.analytics.enabled'))).toBe('false')
   await expect(page.locator('script[data-vaqtpro-cloudflare-analytics]')).toHaveCount(0)
   expect(productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js'))).toHaveLength(1)

@@ -376,7 +376,7 @@ test('repeated back and forward navigation confirms real BFCache restoration', a
   expect(restorationResults).toEqual(Array.from({ length: 6 }, () => 'bfcache'))
 })
 
-test('classic light blocked styling reads cached state without mutating it', async ({ context }) => {
+test('seasonal light blocked styling reads invalid cache without mutating it', async ({ context }) => {
   const owner = await context.newPage()
   await owner.goto('./')
   await expect(owner.locator('[data-execution-owner]')).toBeVisible()
@@ -387,8 +387,8 @@ test('classic light blocked styling reads cached state without mutating it', asy
   await blocked.goto('./')
 
   await expect(blocked.getByRole('heading', { name: 'Приложение уже открыто' })).toBeVisible()
-  await expect.poll(() => blocked.evaluate(() => document.documentElement.dataset.theme)).toBe('classic')
+  await expect.poll(() => blocked.evaluate(() => document.documentElement.dataset.theme)).toBe('seasonal')
   await expect.poll(() => blocked.evaluate(() => document.documentElement.dataset.themeTone)).toBe('light')
-  await expect(blocked.locator('.screen-title')).toHaveCSS('color', 'rgb(24, 24, 24)')
+  await expect(blocked.locator('.screen-title')).toHaveCSS('color', 'rgb(46, 38, 34)')
   await expect.poll(() => blocked.evaluate(() => localStorage.getItem('salah-theme-preference-v1'))).toBe('{')
 })

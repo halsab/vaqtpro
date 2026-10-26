@@ -17,7 +17,7 @@ function memoryStorage(): Storage {
 describe('synchronous theme preference cache', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('uses classic when missing and restores only a supported versioned family', () => {
+  it('uses seasonal when missing and restores only a supported versioned family', () => {
     vi.stubGlobal('localStorage', memoryStorage())
     expect(readThemePreferenceCache()).toBe(DEFAULT_THEME_FAMILY)
     expect(writeThemePreferenceCache('seasonal')).toBe(true)
