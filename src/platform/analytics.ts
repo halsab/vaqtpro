@@ -12,7 +12,6 @@ type AnalyticsRuntime = {
   window: Window
   document: Document
   productionBuild: boolean
-  releaseEnabled: boolean
   siteToken: string
 }
 
@@ -46,21 +45,19 @@ export function readAnalyticsPreference(storage: Pick<Storage, 'getItem'> | null
 
 export function canLoadCloudflareAnalytics(input: {
   productionBuild: boolean
-  releaseEnabled: boolean
   protocol: string
   hostname: string
   enabled: boolean
   preferenceError: boolean
   siteToken: string
 }): boolean {
-  return input.productionBuild && input.releaseEnabled && input.protocol === 'https:' && input.hostname === 'vaqt.pro'
+  return input.productionBuild && input.protocol === 'https:' && input.hostname === 'vaqt.pro'
     && input.enabled && !input.preferenceError && input.siteToken.length > 0
 }
 
 function getRuntime(): AnalyticsRuntime | null {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null
-  return { window, document, productionBuild: import.meta.env.PROD,
-    releaseEnabled: import.meta.env.VITE_CLOUDFLARE_ANALYTICS_ENABLED === 'true', siteToken: SITE_TOKEN }
+  return { window, document, productionBuild: import.meta.env.PROD, siteToken: SITE_TOKEN }
 }
 
 function requestReload(target: Window) {
@@ -75,14 +72,10 @@ function reloadForChangedPreference(target: Window) {
   requestReload(target)
 }
 
-function removePendingBeacon() {
-  if (typeof document !== 'undefined') document.querySelector('script[data-vaqtpro-cloudflare-analytics]')?.remove()
-}
-
 export function initializeCloudflareAnalytics(runtime: AnalyticsRuntime | null = getRuntime()): void {
   if (initialized || !runtime) return
   initialized = true
-  const { window: target, document: page, productionBuild, releaseEnabled, siteToken } = runtime
+  const { window: target, document: page, productionBuild, siteToken } = runtime
   const initial = readAnalyticsPreference()
   publish(initial)
 
@@ -100,7 +93,7 @@ export function initializeCloudflareAnalytics(runtime: AnalyticsRuntime | null =
     } catch { channel = null }
   }
 
-  if (!canLoadCloudflareAnalytics({ productionBuild, releaseEnabled, protocol: target.location.protocol,
+  if (!canLoadCloudflareAnalytics({ productionBuild, protocol: target.location.protocol,
     hostname: target.location.hostname, enabled: initial.enabled, preferenceError: initial.error, siteToken })) return
   if (page.querySelector('script[data-vaqtpro-cloudflare-analytics]')) return
 
@@ -125,18 +118,14 @@ export function subscribeToAnalyticsPreference(listener: () => void): () => void
 export function saveAnalyticsPreference(enabled: boolean): boolean {
   const storage = browserStorage()
   if (!storage) {
-    publish({ enabled: false, error: true })
-    if (!enabled) removePendingBeacon()
+    publish({ enabled: state.enabled, error: true })
     return false
   }
 
   try {
     storage.setItem(PREFERENCE_KEY, String(enabled))
   } catch {
-    if (!enabled) {
-      publish({ enabled: false, error: true })
-      removePendingBeacon()
-    } else publish({ enabled: state.enabled, error: true })
+    publish({ enabled: state.enabled, error: true })
     return false
   }
 
@@ -148,6 +137,6 @@ export function saveAnalyticsPreference(enabled: boolean): boolean {
 
 export function isCloudflareAnalyticsAvailableHere(): boolean {
   const runtime = getRuntime()
-  return Boolean(runtime && runtime.productionBuild && runtime.releaseEnabled && runtime.siteToken.length > 0
+  return Boolean(runtime && runtime.productionBuild && runtime.siteToken.length > 0
     && runtime.window.location.protocol === 'https:' && runtime.window.location.hostname === 'vaqt.pro')
 }

@@ -118,7 +118,7 @@ export function SettingsScreens({ screen, preferences, sourceLabel, effectiveSou
   if (screen === 'privacy') return <Screen label={t('privacy')} top={top} bottom={<ScreenFooter><ActionButton variant="primary" id="reset-trigger" onClick={() => onOpen('reset')}>{t('deleteData')}</ActionButton></ScreenFooter>}>
     <div className="screen-stack">
       {isCloudflareAnalyticsAvailableHere() ? <>
-        <ActionRow title={t('analyticsVisits')} role="switch" aria-label={t('analyticsVisits')} aria-checked={analyticsPreference.enabled}
+        <ActionRow className="fasting-mode-toggle" title={t('analyticsVisits')} role="switch" aria-label={t('analyticsVisits')} aria-checked={analyticsPreference.enabled}
           aria-describedby="analytics-visits-description" onClick={() => { saveAnalyticsPreference(!analyticsPreference.enabled) }} />
         <p id="analytics-visits-description" className="note">{t('analyticsVisitsDescription')}</p>
         {analyticsPreference.error ? <p className="note" role="alert">{t('analyticsPreferenceFailed')}</p> : null}
