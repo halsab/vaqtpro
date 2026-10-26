@@ -2,6 +2,8 @@ import { markdownText } from '../ui/markdownContent'
 
 export const PRIVACY_ARTICLE = `# Конфиденциальность
 
+Дата вступления в силу: 26 октября 2026 года.
+
 Владелец VaqtPro: Халиль Сабиров, физическое лицо, Россия.
 Контакт по вопросам конфиденциальности: win32.hs@gmail.com.
 

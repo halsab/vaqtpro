@@ -51,6 +51,7 @@ describe('новые настройки', () => {
     expect(privacy).toHaveTextContent('GitHub Pages')
     expect(privacy).toHaveTextContent('Cloudflare Web Analytics')
     expect(privacy).toHaveTextContent('win32.hs@gmail.com')
+    expect(privacy).toHaveTextContent('Дата вступления в силу: 26 октября 2026 года.')
     expect(screen.queryByRole('link', { name: 'Конфиденциальность' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Удалить данные' })).toBeVisible()
     rerender(<SettingsScreens {...props} screen="about" />)
@@ -99,7 +100,7 @@ describe('новые настройки', () => {
     try {
       render(<SettingsScreens {...defaults} screen="privacy" preferences={automaticPreferences()} onChange={vi.fn()} />)
       expect(screen.getByRole('switch', { name: 'Аналитика посещений' })).toHaveAttribute('aria-checked', 'true')
-      expect(screen.getByRole('alert')).toHaveTextContent('Не удалось сохранить настройку аналитики')
+      expect(screen.getByRole('alert')).toHaveTextContent('Браузер не разрешает сохранить отключение. Аналитика остаётся включённой и продолжает работать.')
     } finally {
       available.mockRestore()
       snapshot.mockRestore()

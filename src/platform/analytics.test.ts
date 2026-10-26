@@ -114,11 +114,35 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     const storage = memoryStorage('true')
     storage.setItem.mockImplementation(() => { throw new Error('quota exceeded') })
     vi.stubGlobal('localStorage', storage)
+    const runtime = mockRuntime()
+    vi.stubGlobal('window', runtime.target)
     const analytics = await import('./analytics')
-    const unsubscribe = analytics.subscribeToAnalyticsPreference(() => {})
+    analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
+      productionBuild: true, siteToken: 'public-token' })
     expect(analytics.saveAnalyticsPreference(false)).toBe(false)
     expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: true, error: true })
-    unsubscribe()
+    expect(runtime.page.head.append).toHaveBeenCalledOnce()
+    expect(runtime.script.remove).not.toHaveBeenCalled()
+    expect(runtime.target.location.reload).not.toHaveBeenCalled()
+  })
+
+  it('persists OFF and reloads after a failed write is retried successfully', async () => {
+    const storage = memoryStorage('true')
+    const writePreference = storage.setItem.getMockImplementation()
+    storage.setItem.mockImplementation(() => { throw new Error('quota exceeded') })
+    vi.stubGlobal('localStorage', storage)
+    const runtime = mockRuntime()
+    vi.stubGlobal('window', runtime.target)
+    const analytics = await import('./analytics')
+
+    expect(analytics.saveAnalyticsPreference(false)).toBe(false)
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: true, error: true })
+    storage.setItem.mockImplementation(writePreference ?? (() => undefined))
+
+    expect(analytics.saveAnalyticsPreference(false)).toBe(true)
+    expect(storage.getItem()).toBe('false')
+    expect(analytics.getAnalyticsPreferenceSnapshot()).toEqual({ enabled: false, error: false })
+    expect(runtime.target.location.reload).toHaveBeenCalledOnce()
   })
 
   it('reloads an open tab when another tab broadcasts a changed preference', async () => {
