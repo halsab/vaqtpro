@@ -13,11 +13,8 @@ test('first launch uses the VaqtPro welcome screen without Settings or automatic
   await expect(page.getByText('VaqtPro')).toBeVisible()
   await expect(page.getByText('Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Настройки' })).toHaveCount(0)
-  await expect(page.locator('.initial-location-landscape')).toHaveAttribute('aria-hidden', 'true')
+  await expect(page.locator('.initial-location-landscape')).toHaveCount(0)
   await expect(page.locator('.initial-location-brand img')).toHaveAttribute('src', '/icons/light/icon.svg')
-  const artBottom = await page.locator('.initial-location-landscape').evaluate(element => element.getBoundingClientRect().bottom)
-  const panelBottom = await page.locator('.screen-panel').evaluate(element => element.getBoundingClientRect().bottom)
-  expect(Math.abs(artBottom - panelBottom)).toBeLessThanOrEqual(1)
   await expect.poll(() => page.evaluate(() => (window as Window & { __geoRequests: number }).__geoRequests)).toBe(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe('seasonal')
   await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('0px')
@@ -25,6 +22,49 @@ test('first launch uses the VaqtPro welcome screen without Settings or automatic
   await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
   await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('38px')
   await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderBottomLeftRadius)).toBe('0px')
+})
+
+test('prepaints the Seasonal default and an explicitly cached Classic theme before app startup', async ({ page }) => {
+  await page.route('**/assets/index-*.js', route => route.abort())
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.addInitScript(() => localStorage.removeItem('salah-theme-preference-v1'))
+  await page.goto('./')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'seasonal')
+  const seasonal = await page.locator('html').evaluate(element => ({
+    background: getComputedStyle(element).getPropertyValue('--background-primary').trim(),
+    themeColor: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
+  }))
+  expect(seasonal.background).not.toBe('#000000')
+  expect(seasonal.themeColor).toBe(seasonal.background)
+
+  const seasonalDarkPage = await page.context().newPage()
+  await seasonalDarkPage.route('**/assets/index-*.js', route => route.abort())
+  await seasonalDarkPage.emulateMedia({ colorScheme: 'dark' })
+  await seasonalDarkPage.addInitScript(() => localStorage.removeItem('salah-theme-preference-v1'))
+  await seasonalDarkPage.goto('./')
+  const seasonalDark = await seasonalDarkPage.locator('html').evaluate(element => ({
+    tone: getComputedStyle(element).colorScheme,
+    background: getComputedStyle(element).getPropertyValue('--background-primary').trim(),
+    secondary: getComputedStyle(element).getPropertyValue('--background-secondary').trim(),
+    themeColor: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
+  }))
+  expect(seasonalDark.tone).toBe('dark')
+  expect(seasonalDark.background).not.toBe('#000000')
+  expect(seasonalDark.secondary).not.toBe('#282828')
+  expect(seasonalDark.themeColor).toBe(seasonalDark.background)
+
+  const classicPage = await page.context().newPage()
+  await classicPage.route('**/assets/index-*.js', route => route.abort())
+  await classicPage.emulateMedia({ colorScheme: 'dark' })
+  await classicPage.addInitScript(() => localStorage.setItem('salah-theme-preference-v1', JSON.stringify({ version: 1, themeFamily: 'classic' })))
+  await classicPage.goto('./')
+  await expect(classicPage.locator('html')).toHaveAttribute('data-theme', 'classic')
+  const classic = await classicPage.locator('html').evaluate(element => ({
+    background: getComputedStyle(element).getPropertyValue('--background-primary').trim(),
+    secondary: getComputedStyle(element).getPropertyValue('--background-secondary').trim(),
+    themeColor: document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content,
+  }))
+  expect(classic).toEqual({ background: '#000000', secondary: '#282828', themeColor: '#000000' })
 })
 
 test('initial low-accuracy GPS stays provisional until explicit acceptance', async ({ context, page }) => {

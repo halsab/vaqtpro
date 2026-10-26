@@ -20,6 +20,7 @@ describe('экраны локации', () => {
     expect(screen.getByText('VaqtPro')).toBeVisible()
     expect(container.querySelector('img')).toHaveAttribute('src', '/icons/light/icon.svg')
     expect(container.querySelector('img')).toHaveAttribute('alt', '')
+    expect(container.querySelector('svg')).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Выберите место' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Настройки' })).not.toBeInTheDocument()
     expect(onLocate).not.toHaveBeenCalled()

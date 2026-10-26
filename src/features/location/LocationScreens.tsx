@@ -90,14 +90,6 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
       })}
     </div></section> : null}
     {notice}
-    {initial ? <svg className="initial-location-landscape" viewBox="0 0 800 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
-      <path className="initial-landscape-distant" d="M0 92 Q110 28 230 86 T470 78 T800 62 V150 H0Z" />
-      <path className="initial-landscape-near" d="M0 118 Q145 52 300 112 T590 102 T800 91 V150 H0Z" />
-      <g className="initial-landscape-mosque" transform="translate(525 26)">
-        <path d="M0 92 V55 Q38 41 76 55 V92Z M29 55 C29 35 47 26 47 8 C47 26 65 35 65 55Z M16 53 V25 H21 V53 M13 25 L18.5 12 L24 25Z M57 53 V20 H62 V53 M54 20 L59.5 7 L65 20Z" />
-        <circle cx="47" cy="8" r="2" />
-      </g>
-    </svg> : null}
   </Screen>
 }
 
