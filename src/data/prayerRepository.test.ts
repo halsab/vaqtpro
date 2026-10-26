@@ -19,9 +19,15 @@ describe('calculation settings repository', () => {
     const fetcher = vi.fn()
     vi.stubGlobal('fetch', fetcher)
     expect(await initializePrayerRepository()).toMatchObject({ ok: true, value: {
-      locationChoice: null, recentPlaces: [], preferences: { mode: 'automatic' },
+      locationChoice: null, recentPlaces: [], themeFamily: 'seasonal', preferences: { mode: 'automatic' },
     } })
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('preserves an explicitly saved classic theme across initialization', async () => {
+    await repository.initialize()
+    expect(await repository.saveSettings({ themeFamily: 'classic' })).toEqual(success(undefined))
+    expect(await initializePrayerRepository()).toMatchObject({ ok: true, value: { themeFamily: 'classic' } })
   })
 
   it('restores optional settings consistently and clears them on reset', async () => {
@@ -38,7 +44,7 @@ describe('calculation settings repository', () => {
       calendarPreferences, themeFamily: 'seasonal', languagePreference: 'ru', fastingMode } })
     await clearAppData()
     expect(await initializePrayerRepository()).toMatchObject({ value: { locationChoice: null, recentPlaces: [],
-      calendarPreferences: { calendar: 'gregorian', correction: 0 }, themeFamily: 'classic', languagePreference: 'auto' } })
+      calendarPreferences: { calendar: 'gregorian', correction: 0 }, themeFamily: 'seasonal', languagePreference: 'auto' } })
   })
 
   it('preserves the chosen calculation profile, overrides and mode across restart', async () => {

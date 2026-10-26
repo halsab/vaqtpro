@@ -12,8 +12,16 @@ const searchProps = { locations: [location], catalogStatus: 'ready' as const, on
 describe('экраны локации', () => {
   it('объясняет запрос разрешения на первом запуске без запуска GPS', () => {
     const onLocate = vi.fn()
-    render(<LocationScreen initial place={null} recentPlaces={[]} onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={onLocate} />)
+    const { container } = render(<LocationScreen initial place={null} recentPlaces={[]} onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={onLocate}
+      bottom={<button>Настройки</button>} />)
     expect(screen.getByText('Браузер запросит доступ к геопозиции. При необходимости город можно выбрать вручную.')).toBeVisible()
+    expect(screen.getByText('Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
+    expect(screen.getByText('VaqtPro')).toBeVisible()
+    expect(container.querySelector('img')).toHaveAttribute('src', '/icons/light/icon.svg')
+    expect(container.querySelector('img')).toHaveAttribute('alt', '')
+    expect(screen.getByRole('region', { name: 'Выберите место' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Настройки' })).not.toBeInTheDocument()
     expect(onLocate).not.toHaveBeenCalled()
   })
   it('показывает координаты и точность GPS в компактном формате', () => {

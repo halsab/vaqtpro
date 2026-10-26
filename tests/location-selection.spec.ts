@@ -1,5 +1,32 @@
 import { choosePlace, expect, readSavedSetting, test } from './fixtures'
 
+test('first launch uses the VaqtPro welcome screen without Settings or automatic geolocation', async ({ page }) => {
+  await page.addInitScript(() => {
+    const target = window as Window & { __geoRequests: number }
+    target.__geoRequests = 0
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
+      getCurrentPosition: () => { target.__geoRequests += 1 },
+    } })
+  })
+  await page.goto('./')
+  await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
+  await expect(page.getByText('VaqtPro')).toBeVisible()
+  await expect(page.getByText('Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Настройки' })).toHaveCount(0)
+  await expect(page.locator('.initial-location-landscape')).toHaveAttribute('aria-hidden', 'true')
+  await expect(page.locator('.initial-location-brand img')).toHaveAttribute('src', '/icons/light/icon.svg')
+  const artBottom = await page.locator('.initial-location-landscape').evaluate(element => element.getBoundingClientRect().bottom)
+  const panelBottom = await page.locator('.screen-panel').evaluate(element => element.getBoundingClientRect().bottom)
+  expect(Math.abs(artBottom - panelBottom)).toBeLessThanOrEqual(1)
+  await expect.poll(() => page.evaluate(() => (window as Window & { __geoRequests: number }).__geoRequests)).toBe(0)
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe('seasonal')
+  await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('0px')
+  await page.getByRole('button', { name: 'Найти город' }).click()
+  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('38px')
+  await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderBottomLeftRadius)).toBe('0px')
+})
+
 test('initial low-accuracy GPS stays provisional until explicit acceptance', async ({ context, page }) => {
   await context.grantPermissions(['geolocation'])
   await context.setGeolocation({ latitude: 41.01, longitude: 28.95, accuracy: 2400 })
@@ -89,7 +116,7 @@ test('denied GPS leaves initial location selection available', async ({ page }) 
   await expect.poll(() => readSavedSetting(page, 'locationChoice')).toBeUndefined()
 })
 
-test('opening Settings from initial place selection cancels delayed GPS callbacks', async ({ page }) => {
+test('opening city search from initial place selection cancels delayed GPS callbacks', async ({ page }) => {
   await page.addInitScript(() => {
     const target = window as Window & { __gpsCallbacks: Array<(position: GeolocationPosition) => void> }
     target.__gpsCallbacks = []
@@ -111,8 +138,8 @@ test('opening Settings from initial place selection cancels delayed GPS callback
     })
   })
   await expect(page.getByText('41.0100, 28.9500')).toBeVisible()
-  await page.getByRole('button', { name: 'Настройки' }).click()
-  await expect(page.getByRole('region', { name: 'Настройки' })).toBeVisible()
+  await page.getByRole('button', { name: 'Найти город' }).click()
+  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
   const savedChoice = await readSavedSetting(page, 'locationChoice')
   const savedHistory = await readSavedSetting(page, 'recentPlaces')
   await page.evaluate(() => {
@@ -122,7 +149,7 @@ test('opening Settings from initial place selection cancels delayed GPS callback
       timestamp: Date.now(),
     })
   })
-  await expect(page.getByRole('region', { name: 'Настройки' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Главная', exact: true })).toHaveCount(0)
   await expect.poll(() => readSavedSetting(page, 'locationChoice')).toEqual(savedChoice)
   await expect.poll(() => readSavedSetting(page, 'recentPlaces')).toEqual(savedHistory)

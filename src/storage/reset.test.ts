@@ -37,7 +37,7 @@ it('не восстанавливает настройки после повто
   const second = createPrayerRepository()
   const result = await second.initialize()
   expect(result.ok && result.value).toMatchObject({
-    locationChoice: null, appearance: 'system', themeFamily: 'classic', preferences: { mode: 'automatic' },
+    locationChoice: null, appearance: 'system', themeFamily: 'seasonal', preferences: { mode: 'automatic' },
   })
   expect((await second.saveSettings({ appearance: 'light' })).ok).toBe(true)
 })

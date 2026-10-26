@@ -41,8 +41,15 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
   const lowAccuracy = gpsState.status === 'ready' && gpsState.lowAccuracy
   const status = locationStatus(gpsState, nameLookupState, gpsPlace, locale, t)
   const error = gpsState.status === 'error' ? geolocationFailureMessage(gpsState.reason, locale) : null
-  return <Screen label={initial ? t('selectPlace') : t('location')} top={initial ? undefined : <BackButton onClick={onBack} />} bottom={bottom} contentClassName={initial ? 'screen-center' : ''}>
-    {initial ? <h1 className="screen-title">{t('selectPlace')}</h1> : null}
+  return <Screen label={initial ? t('selectPlace') : t('location')} top={initial ? undefined : <BackButton onClick={onBack} />} bottom={initial ? undefined : bottom}
+    contentClassName={initial ? 'screen-center initial-location-content' : ''}>
+    {initial ? <div className="initial-location-brand">
+      <picture><source media="(prefers-color-scheme: dark)" srcSet="/icons/dark/icon.svg" />
+        <img src="/icons/light/icon.svg" width="64" height="64" alt="" /></picture>
+      <p className="initial-location-wordmark">{t('appBrand')}</p>
+      <h1 className="screen-title">{t('selectPlace')}</h1>
+      <p className="note">{t('locationPrayerTimesIntro')}</p>
+    </div> : null}
     {place ? <div className="location-current"><p className="screen-title">{gpsPlace
       ? place.nearbyCity ? t('nearestPlace', { name: compactPlaceLabel(place.nearbyCity.name, locale) }) : t('nearestPlaceUnknown')
       : compactPlaceLabel(place.name, locale)}</p>
@@ -55,7 +62,7 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
     <div className="screen-stack">
       <ActionButton variant="field" id="location-search" onClick={onSearch}>{t('locationSearch')}</ActionButton>
       <ActionButton variant="primary" onClick={() => void onLocate()} disabled={busy}>{lowAccuracy || gpsState.status === 'error' ? t('retry') : t('geolocation')}</ActionButton>
-      {initial ? <p className="note">{t('locationPermissionNotice')}</p> : null}
+      {initial ? <p className="note initial-location-permission">{t('locationPermissionNotice')}</p> : null}
       {gpsPlace && (gpsState.status === 'refining' || lowAccuracy) ? <ActionButton variant="primary" onClick={onAcceptGps}>{t('useThisPoint')}</ActionButton> : null}
       {status ? <p className="note" role="status" aria-live="polite">{status}</p> : null}
       {error ? <p className="note" role="alert">{error}</p> : null}
@@ -83,6 +90,14 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
       })}
     </div></section> : null}
     {notice}
+    {initial ? <svg className="initial-location-landscape" viewBox="0 0 800 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true" focusable="false">
+      <path className="initial-landscape-distant" d="M0 92 Q110 28 230 86 T470 78 T800 62 V150 H0Z" />
+      <path className="initial-landscape-near" d="M0 118 Q145 52 300 112 T590 102 T800 91 V150 H0Z" />
+      <g className="initial-landscape-mosque" transform="translate(525 26)">
+        <path d="M0 92 V55 Q38 41 76 55 V92Z M29 55 C29 35 47 26 47 8 C47 26 65 35 65 55Z M16 53 V25 H21 V53 M13 25 L18.5 12 L24 25Z M57 53 V20 H62 V53 M54 20 L59.5 7 L65 20Z" />
+        <circle cx="47" cy="8" r="2" />
+      </g>
+    </svg> : null}
   </Screen>
 }
 

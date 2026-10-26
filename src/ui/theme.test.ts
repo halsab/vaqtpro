@@ -7,6 +7,7 @@ describe('theme behavior', () => {
   it('restores only supported theme families', () => {
     expect(restoreThemeFamily(undefined)).toBe(DEFAULT_THEME_FAMILY)
     expect(restoreThemeFamily('invalid')).toBe(DEFAULT_THEME_FAMILY)
+    expect(restoreThemeFamily('classic')).toBe('classic')
     expect(restoreThemeFamily('seasonal')).toBe('seasonal')
   })
 
