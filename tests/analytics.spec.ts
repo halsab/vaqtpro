@@ -2,12 +2,18 @@ import { resolve, sep } from 'node:path'
 import type { BrowserContext, Page } from '@playwright/test'
 import { expect, test } from './fixtures'
 
+test.use({ serviceWorkers: 'block' })
+
 const productionRequests: string[] = []
 
 async function useProductionOrigin(context: BrowserContext) {
   productionRequests.length = 0
   await context.route('**/*', async route => {
     const url = new URL(route.request().url())
+    if (url.hostname === 'vaqt.pro' && url.pathname === '/away.html') {
+      await route.fulfill({ contentType: 'text/html', headers: { 'cache-control': 'public, max-age=3600' }, body: '<!doctype html><title>Away</title><main>Вне приложения</main>' })
+      return
+    }
     if (url.hostname === 'static.cloudflareinsights.com') {
       productionRequests.push(url.href)
       await route.fulfill({ contentType: 'text/javascript', body: `
@@ -29,10 +35,6 @@ async function useProductionOrigin(context: BrowserContext) {
       await route.abort()
       return
     }
-    if (url.pathname === '/away.html') {
-      await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Away</title><main>Вне приложения</main>' })
-      return
-    }
     const relativePath = decodeURIComponent(url.pathname.slice(1) || 'index.html')
     const file = resolve('dist', relativePath)
     if (!file.startsWith(`${resolve('dist')}${sep}`) && file !== resolve('dist', 'index.html')) {
@@ -40,9 +42,9 @@ async function useProductionOrigin(context: BrowserContext) {
       return
     }
     try {
-      await route.fulfill({ path: file })
+      await route.fulfill({ path: file, headers: { 'cache-control': 'public, max-age=3600' } })
     } catch {
-      await route.fulfill({ path: resolve('dist/index.html') })
+      await route.fulfill({ path: resolve('dist/index.html'), headers: { 'cache-control': 'public, max-age=3600' } })
     }
   })
 }
@@ -136,20 +138,36 @@ test('a preference change from another tab reloads with analytics OFF', async ({
   expect(productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js'))).toHaveLength(1)
 })
 
-test('a BFCache pageshow re-reads the stored preference before continuing', async ({ context, page }) => {
+test('a BFCache history restore honors an OFF preference saved from another tab', async ({ context, page }) => {
   await useProductionOrigin(context)
+  await context.addInitScript(() => {
+    window.addEventListener('pageshow', event => {
+      const events = JSON.parse(sessionStorage.getItem('vaqtpro-analytics-pageshow') ?? '[]') as boolean[]
+      events.push(event.persisted)
+      sessionStorage.setItem('vaqtpro-analytics-pageshow', JSON.stringify(events))
+    })
+  })
   await page.goto('https://vaqt.pro/')
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
   await expect.poll(() => productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js')).length).toBe(1)
-  const reload = page.waitForEvent('load')
-  await page.evaluate(() => {
-    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))
-    localStorage.setItem('vaqtpro.analytics.enabled', 'false')
-    window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
-  })
-  await reload
+
+  await page.goto('https://vaqt.pro/away.html')
+  await expect(page).toHaveTitle('Away')
+  const otherTab = await context.newPage()
+  await otherTab.goto('https://vaqt.pro/away.html')
+  await otherTab.evaluate(() => localStorage.setItem('vaqtpro.analytics.enabled', 'false'))
+  const beaconLoadsBeforeRestore = productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js')).length
+  const rumRequestsBeforeRestore = productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum')).length
+
+  const returnedPageLoad = page.waitForEvent('load')
+  await page.goBack({ waitUntil: 'commit' })
+  await returnedPageLoad
   await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('vaqtpro.analytics.enabled'))).toBe('false')
   await expect(page.locator('script[data-vaqtpro-cloudflare-analytics]')).toHaveCount(0)
-  expect(productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js'))).toHaveLength(1)
+  expect(productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js'))).toHaveLength(beaconLoadsBeforeRestore)
+  expect(productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum'))).toHaveLength(rumRequestsBeforeRestore)
+  const restoredFromBfcache = await page.evaluate(() =>
+    (JSON.parse(sessionStorage.getItem('vaqtpro-analytics-pageshow') ?? '[]') as boolean[]).includes(true))
+  test.skip(!restoredFromBfcache, 'BFCache was unavailable in this Playwright environment; the browser history fallback was verified, but BFCache restoration was not.')
 })
