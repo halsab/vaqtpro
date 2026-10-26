@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { automaticPreferences, manualCalculation, type SourcePreferences } from '../../domain/sourcePreferences'
 import { effectiveCalculationSettings } from '../../domain/calculationSettings'
 import type { CalculationSelection } from '../../domain/calculationSettings'
@@ -13,6 +13,7 @@ import type { AppScreen } from '../../ui/useAppNavigation'
 import type { ThemeFamily } from '../../domain/theme'
 import { useLocalization } from '../../localization'
 import type { createTranslator } from '../../localization/messages'
+import { getAnalyticsPreferenceSnapshot, isCloudflareAnalyticsAvailableHere, saveAnalyticsPreference, subscribeToAnalyticsPreference } from '../../platform/analytics'
 
 interface SettingsScreensProps {
   screen: AppScreen
@@ -36,6 +37,7 @@ interface SettingsScreensProps {
 export function SettingsScreens({ screen, preferences, sourceLabel, effectiveSource, initialManualCalculation, themeFamily, onThemeFamilyChange,
   fastingModeEnabled = false, onFastingModeChange = () => {}, onChange, onOpen, onBack, getCapability, onReset, notice, version }: SettingsScreensProps) {
   const { locale, t } = useLocalization()
+  const analyticsPreference = useSyncExternalStore(subscribeToAnalyticsPreference, getAnalyticsPreferenceSnapshot, getAnalyticsPreferenceSnapshot)
   const storedManualSource = preferences.mode === 'manual' ? preferences.source : preferences.manualSourceDraft
   const manualSource = storedManualSource
   const calculation = preferences.mode === 'manual' ? preferences.source.calculation
@@ -114,7 +116,15 @@ export function SettingsScreens({ screen, preferences, sourceLabel, effectiveSou
     </div>
   </Screen>
   if (screen === 'privacy') return <Screen label={t('privacy')} top={top} bottom={<ScreenFooter><ActionButton variant="primary" id="reset-trigger" onClick={() => onOpen('reset')}>{t('deleteData')}</ActionButton></ScreenFooter>}>
-    <MarkdownArticle content={privacyContent.status === 'resolved' ? privacyContent.content : ''} />{notice}
+    <div className="screen-stack">
+      {isCloudflareAnalyticsAvailableHere() ? <>
+        <ActionRow title={t('analyticsVisits')} role="switch" aria-label={t('analyticsVisits')} aria-checked={analyticsPreference.enabled}
+          aria-describedby="analytics-visits-description" onClick={() => { saveAnalyticsPreference(!analyticsPreference.enabled) }} />
+        <p id="analytics-visits-description" className="note">{t('analyticsVisitsDescription')}</p>
+        {analyticsPreference.error ? <p className="note" role="alert">{t('analyticsPreferenceFailed')}</p> : null}
+      </> : <p className="note" role="status">{t('analyticsUnavailable')}</p>}
+      <MarkdownArticle content={privacyContent.status === 'resolved' ? privacyContent.content : ''} />{notice}
+    </div>
   </Screen>
   if (screen === 'about') return <Screen label={t('about')} top={top}><MarkdownArticle content={aboutContent.status === 'resolved' ? aboutContent.content : ''} /></Screen>
   if (screen === 'reset') return <ResetScreen onBack={onBack} onReset={onReset} />

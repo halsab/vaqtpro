@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { automaticPreferences, manualCalculation, restoreSourcePreferences, type SourcePreferences } from '../../domain/sourcePreferences'
 import { resolvePrayerTimeSource } from '../../domain/prayerSource'
 import { createLocalityPlace } from '../../domain/place'
+import * as analytics from '../../platform/analytics'
 import { SettingsScreens } from './SettingsScreens'
 import type { AppScreen } from '../../ui/useAppNavigation'
 const defaults = { onBack: vi.fn(), onOpen: vi.fn(), sourceLabel: 'Татарстан', themeFamily: 'classic' as const, onThemeFamilyChange: vi.fn(), getCapability: () => ({ supported: true as const }), onReset: vi.fn(), version: 'v26.4' }
@@ -45,9 +46,11 @@ describe('новые настройки', () => {
     const { rerender } = render(<SettingsScreens {...props} screen="privacy" />)
     const privacy = screen.getByRole('region', { name: 'Данные и конфиденциальность' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Конфиденциальность' })).toBeVisible()
-    expect(privacy).toHaveTextContent('До десяти недавно выбранных мест, включая сохранённые GPS-координаты, могут храниться локально')
-    expect(privacy).toHaveTextContent('Пассивная история перемещений и поисковых запросов не ведётся')
+    expect(privacy).toHaveTextContent('до десяти недавно выбранных мест, включая GPS-координаты, хранятся в браузере пользователя')
+    expect(privacy).toHaveTextContent('Постоянная история перемещений и поисковых запросов не ведётся')
     expect(privacy).toHaveTextContent('GitHub Pages')
+    expect(privacy).toHaveTextContent('Cloudflare Web Analytics')
+    expect(privacy).toHaveTextContent('win32.hs@gmail.com')
     expect(screen.queryByRole('link', { name: 'Конфиденциальность' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Удалить данные' })).toBeVisible()
     rerender(<SettingsScreens {...props} screen="about" />)
@@ -60,6 +63,24 @@ describe('новые настройки', () => {
     expect(within(sources as HTMLElement).getByRole('link', { name: 'SIL Open Font License 1.1' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Все источники и лицензии' })).toBeVisible()
     expect(document.querySelector('details')).toBeNull()
+  })
+  it('показывает доступный переключатель только в production-origin и сохраняет выбор', async () => {
+    const available = vi.spyOn(analytics, 'isCloudflareAnalyticsAvailableHere').mockReturnValue(true)
+    const save = vi.spyOn(analytics, 'saveAnalyticsPreference').mockReturnValue(true)
+    try {
+      render(<SettingsScreens {...defaults} screen="privacy" preferences={automaticPreferences()} onChange={vi.fn()} />)
+      const toggle = screen.getByRole('switch', { name: 'Аналитика посещений' })
+      expect(toggle).toHaveAttribute('aria-checked', 'true')
+      expect(toggle).toHaveAttribute('aria-describedby', 'analytics-visits-description')
+      expect(screen.getByText('Помогает оценивать посещаемость и скорость работы. Выбранное место, расписание и настройки не передаются в аналитику.')).toBeVisible()
+      const heading = await screen.findByRole('heading', { name: 'Конфиденциальность' })
+      expect(toggle.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      await userEvent.click(toggle)
+      expect(save).toHaveBeenCalledWith(false)
+    } finally {
+      available.mockRestore()
+      save.mockRestore()
+    }
   })
   it.each<[SourcePreferences, string]>([
     [automaticPreferences(), 'В автоматическом режиме расписание рассчитывается по региональному профилю и местной часовой зоне.'],

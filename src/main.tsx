@@ -3,9 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 
 import { ExecutionGateView } from './platform/ExecutionGateView'
+import { initializeCloudflareAnalytics } from './platform/analytics'
 import { createServiceWorkerReloadGuard } from './platform/serviceWorkerUpdate'
 import './styles.css'
 import './ui/screen.css'
+
+initializeCloudflareAnalytics()
 
 registerSW({
   immediate: true,
