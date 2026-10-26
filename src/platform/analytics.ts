@@ -31,6 +31,34 @@ function browserStorage(): Storage | null {
   catch { return null }
 }
 
+function isCityShardResource(name: string, origin: string): boolean {
+  try {
+    const url = new URL(name, origin)
+    return url.origin === origin && /^\/data\/cities\/[a-f\d]{20}\/[A-Z]{2}-\d+\.json$/i.test(url.pathname)
+  } catch {
+    return false
+  }
+}
+
+function hideCityShardResourceTimings(target: Window): boolean {
+  const performance = target.performance
+  if (typeof performance.getEntriesByType !== 'function') return true
+  const origin = target.location.origin
+  const getEntriesByType = performance.getEntriesByType.bind(performance)
+  try {
+    Object.defineProperty(performance, 'getEntriesByType', {
+      configurable: true,
+      value: (type: string) => {
+        const entries = getEntriesByType(type)
+        return type === 'resource' ? entries.filter(entry => !isCityShardResource(entry.name, origin)) : entries
+      },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function readAnalyticsPreference(storage: Pick<Storage, 'getItem'> | null = browserStorage()): AnalyticsPreferenceState {
   if (!storage) return { enabled: false, error: 'read' }
   try {
@@ -105,6 +133,7 @@ export function initializeCloudflareAnalytics(runtime: AnalyticsRuntime | null =
   if (!canLoadCloudflareAnalytics({ productionBuild, protocol: target.location.protocol,
     hostname: target.location.hostname, enabled: initial.enabled, preferenceError: initial.error !== null, siteToken })) return
   if (page.querySelector('script[data-vaqtpro-cloudflare-analytics]')) return
+  if (!hideCityShardResourceTimings(target)) return
 
   const script = page.createElement('script')
   script.type = 'module'

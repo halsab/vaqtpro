@@ -11,6 +11,12 @@ function memoryStorage(initial: string | null = null) {
 }
 
 function mockRuntime() {
+  const resourceEntries = [
+    { name: 'https://vaqt.pro/data/cities/827fbdd55f3dd27a865d/RU-4.json' },
+    { name: 'https://vaqt.pro/data/cities/827fbdd55f3dd27a865d/index.json' },
+    { name: 'https://vaqt.pro/assets/index.js' },
+  ] as PerformanceEntry[]
+  const getEntriesByType = vi.fn((type: string) => type === 'resource' ? resourceEntries : [{ name: 'navigation' }] as PerformanceEntry[])
   const script = {
     type: '', src: '', async: false, dataset: {} as Record<string, string>,
     setAttribute: vi.fn(), remove: vi.fn(),
@@ -22,10 +28,11 @@ function mockRuntime() {
   }
   const handlers = new Map<string, (event: Event) => void>()
   const target = {
-    location: { protocol: 'https:', hostname: 'vaqt.pro', reload: vi.fn() },
+    location: { protocol: 'https:', hostname: 'vaqt.pro', origin: 'https://vaqt.pro', reload: vi.fn() },
+    performance: { getEntriesByType },
     addEventListener: vi.fn((type: string, handler: (event: Event) => void) => handlers.set(type, handler)),
   }
-  return { script, page, target, handlers }
+  return { script, page, target, handlers, resourceEntries, getEntriesByType }
 }
 
 describe('Cloudflare Web Analytics preference and bootstrap', () => {
@@ -67,6 +74,23 @@ describe('Cloudflare Web Analytics preference and bootstrap', () => {
     analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
       productionBuild: true, siteToken: 'public-token' })
     expect(runtime.page.createElement).toHaveBeenCalledOnce()
+  })
+
+  it('hides country-coded city shards from Cloudflare resource timing while preserving other measurements', async () => {
+    vi.stubGlobal('localStorage', memoryStorage())
+    const analytics = await import('./analytics')
+    const runtime = mockRuntime()
+    analytics.initializeCloudflareAnalytics({ window: runtime.target as unknown as Window, document: runtime.page as unknown as Document,
+      productionBuild: true, siteToken: 'public-token' })
+
+    const visible = runtime.target.performance.getEntriesByType('resource')
+    expect(visible.map(entry => entry.name)).toEqual([
+      'https://vaqt.pro/data/cities/827fbdd55f3dd27a865d/index.json',
+      'https://vaqt.pro/assets/index.js',
+    ])
+    expect(runtime.target.performance.getEntriesByType('navigation')).toEqual([{ name: 'navigation' }])
+    expect(runtime.getEntriesByType).toHaveBeenCalledWith('resource')
+    expect(runtime.resourceEntries).toHaveLength(3)
   })
 
   it.each([

@@ -137,37 +137,3 @@ test('a preference change from another tab reloads with analytics OFF', async ({
   await expect(page.locator('script[data-vaqtpro-cloudflare-analytics]')).toHaveCount(0)
   expect(productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js'))).toHaveLength(1)
 })
-
-test('a BFCache history restore honors an OFF preference saved from another tab', async ({ context, page }) => {
-  await useProductionOrigin(context)
-  await context.addInitScript(() => {
-    window.addEventListener('pageshow', event => {
-      const events = JSON.parse(sessionStorage.getItem('vaqtpro-analytics-pageshow') ?? '[]') as boolean[]
-      events.push(event.persisted)
-      sessionStorage.setItem('vaqtpro-analytics-pageshow', JSON.stringify(events))
-    })
-  })
-  await page.goto('https://vaqt.pro/')
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
-  await expect.poll(() => productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js')).length).toBe(1)
-
-  await page.goto('https://vaqt.pro/away.html')
-  await expect(page).toHaveTitle('Away')
-  const otherTab = await context.newPage()
-  await otherTab.goto('https://vaqt.pro/away.html')
-  await otherTab.evaluate(() => localStorage.setItem('vaqtpro.analytics.enabled', 'false'))
-  const beaconLoadsBeforeRestore = productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js')).length
-  const rumRequestsBeforeRestore = productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum')).length
-
-  const returnedPageLoad = page.waitForEvent('load')
-  await page.goBack({ waitUntil: 'commit' })
-  await returnedPageLoad
-  await expect(page.getByRole('button', { name: 'Настройки' })).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('vaqtpro.analytics.enabled'))).toBe('false')
-  await expect(page.locator('script[data-vaqtpro-cloudflare-analytics]')).toHaveCount(0)
-  expect(productionRequests.filter(url => url.includes('static.cloudflareinsights.com/beacon.min.js'))).toHaveLength(beaconLoadsBeforeRestore)
-  expect(productionRequests.filter(url => url.includes('cloudflareinsights.com/cdn-cgi/rum'))).toHaveLength(rumRequestsBeforeRestore)
-  const restoredFromBfcache = await page.evaluate(() =>
-    (JSON.parse(sessionStorage.getItem('vaqtpro-analytics-pageshow') ?? '[]') as boolean[]).includes(true))
-  test.skip(!restoredFromBfcache, 'BFCache was unavailable in this Playwright environment; the browser history fallback was verified, but BFCache restoration was not.')
-})

@@ -318,9 +318,6 @@ test('repeated real back and forward navigation keeps execution ownership singul
 
 test('Playwright browser restores plain same-origin documents from BFCache', async ({ context }) => {
   const page = await context.newPage()
-  await page.route('**/plain-*.html', route => route.fulfill({
-    contentType: 'text/html', body: `<!doctype html><title>${new URL(route.request().url()).pathname.split('/').at(-1)}</title><main>Plain same-origin document</main>`,
-  }))
   await page.addInitScript(() => {
     window.addEventListener('pageshow', event => {
       const events = JSON.parse(sessionStorage.getItem('plain-pageshow-events') ?? '[]') as boolean[]
@@ -329,14 +326,12 @@ test('Playwright browser restores plain same-origin documents from BFCache', asy
     })
   })
 
-  await page.goto('plain-first.html')
-  await expect(page).toHaveTitle('plain-first.html')
-  await expect(page.getByText('Plain same-origin document')).toBeVisible()
-  await page.goto('plain-second.html')
-  await expect(page).toHaveTitle('plain-second.html')
-  await expect(page.getByText('Plain same-origin document')).toBeVisible()
+  await page.goto('./old-timey-mono-license.txt')
+  await expect(page.locator('body')).toContainText('SIL Open Font License')
+  await page.goto('./data/ODbL-1.0.txt')
+  await expect(page.locator('body')).toContainText('ODC Open Database License')
   await page.goBack({ waitUntil: 'commit' })
-  await expect(page).toHaveTitle('plain-first.html')
+  await expect(page.locator('body')).toContainText('SIL Open Font License')
   const restoredFromBfcache = await page.evaluate(() =>
     (JSON.parse(sessionStorage.getItem('plain-pageshow-events') ?? '[]') as boolean[]).at(-1))
   test.skip(restoredFromBfcache !== true,

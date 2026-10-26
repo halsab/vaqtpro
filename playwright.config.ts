@@ -52,6 +52,11 @@ export default defineConfig({
       testMatch: ['**/execution-gate.spec.ts'],
       use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
     },
+    {
+      name: 'webkit-analytics-bfcache',
+      testMatch: ['**/analytics-bfcache.spec.ts'],
+      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
+    },
     // Обновление service worker меняет dist/sw.js; запускается строго после остальных.
     {
       name: 'chromium-sw',
