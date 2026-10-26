@@ -1,6 +1,15 @@
 @import './theme.css';
 
 html, body { background: var(--app-shell-background); color: var(--text-primary); }
+:root[data-theme='seasonal'] { --seasonal-pattern-opacity: 0.2; }
+:root[data-theme='seasonal'][data-season='spring'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-spring-transparent-seamless.png'); }
+:root[data-theme='seasonal'][data-season='summer'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-summer-transparent-seamless.png'); }
+:root[data-theme='seasonal'][data-season='autumn'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-autumn-transparent-seamless.png'); }
+:root[data-theme='seasonal'][data-season='winter'] { --seasonal-pattern: url('/seasonal-patterns/vaqtpro-winter-transparent-seamless.png'); }
+:root[data-theme='seasonal'][data-season='spring'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.6; }
+:root[data-theme='seasonal'][data-season='summer'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.4; }
+:root[data-theme='seasonal'][data-season='autumn'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.55; }
+:root[data-theme='seasonal'][data-season='winter'][data-theme-tone='dark'] { --seasonal-pattern-opacity: 0.45; }
 .execution-owner { display: contents; }
 .app-bottom-surface { display: none; }
 @media (display-mode: browser) {
@@ -51,6 +60,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  isolation: isolate;
   padding: 0 var(--screen-inset-right) 0 var(--screen-inset-left);
   border-radius: var(--container-radius) var(--container-radius) 0 0;
   background: var(--background-secondary);
@@ -58,6 +68,19 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
   flex-direction: column;
   gap: 0;
   overflow: hidden;
+}
+.screen-panel::before {
+  /* Изолированный отрицательный слой остаётся над фоном панели, но под её содержимым. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: var(--seasonal-pattern-opacity, 0.3);
+  background-image: var(--seasonal-pattern, none);
+  background-repeat: repeat;
+  background-position: 0 0;
+  background-size: 627px 627px;
+  pointer-events: none;
 }
 .screen-panel--no-top { border-top-left-radius: 0; border-top-right-radius: 0; }
 .screen-content { flex: 1; min-height: 0; padding-top: var(--content-inset); padding-bottom: max(var(--screen-content-bottom-inset), calc(var(--app-keyboard-inset, 0px) + var(--content-inset))); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; view-transition-name: vaqtpro-screen-content; }
