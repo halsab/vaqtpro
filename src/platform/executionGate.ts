@@ -1,5 +1,7 @@
 const LOCK_NAME = 'salah-foreground-execution-v1'
 const CHANNEL_NAME = 'salah-execution-gate-v1'
+const LOCK_ACQUISITION_TIMEOUT_MS = 10_000
+const QUIESCENCE_TIMEOUT_MS = 10_000
 let quiescence: () => Promise<void> = async () => {}
 
 export function setExecutionQuiescence(operation: Promise<unknown> | (() => Promise<unknown>)) {
@@ -9,6 +11,16 @@ export function setExecutionQuiescence(operation: Promise<unknown> | (() => Prom
 }
 
 export function waitForExecutionQuiescence() { return quiescence() }
+
+function withDeadline<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs)
+    operation.then(value => { window.clearTimeout(timer); resolve(value) }, (error: unknown) => {
+      window.clearTimeout(timer)
+      reject(error instanceof Error ? error : new Error(String(error)))
+    })
+  })
+}
 
 function createEphemeralId(): string | null {
   try {
@@ -86,13 +98,18 @@ export function createExecutionGate(): ExecutionGate {
     const settle = (value: { acquired: boolean; owner?: symbol }) => {
       if (settled) return
       settled = true
+      window.clearTimeout(acquisitionTimer)
       if (acquisition === result) acquisition = null
       finish(value)
     }
+    const acquisitionTimer = window.setTimeout(() => {
+      coordinationError = true
+      settle({ acquired: false })
+    }, LOCK_ACQUISITION_TIMEOUT_MS)
 
     try {
       const task = locks.request(LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, async lock => {
-        if (!lock || stopped || !isCurrent()) {
+        if (settled || !lock || stopped || !isCurrent()) {
           settle({ acquired: false })
           return
         }
@@ -165,7 +182,7 @@ export function createExecutionGate(): ExecutionGate {
       serving = false
       takeover = (async () => {
         try {
-          await deactivate()
+          await withDeadline(deactivate(), QUIESCENCE_TIMEOUT_MS, 'Execution quiescence timed out')
           if (!isHeld()) return
           release()
           if (shouldClose()) { stopped = true; channel.close() }
@@ -201,10 +218,10 @@ export function createExecutionGate(): ExecutionGate {
       if (held && !serving) {
         const recovery = (async () => {
           try {
-            await deactivate()
+            await withDeadline(deactivate(), QUIESCENCE_TIMEOUT_MS, 'Execution quiescence timed out')
             if (isStopped() || isSuspended()) return false
             release()
-            await lockTask
+            await withDeadline(lockTask ?? Promise.resolve(), QUIESCENCE_TIMEOUT_MS, 'Execution lock release timed out')
             const acquired = await acquire(() => !isStopped() && !isSuspended())
             if (acquired.acquired && isHeld() && !isStopped() && !isSuspended()) {
               coordinationError = false
@@ -261,6 +278,10 @@ export function createExecutionGate(): ExecutionGate {
           finish(true)
           return
         }
+        if (coordinationError) {
+          finish(false)
+          return
+        }
         if (refusedRequestId === requestId) {
           finish(false)
           return
@@ -301,9 +322,9 @@ export function createExecutionGate(): ExecutionGate {
       if (!held) return
       serving = false
       try {
-        await deactivate()
+        await withDeadline(deactivate(), QUIESCENCE_TIMEOUT_MS, 'Execution quiescence timed out')
         release()
-        await lockTask
+        await withDeadline(lockTask ?? Promise.resolve(), QUIESCENCE_TIMEOUT_MS, 'Execution lock release timed out')
         channel?.close()
         coordinationError = false
       } catch (error) {

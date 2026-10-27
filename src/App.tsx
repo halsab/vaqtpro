@@ -83,6 +83,17 @@ import {
 const loadSecondaryScreens = () => import('./features/SecondaryScreens')
 const SECONDARY_SCREENS: readonly AppScreen[] = ['settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about']
 const loadReligiousEventScreen = () => import('./features/religiousEvents/ReligiousEventScreen')
+const SCREEN_MODULE_TIMEOUT_MS = 15_000
+
+function waitForScreenModule<T>(module: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('Screen module loading timed out')), SCREEN_MODULE_TIMEOUT_MS)
+    module.then(value => { window.clearTimeout(timer); resolve(value) }, (error: unknown) => {
+      window.clearTimeout(timer)
+      reject(error instanceof Error ? error : new Error(String(error)))
+    })
+  })
+}
 export interface AppServices extends Partial<Pick<typeof prayerRepository,
   'clearAppData' | 'initializeStartup' | 'loadOptionalSettings'>>,
   Pick<typeof prayerRepository, 'initialize' | 'saveSettings' | 'invalidateAndDrain'> {
@@ -254,23 +265,50 @@ export function App({
     saveSettings(patch)
   }, [invalidateFastCache, saveSettings])
   const navigation = useAppNavigation()
-  const { open: openImmediately, openPrepared: openScreenPrepared, back: backScreen, home: homeScreen } = navigation
+  const { open: openImmediately, openPrepared: openScreenPrepared, back: navigateBack, home: navigateHome } = navigation
   const [secondaryScreens, setSecondaryScreens] = useState<typeof import('./features/SecondaryScreens') | null>(null)
   const [screenLoadFailed, setScreenLoadFailed] = useState(false)
+  const [screenLoadPending, setScreenLoadPending] = useState(false)
+  const [failedScreenTarget, setFailedScreenTarget] = useState<AppScreen | null>(null)
+  const screenLoadGeneration = useRef(0)
+  const [religiousEventScreen, setReligiousEventScreen] = useState<typeof import('./features/religiousEvents/ReligiousEventScreen')['ReligiousEventScreen'] | null>(null)
+  const [religiousEventLoadError, setReligiousEventLoadError] = useState<string | null>(null)
+  const [religiousEventLoadPending, setReligiousEventLoadPending] = useState(false)
+  const [failedReligiousEventId, setFailedReligiousEventId] = useState<import('./domain/religiousEvents').ReligiousEventId | null>(null)
+  const religiousEventLoadGeneration = useRef(0)
   const openScreen = useCallback((target: AppScreen) => {
+    const generation = ++screenLoadGeneration.current
+    religiousEventLoadGeneration.current += 1
+    setReligiousEventLoadPending(false)
     setScreenLoadFailed(false)
+    setFailedScreenTarget(null)
+    setScreenLoadPending(false)
     if (!secondaryScreens && SECONDARY_SCREENS.includes(target)) {
+      setScreenLoadPending(true)
       void openScreenPrepared(target, async () => {
-        const screens = await loadSecondaryScreens()
+        const screens = await waitForScreenModule(loadSecondaryScreens())
         flushSync(() => setSecondaryScreens(screens))
-      }).catch(() => setScreenLoadFailed(true))
+      }).catch(() => {
+        if (screenLoadGeneration.current === generation) {
+          setScreenLoadFailed(true)
+          setFailedScreenTarget(target)
+        }
+      }).finally(() => {
+        if (screenLoadGeneration.current === generation) setScreenLoadPending(false)
+      })
     } else openImmediately(target)
   }, [openImmediately, openScreenPrepared, secondaryScreens])
   const SettingsScreens = secondaryScreens?.SettingsScreens
   const SourceInfo = secondaryScreens?.SourceInfo
   const MethodologyDialog = secondaryScreens?.MethodologyDialog
-  const [religiousEventScreen, setReligiousEventScreen] = useState<typeof import('./features/religiousEvents/ReligiousEventScreen')['ReligiousEventScreen'] | null>(null)
-  const [religiousEventLoadError, setReligiousEventLoadError] = useState<string | null>(null)
+  const cancelPendingScreenLoads = useCallback(() => {
+    screenLoadGeneration.current += 1
+    religiousEventLoadGeneration.current += 1
+    setScreenLoadPending(false)
+    setReligiousEventLoadPending(false)
+  }, [])
+  const backScreen = useCallback(() => { cancelPendingScreenLoads(); navigateBack() }, [cancelPendingScreenLoads, navigateBack])
+  const homeScreen = useCallback(() => { cancelPendingScreenLoads(); navigateHome() }, [cancelPendingScreenLoads, navigateHome])
   const locationDialogOpen = navigation.screen === 'location' || navigation.screen === 'search'
   const settingsDialogOpen = ['settings', 'source', 'source-choice', 'profiles', 'parameters', 'privacy', 'reset', 'about'].includes(navigation.screen)
   const methodologyDialogOpen = navigation.screen === 'methodology'
@@ -581,12 +619,22 @@ export function App({
 
   const openSettingsDialog = useCallback(() => { openScreen('settings') }, [openScreen])
   const openReligiousEvent = useCallback((religiousEventId: import('./domain/religiousEvents').ReligiousEventId) => {
+    const generation = ++religiousEventLoadGeneration.current
+    screenLoadGeneration.current += 1
+    setScreenLoadPending(false)
     setReligiousEventLoadError(null)
+    setReligiousEventLoadPending(true)
+    setFailedReligiousEventId(null)
     void openScreenPrepared({ screen: 'religious-event', religiousEventId }, async () => {
-      const module = await loadReligiousEventScreen()
+      const module = await waitForScreenModule(loadReligiousEventScreen())
       flushSync(() => setReligiousEventScreen(() => module.ReligiousEventScreen))
     }).catch(() => {
-      setReligiousEventLoadError(t('eventUnavailable'))
+      if (religiousEventLoadGeneration.current === generation) {
+        setReligiousEventLoadError(t('eventUnavailable'))
+        setFailedReligiousEventId(religiousEventId)
+      }
+    }).finally(() => {
+      if (religiousEventLoadGeneration.current === generation) setReligiousEventLoadPending(false)
     })
   }, [openScreenPrepared, t])
 
@@ -651,9 +699,12 @@ export function App({
       ) : null
   const nearbyCityNotice = place?.selection === 'gps' ? nameLookupMessage(nameLookupState, locale) : null
   const recoveryNotices = <>
+    {screenLoadPending || religiousEventLoadPending ? <div className="screen-status" role="status" aria-live="polite">
+      {t('loading')}
+    </div> : null}
     {screenLoadFailed ? <div className="screen-status" role="alert">
       <span>{t('screenLoadFailed')}</span>
-      <ActionButton onClick={() => window.location.reload()}>{t('retry')}</ActionButton>
+      {failedScreenTarget ? <ActionButton onClick={() => openScreen(failedScreenTarget)}>{t('retry')}</ActionButton> : null}
     </div> : null}
     {startupRecoveryError ? <div className="screen-status" role="alert">
       <span>{t('startupRecoveryError')}</span>
@@ -715,7 +766,8 @@ export function App({
         onBack={backScreen} notice={persistenceNotice} /> : null}
 
       {navigation.screen === 'religious-events' ? <ReligiousEventsScreen today={today} correction={calendarPreferences.correction}
-        hijriSupported={hijriSupported} onOpenEvent={openReligiousEvent} onBack={backScreen} loadError={religiousEventLoadError} /> : null}
+        hijriSupported={hijriSupported} onOpenEvent={openReligiousEvent} onBack={backScreen} loadError={religiousEventLoadError}
+        loadPending={religiousEventLoadPending} {...(failedReligiousEventId ? { onRetryLoad: () => openReligiousEvent(failedReligiousEventId) } : {})} /> : null}
 
       {navigation.screen === 'location' ? <LocationScreen place={gpsPreview ?? place} activePlace={place} recentPlaces={recentPlaces} {...(activeHistoryId ? { activeHistoryId } : {})} onSelectRecent={selectRecent}
         onBack={closeLocationDialog} onSearch={() => { cancelInteractiveGps(); flushSync(() => openScreen('search')); document.querySelector<HTMLInputElement>('input[type="search"]')?.focus() }} onLocate={locateAutomatically}

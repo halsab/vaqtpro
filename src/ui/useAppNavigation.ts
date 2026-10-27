@@ -27,6 +27,7 @@ export function useAppNavigation() {
   const current = useRef(HOME)
   const returnFocus = useRef<string | null>(null)
   const traversing = useRef(false)
+  const traversalTimer = useRef<number | null>(null)
   const intentGeneration = useRef(0)
 
   useEffect(() => {
@@ -34,6 +35,8 @@ export function useAppNavigation() {
     window.history.scrollRestoration = 'manual'
     window.history.replaceState({ salahNavigation: { session, entries: HOME } }, '')
     const onPop = (event: PopStateEvent) => {
+      if (traversalTimer.current !== null) window.clearTimeout(traversalTimer.current)
+      traversalTimer.current = null
       intentGeneration.current += 1
       const next = readEntries(event.state, session) ?? HOME
       if (next.length < current.current.length) returnFocus.current = current.current[next.length]?.returnFocus ?? null
@@ -46,6 +49,7 @@ export function useAppNavigation() {
     window.addEventListener('popstate', onPop)
     return () => {
       window.removeEventListener('popstate', onPop)
+      if (traversalTimer.current !== null) window.clearTimeout(traversalTimer.current)
       window.history.scrollRestoration = previousScrollRestoration
     }
   }, [session])
@@ -113,6 +117,12 @@ export function useAppNavigation() {
     returnFocus.current = current.current.at(-1)?.returnFocus ?? null
     traversing.current = true
     window.history.back()
+    traversalTimer.current = window.setTimeout(() => {
+      // Если браузер не выпустил popstate, оставляем текущий экран рабочим.
+      traversing.current = false
+      returnFocus.current = null
+      traversalTimer.current = null
+    }, 1_000)
   }, [])
   const home = useCallback(() => {
     const depth = current.current.length - 1
@@ -121,6 +131,11 @@ export function useAppNavigation() {
     returnFocus.current = current.current[1]?.returnFocus ?? null
     traversing.current = true
     window.history.go(-depth)
+    traversalTimer.current = window.setTimeout(() => {
+      traversing.current = false
+      returnFocus.current = null
+      traversalTimer.current = null
+    }, 1_000)
   }, [])
 
   const active = entries.at(-1) ?? { screen: 'home', returnFocus: null }

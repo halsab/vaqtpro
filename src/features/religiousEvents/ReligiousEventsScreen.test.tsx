@@ -31,3 +31,15 @@ it('keeps an occurrence without an article noninteractive', () => {
 
   expect(within(screen.getByRole('listitem')).queryByRole('button')).not.toBeInTheDocument()
 })
+
+it('shows deferred article progress and offers a retry after load failure', async () => {
+  const retry = vi.fn()
+  const view = render(<ReligiousEventsScreen today="2026-01-01" correction={0} hijriSupported
+    onOpenEvent={() => {}} onBack={() => {}} loadPending />)
+  expect(screen.getByRole('status')).toHaveTextContent('Загрузка')
+
+  view.rerender(<ReligiousEventsScreen today="2026-01-01" correction={0} hijriSupported
+    onOpenEvent={() => {}} onBack={() => {}} loadError="Не удалось загрузить статью" onRetryLoad={retry} />)
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+  expect(retry).toHaveBeenCalledOnce()
+})

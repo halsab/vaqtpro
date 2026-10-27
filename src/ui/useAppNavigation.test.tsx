@@ -161,6 +161,22 @@ describe('навигация экранов', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Настройки' })).toHaveFocus())
   })
 
+  it('разблокирует внутреннюю навигацию, если history traversal не выпускает popstate', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    try {
+      render(<NavigationExample />)
+      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      expect(back).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+    }
+  })
+
   it('завершает вложенный сценарий возвращением на главную', async () => {
     const user = userEvent.setup()
     render(<NavigationExample />)

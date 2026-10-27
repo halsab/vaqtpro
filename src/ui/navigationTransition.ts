@@ -1,56 +1,26 @@
-import { flushSync } from 'react-dom'
-
 export function canUseNavigationTransitions(): boolean {
-  return typeof (document as unknown as { startViewTransition?: unknown }).startViewTransition === 'function'
+  return typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function'
     && !(typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 }
 
-interface NavigationViewTransition {
-  finished: Promise<void>
-  updateCallbackDone: Promise<void>
-  skipTransition: () => void
-}
-
-let activeTransition: NavigationViewTransition | null = null
-let generation = 0
+const animations = new WeakMap<Element, Animation>()
 
 export function runNavigationTransition(update: () => void): void {
-  const startViewTransition = (document as unknown as { startViewTransition?: (callback: () => void) => NavigationViewTransition }).startViewTransition
-  if (activeTransition) {
-    const previous = activeTransition
-    activeTransition = null
-    generation += 1
-    previous.skipTransition()
-    update()
-    return
-  }
-
-  if (!canUseNavigationTransitions() || !startViewTransition) {
-    update()
-    return
-  }
-
-  const ownGeneration = ++generation
-  const callbackState = { ran: false }
+  update()
+  if (!canUseNavigationTransitions()) return
+  const content = document.querySelector('.screen-content')
+  if (!content) return
+  animations.get(content)?.cancel()
   try {
-    const transition = startViewTransition.call(document, () => {
-      if (generation !== ownGeneration) return
-      callbackState.ran = true
-      flushSync(update)
+    const animation = content.animate(
+      [{ opacity: 0.72 }, { opacity: 1 }],
+      { duration: 140, easing: 'ease-out' },
+    )
+    animations.set(content, animation)
+    void animation.finished.catch(() => undefined).then(() => {
+      if (animations.get(content) === animation) animations.delete(content)
     })
-    activeTransition = transition
-    const clean = () => {
-      if (generation === ownGeneration && activeTransition === transition) activeTransition = null
-    }
-    void transition.finished.then(clean, clean)
-    void transition.updateCallbackDone.catch(clean)
   } catch {
-    if (!callbackState.ran) update()
+    // Навигация уже обновлена; анимация остаётся необязательной.
   }
-}
-
-export function resetNavigationTransitionForTests() {
-  activeTransition?.skipTransition()
-  activeTransition = null
-  generation += 1
 }

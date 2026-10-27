@@ -83,7 +83,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
   pointer-events: none;
 }
 .screen-panel--no-top { border-top-left-radius: 0; border-top-right-radius: 0; }
-.screen-content { flex: 1; min-height: 0; padding-top: var(--content-inset); padding-bottom: max(var(--screen-content-bottom-inset), calc(var(--app-keyboard-inset, 0px) + var(--content-inset))); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; view-transition-name: vaqtpro-screen-content; }
+.screen-content { flex: 1; min-height: 0; padding-top: var(--content-inset); padding-bottom: max(var(--screen-content-bottom-inset), calc(var(--app-keyboard-inset, 0px) + var(--content-inset))); overflow-x: hidden; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; }
 .screen-bottom { padding-bottom: var(--screen-bottom-inset); }
 .screen-content.home-content {
   margin-left: calc(0px - var(--screen-inset-left));
@@ -158,12 +158,6 @@ html[data-input='pointer'] .select-field { outline: none; }
 .screen-title { font: var(--font-title); overflow-wrap: anywhere; }
 .screen-copy { font: var(--font-body); }
 .screen-status { font: var(--font-footnote); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
-::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-::view-transition-group(vaqtpro-screen-content) { animation: none; }
-::view-transition-old(vaqtpro-screen-content) { animation: vaqtpro-content-out var(--navigation-fade-duration) var(--navigation-transition-easing) both; }
-::view-transition-new(vaqtpro-screen-content) { animation: vaqtpro-content-in var(--navigation-fade-duration) var(--navigation-transition-easing) both; }
-@keyframes vaqtpro-content-out { to { opacity: 0; } }
-@keyframes vaqtpro-content-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .app-layout *, .app-layout *::before, .app-layout *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

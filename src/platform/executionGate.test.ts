@@ -72,6 +72,46 @@ describe('execution gate', () => {
     expect(await gate.requestOwnership()).toBe(false)
   })
 
+  it('bounds stalled initial lock acquisition and drops a late grant without owning it', async () => {
+    setup()
+    let grant!: (lock: Lock | null) => Promise<void>
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (_name: string, _options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        grant = callback
+        return new Promise<void>(() => {})
+      },
+    } })
+    vi.useFakeTimers()
+    try {
+      const gate = createExecutionGate()
+      const starting = gate.start()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await expect(starting).resolves.toBe(false)
+      expect(gate.hasError()).toBe(true)
+      await grant({ name: 'test-lock', mode: 'exclusive', pending: false } as Lock)
+      expect(gate.hasError()).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('keeps the lock when lifecycle quiescence exceeds its deadline', async () => {
+    const locks = setup()
+    const gate = createExecutionGate()
+    const drain = deferred()
+    gate.onTakeover(() => drain.promise)
+    expect(await gate.start()).toBe(true)
+    vi.useFakeTimers()
+    try {
+      const relinquishing = gate.relinquish()
+      const timedOut = expect(relinquishing).rejects.toThrow('timed out')
+      await vi.advanceTimersByTimeAsync(10_000)
+      await timedOut
+      expect(locks.held).toBe(true)
+      drain.resolve()
+      await Promise.resolve()
+      expect(locks.held).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
   it('settles ID generation failures without retaining a request and recovers on retry', async () => {
     setup()
     const randomUUID = vi.fn()

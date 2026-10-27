@@ -24,8 +24,6 @@
   --button-height: 44px;
   --button-radius: 22px;
   --container-radius: 38px;
-  --navigation-fade-duration: 300ms;
-  --navigation-transition-easing: ease-in-out;
 }
 
 @media (prefers-color-scheme: dark) {
