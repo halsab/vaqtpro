@@ -31,7 +31,7 @@ export function ReligiousEventOccurrenceRow({ occurrence, onOpenEvent }: {
   </li>
 }
 
-export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpenEvent, onBack, loadError, loadPending, onRetryLoad }: {
+export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpenEvent, onBack, loadError, loadPending, onRetryLoad, onReload }: {
   today: string
   correction: DateCorrection
   hijriSupported: boolean
@@ -40,6 +40,7 @@ export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpe
   loadError?: string | null
   loadPending?: boolean
   onRetryLoad?: () => void
+  onReload?: () => void
 }) {
   const { t } = useLocalization()
   const occurrences = useMemo(() => {
@@ -49,8 +50,9 @@ export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpe
   }, [today, correction, hijriSupported])
 
   return <Screen label={t('religiousEvents')} top={<BackButton onClick={onBack} />}>
-    {loadPending ? <p role="status" aria-live="polite">{t('loading')}</p> : null}
-    {loadError ? <div role="alert"><p>{loadError}</p>{onRetryLoad ? <ActionButton onClick={onRetryLoad}>{t('retry')}</ActionButton> : null}</div> : null}
+    {loadPending ? <p className="screen-load-progress" role="status" aria-live="polite">{t('loading')}</p> : null}
+    {loadError ? <div role="alert"><p>{loadError}</p>{onRetryLoad ? <ActionButton onClick={onRetryLoad}>{t('retry')}</ActionButton> : null}
+      {onReload ? <ActionButton onClick={onReload}>{t('reload')}</ActionButton> : null}</div> : null}
     <ul className="religious-events-list">
       {occurrences.map(occurrence => <ReligiousEventOccurrenceRow
         key={`${occurrence.civilDate}:${occurrence.eventId}`}

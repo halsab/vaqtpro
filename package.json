@@ -16,7 +16,7 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test --project=chromium --project=mobile-safari-portrait --project=chromium-execution-gate --project=webkit-execution-gate --project=webkit-analytics-bfcache --project=chromium-sw",
+    "test:e2e": "playwright test --project=chromium --project=mobile-safari-portrait --project=chromium-execution-gate --project=webkit-execution-gate --project=webkit-deferred-loading --project=webkit-mobile-jelly --project=webkit-analytics-bfcache --project=chromium-sw",
     "security:csp": "playwright test tests/security.spec.ts --project=chromium --workers=1",
     "smoke:offline": "playwright test tests/offline.spec.ts --project=chromium",
     "smoke:sw-update": "playwright test tests/sw-update.spec.ts --project=chromium-sw --no-deps --workers=1",

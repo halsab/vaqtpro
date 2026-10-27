@@ -1,26 +1,46 @@
+import { flushSync } from 'react-dom'
+
+interface NavigationViewTransition {
+  finished: Promise<void>
+  skipTransition: () => void
+}
+
+let activeTransition: NavigationViewTransition | null = null
+
 export function canUseNavigationTransitions(): boolean {
-  return typeof Element !== 'undefined' && typeof Element.prototype.animate === 'function'
+  return typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === 'function'
     && !(typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 }
 
-const animations = new WeakMap<Element, Animation>()
-
 export function runNavigationTransition(update: () => void): void {
-  update()
-  if (!canUseNavigationTransitions()) return
-  const content = document.querySelector('.screen-content')
-  if (!content) return
-  animations.get(content)?.cancel()
+  const startViewTransition = Reflect.get(document, 'startViewTransition') as
+    ((callback: () => void) => NavigationViewTransition) | undefined
+  if (!canUseNavigationTransitions() || !startViewTransition) {
+    update()
+    return
+  }
+
+  if (activeTransition) {
+    const previous = activeTransition
+    activeTransition = null
+    previous.skipTransition()
+    update()
+    return
+  }
+
+  const commitState = { completed: false }
   try {
-    const animation = content.animate(
-      [{ opacity: 0.72 }, { opacity: 1 }],
-      { duration: 140, easing: 'ease-out' },
-    )
-    animations.set(content, animation)
-    void animation.finished.catch(() => undefined).then(() => {
-      if (animations.get(content) === animation) animations.delete(content)
+    const transition = Reflect.apply(startViewTransition, document, [() => {
+      commitState.completed = true
+      flushSync(update)
+    }])
+    activeTransition = transition
+    void transition.finished.then(() => {
+      if (activeTransition === transition) activeTransition = null
+    }, () => {
+      if (activeTransition === transition) activeTransition = null
     })
   } catch {
-    // Навигация уже обновлена; анимация остаётся необязательной.
+    if (!commitState.completed) update()
   }
 }

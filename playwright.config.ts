@@ -27,6 +27,7 @@ export default defineConfig({
         '**/privacy.spec.ts',
         '**/analytics.spec.ts',
         '**/location-selection.spec.ts',
+        '**/deferred-loading.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
       ],
@@ -51,6 +52,16 @@ export default defineConfig({
       name: 'webkit-execution-gate',
       testMatch: ['**/execution-gate.spec.ts'],
       use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
+    },
+    {
+      name: 'webkit-deferred-loading',
+      testMatch: ['**/deferred-loading.spec.ts'],
+      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
+    },
+    {
+      name: 'webkit-mobile-jelly',
+      testMatch: ['**/jelly-pointer.spec.ts'],
+      use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
     },
     {
       name: 'webkit-analytics-bfcache',

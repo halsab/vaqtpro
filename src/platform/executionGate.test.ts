@@ -222,6 +222,65 @@ describe('execution gate', () => {
     gate.close()
   })
 
+  it('recovers from a prior lock API error and completes a safe ownership handoff', async () => {
+    const locks = setup()
+    const owner = createExecutionGate()
+    expect(await owner.start()).toBe(true)
+
+    const request = locks.request.bind(locks)
+    let failOnce = true
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (_name: string, _options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        if (failOnce) {
+          failOnce = false
+          return Promise.reject(new Error('transient lock acquisition error'))
+        }
+        return request(_name, _options, callback)
+      },
+    } })
+    const requester = createExecutionGate()
+    expect(await requester.requestOwnership()).toBe(false)
+    expect(requester.hasError()).toBe(true)
+
+    expect(await requester.requestOwnership()).toBe(true)
+    expect(requester.hasError()).toBe(false)
+    expect(locks.held).toBe(true)
+    await requester.relinquish()
+    owner.close()
+  })
+
+  it('recovers from a prior lock acquisition timeout and completes a safe ownership handoff', async () => {
+    const locks = setup()
+    const owner = createExecutionGate()
+    expect(await owner.start()).toBe(true)
+
+    const request = locks.request.bind(locks)
+    let hangOnce = true
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (name: string, options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        if (hangOnce) {
+          hangOnce = false
+          return new Promise<void>(() => {})
+        }
+        return request(name, options, callback)
+      },
+    } })
+    const requester = createExecutionGate()
+    vi.useFakeTimers()
+    try {
+      const firstRequest = requester.requestOwnership()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await expect(firstRequest).resolves.toBe(false)
+    } finally { vi.useRealTimers() }
+    expect(requester.hasError()).toBe(true)
+
+    expect(await requester.requestOwnership()).toBe(true)
+    expect(requester.hasError()).toBe(false)
+    expect(locks.held).toBe(true)
+    await requester.relinquish()
+    owner.close()
+  })
+
   it('releases a lock granted after the gate was disposed', async () => {
     const locks = setup()
     let grant!: (lock: Lock | null) => Promise<void>

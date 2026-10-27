@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { JellySurface } from './surface'
 
@@ -43,8 +43,38 @@ describe('Jelly pointer lifecycle', () => {
     fireEvent.pointerDown(button, { pointerId: 3, pointerType: 'mouse', button: 0, clientX: 20, clientY: 20 })
     fireEvent.pointerUp(window, { pointerId: 3, pointerType: 'mouse', button: 0, clientX: 140, clientY: 20 })
     fireEvent.lostPointerCapture(button, { pointerId: 3, pointerType: 'mouse' })
-    fireEvent.click(button)
+    fireEvent.click(button, { detail: 1 })
 
+    expect(onClick).not.toHaveBeenCalled()
+    surface.destroy()
+  })
+
+  it('suppresses a delayed synthetic click after an outside release', () => {
+    vi.useFakeTimers()
+    const { button, surface, onClick } = mountSurface()
+    fireEvent.pointerDown(button, { pointerId: 4, pointerType: 'touch', button: 0, clientX: 20, clientY: 20 })
+    fireEvent.pointerUp(window, { pointerId: 4, pointerType: 'touch', button: 0, clientX: 140, clientY: 20 })
+    act(() => { vi.advanceTimersByTime(450) })
+    fireEvent.click(button, { detail: 1, clientX: 140, clientY: 20 })
+
+    expect(onClick).not.toHaveBeenCalled()
+    act(() => { vi.advanceTimersByTime(400) })
+    fireEvent.click(button, { detail: 1, clientX: 20, clientY: 20 })
+    expect(onClick).toHaveBeenCalledOnce()
+    surface.destroy()
+    vi.useRealTimers()
+  })
+
+  it('suppresses a synthetic click after pointer cancellation or lost capture', () => {
+    const { button, surface, onClick } = mountSurface()
+    fireEvent.pointerDown(button, { pointerId: 5, pointerType: 'touch', button: 0, clientX: 20, clientY: 20 })
+    fireEvent.pointerCancel(window, { pointerId: 5, pointerType: 'touch' })
+    fireEvent.click(button, { detail: 1 })
+    expect(onClick).not.toHaveBeenCalled()
+
+    fireEvent.pointerDown(button, { pointerId: 6, pointerType: 'mouse', button: 0, clientX: 20, clientY: 20 })
+    fireEvent.lostPointerCapture(button, { pointerId: 6 })
+    fireEvent.click(button, { detail: 1 })
     expect(onClick).not.toHaveBeenCalled()
     surface.destroy()
   })

@@ -67,6 +67,7 @@ import { applyTheme, resolveTheme } from './ui/theme'
 import { clearThemePreferenceCache, readThemePreferenceCache, writeThemePreferenceCache } from './ui/themePreferenceCache'
 import { useSystemAppearance } from './ui/useSystemAppearance'
 import { setExecutionQuiescence } from './platform/executionGate'
+import { deferredModuleReloadUrl, deferredModuleRetryUrl } from './platform/deferredModuleRecovery'
 import { setLanguagePreference, useLocalization } from './localization'
 import { PROFILE_LABEL_KEYS } from './ui/calculationLabels'
 import { scheduleContextKey } from './domain/scheduleContext'
@@ -80,9 +81,26 @@ import {
   type FastingModePreferences,
 } from './domain/fasting'
 
-const loadSecondaryScreens = () => import('./features/SecondaryScreens')
+function moduleUrlFromImporter(importer: () => Promise<unknown>): string | null {
+  const specifier = Function.prototype.toString.call(importer).match(/import\(\s*['"]([^'"]+)['"]\s*\)/)?.[1]
+  return specifier ? new URL(specifier, import.meta.url).toString() : null
+}
+
+function loadDeferredScreenModule<T>(moduleName: string, load: () => Promise<T>): Promise<T> {
+  return load().catch(async (error: unknown) => {
+    const moduleUrl = moduleUrlFromImporter(load)
+    const retryUrl = moduleUrl ? deferredModuleRetryUrl(moduleName, window.location.href, moduleUrl) : null
+    if (!retryUrl) throw error
+    try { return await import(/* @vite-ignore */ retryUrl) as T }
+    catch { throw error }
+  })
+}
+
+const secondaryScreenImporter = () => import('./features/SecondaryScreens')
+const loadSecondaryScreens = () => loadDeferredScreenModule('SecondaryScreens', secondaryScreenImporter)
 const SECONDARY_SCREENS: readonly AppScreen[] = ['settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about']
-const loadReligiousEventScreen = () => import('./features/religiousEvents/ReligiousEventScreen')
+const religiousEventScreenImporter = () => import('./features/religiousEvents/ReligiousEventScreen')
+const loadReligiousEventScreen = () => loadDeferredScreenModule('ReligiousEventScreen', religiousEventScreenImporter)
 const SCREEN_MODULE_TIMEOUT_MS = 15_000
 
 function waitForScreenModule<T>(module: Promise<T>): Promise<T> {
@@ -638,6 +656,15 @@ export function App({
     })
   }, [openScreenPrepared, t])
 
+  useEffect(() => {
+    const retryDeferredScreen = () => {
+      if (screenLoadFailed && failedScreenTarget) openScreen(failedScreenTarget)
+      if (religiousEventLoadError && failedReligiousEventId) openReligiousEvent(failedReligiousEventId)
+    }
+    window.addEventListener('online', retryDeferredScreen)
+    return () => window.removeEventListener('online', retryDeferredScreen)
+  }, [failedReligiousEventId, failedScreenTarget, openReligiousEvent, openScreen, religiousEventLoadError, screenLoadFailed])
+
   if (error) {
     return (
       <AppShell>
@@ -699,12 +726,13 @@ export function App({
       ) : null
   const nearbyCityNotice = place?.selection === 'gps' ? nameLookupMessage(nameLookupState, locale) : null
   const recoveryNotices = <>
-    {screenLoadPending || religiousEventLoadPending ? <div className="screen-status" role="status" aria-live="polite">
+    {screenLoadPending || religiousEventLoadPending ? <div className="screen-status screen-load-progress" role="status" aria-live="polite">
       {t('loading')}
     </div> : null}
     {screenLoadFailed ? <div className="screen-status" role="alert">
       <span>{t('screenLoadFailed')}</span>
       {failedScreenTarget ? <ActionButton onClick={() => openScreen(failedScreenTarget)}>{t('retry')}</ActionButton> : null}
+      <ActionButton onClick={() => window.location.replace(deferredModuleReloadUrl(window.location.href))}>{t('reload')}</ActionButton>
     </div> : null}
     {startupRecoveryError ? <div className="screen-status" role="alert">
       <span>{t('startupRecoveryError')}</span>
@@ -767,7 +795,10 @@ export function App({
 
       {navigation.screen === 'religious-events' ? <ReligiousEventsScreen today={today} correction={calendarPreferences.correction}
         hijriSupported={hijriSupported} onOpenEvent={openReligiousEvent} onBack={backScreen} loadError={religiousEventLoadError}
-        loadPending={religiousEventLoadPending} {...(failedReligiousEventId ? { onRetryLoad: () => openReligiousEvent(failedReligiousEventId) } : {})} /> : null}
+        loadPending={religiousEventLoadPending} {...(failedReligiousEventId ? {
+          onRetryLoad: () => openReligiousEvent(failedReligiousEventId),
+          onReload: () => window.location.replace(deferredModuleReloadUrl(window.location.href)),
+        } : {})} /> : null}
 
       {navigation.screen === 'location' ? <LocationScreen place={gpsPreview ?? place} activePlace={place} recentPlaces={recentPlaces} {...(activeHistoryId ? { activeHistoryId } : {})} onSelectRecent={selectRecent}
         onBack={closeLocationDialog} onSearch={() => { cancelInteractiveGps(); flushSync(() => openScreen('search')); document.querySelector<HTMLInputElement>('input[type="search"]')?.focus() }} onLocate={locateAutomatically}

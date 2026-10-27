@@ -46,9 +46,11 @@ export type ExecutionGate = {
 
 export function createExecutionGate(): ExecutionGate {
   let coordinationError = false
+  let coordinationFailureGeneration = 0
+  const markCoordinationError = () => { coordinationError = true; coordinationFailureGeneration += 1 }
   let locks: LockManager | undefined
   try { locks = (navigator as Omit<Navigator, 'locks'> & { locks?: LockManager }).locks }
-  catch { coordinationError = true }
+  catch { markCoordinationError() }
   let channel: BroadcastChannel | null = null
   try {
     if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(CHANNEL_NAME)
@@ -57,7 +59,7 @@ export function createExecutionGate(): ExecutionGate {
   }
 
   const contextId = createEphemeralId()
-  if (!contextId) coordinationError = true
+  if (!contextId) markCoordinationError()
   let stopped = false
   let suspended = false
   let held = false
@@ -103,7 +105,7 @@ export function createExecutionGate(): ExecutionGate {
       finish(value)
     }
     const acquisitionTimer = window.setTimeout(() => {
-      coordinationError = true
+      markCoordinationError()
       settle({ acquired: false })
     }, LOCK_ACQUISITION_TIMEOUT_MS)
 
@@ -128,9 +130,9 @@ export function createExecutionGate(): ExecutionGate {
           releaseLock = null
         }
       })
-      lockTask = task.then(() => undefined, () => { coordinationError = true; settle({ acquired: false }) })
+      lockTask = task.then(() => undefined, () => { markCoordinationError(); settle({ acquired: false }) })
     } catch {
-      coordinationError = true
+      markCoordinationError()
       settle({ acquired: false })
     }
     return result
@@ -188,7 +190,7 @@ export function createExecutionGate(): ExecutionGate {
           if (shouldClose()) { stopped = true; channel.close() }
         } catch {
           closing = false
-          coordinationError = true
+          markCoordinationError()
           channel.postMessage({ version: 1, type: 'refused', requestId, ownerId: contextId } satisfies Message)
         }
       })().finally(() => { takeover = null; takeoverRequestId = null })
@@ -230,7 +232,7 @@ export function createExecutionGate(): ExecutionGate {
             }
           } catch {
             // Ошибка quiescence оставляет lock у текущего контекста до успешного повтора.
-            coordinationError = true
+            markCoordinationError()
           }
           return false
         })()
@@ -240,7 +242,7 @@ export function createExecutionGate(): ExecutionGate {
 
       const uniqueRequestId = createEphemeralId()
       if (!uniqueRequestId) {
-        coordinationError = true
+        markCoordinationError()
         return Promise.resolve(false)
       }
 
@@ -248,6 +250,7 @@ export function createExecutionGate(): ExecutionGate {
       const currentRequest = new Promise<boolean>(resolve => { resolveRequest = resolve })
       request = currentRequest
       const requestId = `${contextId}:${uniqueRequestId}`
+      const failureGenerationAtStart = coordinationFailureGeneration
       activeRequestId = requestId
       targetOwnerId = null
       refusedRequestId = null
@@ -278,7 +281,7 @@ export function createExecutionGate(): ExecutionGate {
           finish(true)
           return
         }
-        if (coordinationError) {
+        if (coordinationFailureGeneration !== failureGenerationAtStart) {
           finish(false)
           return
         }
@@ -328,7 +331,7 @@ export function createExecutionGate(): ExecutionGate {
         channel?.close()
         coordinationError = false
       } catch (error) {
-        coordinationError = true
+        markCoordinationError()
         throw error
       }
     },

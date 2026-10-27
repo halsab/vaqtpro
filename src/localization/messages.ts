@@ -32,6 +32,7 @@ export const RU_MESSAGES = Object.freeze({
   appLoadError: 'Не удалось открыть расписание. Проверьте соединение и попробуйте ещё раз.',
   loading: 'Загрузка',
   retry: 'Повторить',
+  reload: 'Перезапустить',
   retryAgain: 'Попробовать снова',
   back: 'Назад',
   cancel: 'Отмена',

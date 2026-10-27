@@ -267,12 +267,7 @@ export class JellySurface implements JellyComponent {
       || event.clientY < rect.top || event.clientY > rect.bottom
 
     this.endPointer()
-    if (this.suppressClick) {
-      this.suppressClickTimer = window.setTimeout(() => {
-        this.suppressClick = false
-        this.suppressClickTimer = null
-      }, 0)
-    }
+    if (this.suppressClick) this.armClickSuppression()
   }
 
   private onPointerCancel = (event: PointerEvent): void => {
@@ -280,19 +275,26 @@ export class JellySurface implements JellyComponent {
       return
     }
 
-    this.suppressClick = false
-    if (this.suppressClickTimer !== null) window.clearTimeout(this.suppressClickTimer)
-    this.suppressClickTimer = null
+    this.suppressClick = true
     this.endPointer()
+    this.armClickSuppression()
   }
 
   private onLostPointerCapture = (): void => {
     // pointerup уже мог зафиксировать отпускание снаружи; его click ещё ожидается.
     if (this.pointerId === null) return
-    this.suppressClick = false
-    if (this.suppressClickTimer !== null) window.clearTimeout(this.suppressClickTimer)
-    this.suppressClickTimer = null
+    this.suppressClick = true
     this.endPointer()
+    this.armClickSuppression()
+  }
+
+  private armClickSuppression(): void {
+    if (this.suppressClickTimer !== null) window.clearTimeout(this.suppressClickTimer)
+    // Некоторые мобильные WebKit откладывают синтетический click после завершения pointer.
+    this.suppressClickTimer = window.setTimeout(() => {
+      this.suppressClick = false
+      this.suppressClickTimer = null
+    }, 800)
   }
 
   private endPointer(): void {
@@ -302,7 +304,7 @@ export class JellySurface implements JellyComponent {
   }
 
   private onClick = (event: MouseEvent): void => {
-    if (!this.suppressClick) {
+    if (!this.suppressClick || event.detail === 0) {
       return
     }
 

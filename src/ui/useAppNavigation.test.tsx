@@ -177,6 +177,29 @@ describe('навигация экранов', () => {
     }
   })
 
+  it('keeps a newer screen when a timed-out history traversal delivers popstate late', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => {})
+    try {
+      render(<NavigationExample />)
+      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Поделиться' }))
+      expect(screen.getByText('share')).toBeInTheDocument()
+
+      act(() => { window.dispatchEvent(new PopStateEvent('popstate', { state: null })) })
+
+      expect(screen.getByText('share')).toBeInTheDocument()
+      expect(forward).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+      forward.mockRestore()
+    }
+  })
+
   it('завершает вложенный сценарий возвращением на главную', async () => {
     const user = userEvent.setup()
     render(<NavigationExample />)
