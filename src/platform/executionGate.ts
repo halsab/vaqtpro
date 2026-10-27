@@ -1,5 +1,7 @@
 const LOCK_NAME = 'salah-foreground-execution-v1'
 const CHANNEL_NAME = 'salah-execution-gate-v1'
+const LOCK_ACQUISITION_TIMEOUT_MS = 10_000
+const QUIESCENCE_TIMEOUT_MS = 10_000
 let quiescence: () => Promise<void> = async () => {}
 
 export function setExecutionQuiescence(operation: Promise<unknown> | (() => Promise<unknown>)) {
@@ -9,6 +11,16 @@ export function setExecutionQuiescence(operation: Promise<unknown> | (() => Prom
 }
 
 export function waitForExecutionQuiescence() { return quiescence() }
+
+function withDeadline<T>(operation: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs)
+    operation.then(value => { window.clearTimeout(timer); resolve(value) }, (error: unknown) => {
+      window.clearTimeout(timer)
+      reject(error instanceof Error ? error : new Error(String(error)))
+    })
+  })
+}
 
 function createEphemeralId(): string | null {
   try {
@@ -34,9 +46,11 @@ export type ExecutionGate = {
 
 export function createExecutionGate(): ExecutionGate {
   let coordinationError = false
+  let coordinationFailureGeneration = 0
+  const markCoordinationError = () => { coordinationError = true; coordinationFailureGeneration += 1 }
   let locks: LockManager | undefined
   try { locks = (navigator as Omit<Navigator, 'locks'> & { locks?: LockManager }).locks }
-  catch { coordinationError = true }
+  catch { markCoordinationError() }
   let channel: BroadcastChannel | null = null
   try {
     if (typeof BroadcastChannel !== 'undefined') channel = new BroadcastChannel(CHANNEL_NAME)
@@ -45,7 +59,7 @@ export function createExecutionGate(): ExecutionGate {
   }
 
   const contextId = createEphemeralId()
-  if (!contextId) coordinationError = true
+  if (!contextId) markCoordinationError()
   let stopped = false
   let suspended = false
   let held = false
@@ -54,6 +68,7 @@ export function createExecutionGate(): ExecutionGate {
   let lockOwner: symbol | null = null
   let lockTask: Promise<void> | null = null
   let acquisition: Promise<{ acquired: boolean; owner?: symbol }> | null = null
+  let acquisitionGeneration = 0
   let request: Promise<boolean> | null = null
   let takeover: Promise<void> | null = null
   let takeoverRequestId: string | null = null
@@ -82,17 +97,23 @@ export function createExecutionGate(): ExecutionGate {
     let finish!: (acquired: { acquired: boolean; owner?: symbol }) => void
     const result = new Promise<{ acquired: boolean; owner?: symbol }>(resolve => { finish = resolve })
     acquisition = result
+    const generation = ++acquisitionGeneration
     let settled = false
     const settle = (value: { acquired: boolean; owner?: symbol }) => {
       if (settled) return
       settled = true
+      window.clearTimeout(acquisitionTimer)
       if (acquisition === result) acquisition = null
       finish(value)
     }
+    const acquisitionTimer = window.setTimeout(() => {
+      markCoordinationError()
+      settle({ acquired: false })
+    }, LOCK_ACQUISITION_TIMEOUT_MS)
 
     try {
       const task = locks.request(LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, async lock => {
-        if (!lock || stopped || !isCurrent()) {
+        if (settled || !lock || stopped || !isCurrent()) {
           settle({ acquired: false })
           return
         }
@@ -111,9 +132,13 @@ export function createExecutionGate(): ExecutionGate {
           releaseLock = null
         }
       })
-      lockTask = task.then(() => undefined, () => { coordinationError = true; settle({ acquired: false }) })
+      lockTask = task.then(() => undefined, () => {
+        if (generation !== acquisitionGeneration || acquisition !== result || settled) return
+        markCoordinationError()
+        settle({ acquired: false })
+      })
     } catch {
-      coordinationError = true
+      markCoordinationError()
       settle({ acquired: false })
     }
     return result
@@ -165,13 +190,13 @@ export function createExecutionGate(): ExecutionGate {
       serving = false
       takeover = (async () => {
         try {
-          await deactivate()
+          await withDeadline(deactivate(), QUIESCENCE_TIMEOUT_MS, 'Execution quiescence timed out')
           if (!isHeld()) return
           release()
           if (shouldClose()) { stopped = true; channel.close() }
         } catch {
           closing = false
-          coordinationError = true
+          markCoordinationError()
           channel.postMessage({ version: 1, type: 'refused', requestId, ownerId: contextId } satisfies Message)
         }
       })().finally(() => { takeover = null; takeoverRequestId = null })
@@ -201,10 +226,10 @@ export function createExecutionGate(): ExecutionGate {
       if (held && !serving) {
         const recovery = (async () => {
           try {
-            await deactivate()
+            await withDeadline(deactivate(), QUIESCENCE_TIMEOUT_MS, 'Execution quiescence timed out')
             if (isStopped() || isSuspended()) return false
             release()
-            await lockTask
+            await withDeadline(lockTask ?? Promise.resolve(), QUIESCENCE_TIMEOUT_MS, 'Execution lock release timed out')
             const acquired = await acquire(() => !isStopped() && !isSuspended())
             if (acquired.acquired && isHeld() && !isStopped() && !isSuspended()) {
               coordinationError = false
@@ -213,7 +238,7 @@ export function createExecutionGate(): ExecutionGate {
             }
           } catch {
             // Ошибка quiescence оставляет lock у текущего контекста до успешного повтора.
-            coordinationError = true
+            markCoordinationError()
           }
           return false
         })()
@@ -223,7 +248,7 @@ export function createExecutionGate(): ExecutionGate {
 
       const uniqueRequestId = createEphemeralId()
       if (!uniqueRequestId) {
-        coordinationError = true
+        markCoordinationError()
         return Promise.resolve(false)
       }
 
@@ -231,6 +256,7 @@ export function createExecutionGate(): ExecutionGate {
       const currentRequest = new Promise<boolean>(resolve => { resolveRequest = resolve })
       request = currentRequest
       const requestId = `${contextId}:${uniqueRequestId}`
+      const failureGenerationAtStart = coordinationFailureGeneration
       activeRequestId = requestId
       targetOwnerId = null
       refusedRequestId = null
@@ -259,6 +285,10 @@ export function createExecutionGate(): ExecutionGate {
           coordinationError = false
           serving = true
           finish(true)
+          return
+        }
+        if (coordinationFailureGeneration !== failureGenerationAtStart) {
+          finish(false)
           return
         }
         if (refusedRequestId === requestId) {
@@ -301,13 +331,13 @@ export function createExecutionGate(): ExecutionGate {
       if (!held) return
       serving = false
       try {
-        await deactivate()
+        await withDeadline(deactivate(), QUIESCENCE_TIMEOUT_MS, 'Execution quiescence timed out')
         release()
-        await lockTask
+        await withDeadline(lockTask ?? Promise.resolve(), QUIESCENCE_TIMEOUT_MS, 'Execution lock release timed out')
         channel?.close()
         coordinationError = false
       } catch (error) {
-        coordinationError = true
+        markCoordinationError()
         throw error
       }
     },

@@ -33,6 +33,7 @@ export class JellySurface implements JellyComponent {
   private pointerId: number | null = null
   private keyboardActive = false
   private suppressClick = false
+  private suppressClickTimer: number | null = null
   private cssW = 0
   private cssH = 0
   private readonly motionQuery: MediaQueryList | null
@@ -59,8 +60,8 @@ export class JellySurface implements JellyComponent {
 
     this.button.addEventListener('pointerdown', this.onPointerDown)
     this.button.addEventListener('pointermove', this.onPointerMove)
-    this.button.addEventListener('pointerup', this.onPointerUp)
-    this.button.addEventListener('pointercancel', this.onPointerCancel)
+    window.addEventListener('pointerup', this.onPointerUp, true)
+    window.addEventListener('pointercancel', this.onPointerCancel, true)
     this.button.addEventListener('lostpointercapture', this.onLostPointerCapture)
     this.button.addEventListener('keydown', this.onKeyDown)
     this.button.addEventListener('keyup', this.onKeyUp)
@@ -81,8 +82,8 @@ export class JellySurface implements JellyComponent {
 
     this.button.removeEventListener('pointerdown', this.onPointerDown)
     this.button.removeEventListener('pointermove', this.onPointerMove)
-    this.button.removeEventListener('pointerup', this.onPointerUp)
-    this.button.removeEventListener('pointercancel', this.onPointerCancel)
+    window.removeEventListener('pointerup', this.onPointerUp, true)
+    window.removeEventListener('pointercancel', this.onPointerCancel, true)
     this.button.removeEventListener('lostpointercapture', this.onLostPointerCapture)
     this.button.removeEventListener('keydown', this.onKeyDown)
     this.button.removeEventListener('keyup', this.onKeyUp)
@@ -92,6 +93,10 @@ export class JellySurface implements JellyComponent {
     this.resizeObserver?.disconnect()
     this.resizeObserver = null
     this.motionQuery?.removeEventListener('change', this.onMotionChange)
+    if (this.suppressClickTimer !== null) window.clearTimeout(this.suppressClickTimer)
+    this.suppressClickTimer = null
+    this.suppressClick = false
+    this.pointerId = null
     this.body = null
   }
 
@@ -220,6 +225,9 @@ export class JellySurface implements JellyComponent {
     }
 
     this.pointerId = event.pointerId
+    this.suppressClick = false
+    if (this.suppressClickTimer !== null) window.clearTimeout(this.suppressClickTimer)
+    this.suppressClickTimer = null
 
     if (event.pointerType !== 'touch') {
       try {
@@ -259,6 +267,7 @@ export class JellySurface implements JellyComponent {
       || event.clientY < rect.top || event.clientY > rect.bottom
 
     this.endPointer()
+    if (this.suppressClick) this.armClickSuppression()
   }
 
   private onPointerCancel = (event: PointerEvent): void => {
@@ -266,13 +275,26 @@ export class JellySurface implements JellyComponent {
       return
     }
 
-    this.suppressClick = false
+    this.suppressClick = true
     this.endPointer()
+    this.armClickSuppression()
   }
 
   private onLostPointerCapture = (): void => {
-    this.suppressClick = false
+    // pointerup уже мог зафиксировать отпускание снаружи; его click ещё ожидается.
+    if (this.pointerId === null) return
+    this.suppressClick = true
     this.endPointer()
+    this.armClickSuppression()
+  }
+
+  private armClickSuppression(): void {
+    if (this.suppressClickTimer !== null) window.clearTimeout(this.suppressClickTimer)
+    // Некоторые мобильные WebKit откладывают синтетический click после завершения pointer.
+    this.suppressClickTimer = window.setTimeout(() => {
+      this.suppressClick = false
+      this.suppressClickTimer = null
+    }, 800)
   }
 
   private endPointer(): void {
@@ -282,7 +304,7 @@ export class JellySurface implements JellyComponent {
   }
 
   private onClick = (event: MouseEvent): void => {
-    if (!this.suppressClick) {
+    if (!this.suppressClick || event.detail === 0) {
       return
     }
 
@@ -317,7 +339,7 @@ export class JellySurface implements JellyComponent {
 
   private onBlur = (): void => {
     this.keyboardActive = false
-    this.pointerId = null
+    if (this.pointerId !== null) this.endPointer()
     this.body?.release()
     this.wake()
   }

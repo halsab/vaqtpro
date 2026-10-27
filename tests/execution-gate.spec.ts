@@ -34,6 +34,30 @@ test('a blocked tab can acquire ownership after the owner closes', async ({ cont
   await expect(requester.locator('[data-execution-owner]')).toBeVisible()
 })
 
+test('a frozen owner never permits a second App and handles explicit handoff after resume', async ({ context, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Page lifecycle freezing is only available through Chromium CDP.')
+  const owner = await context.newPage()
+  const requester = await context.newPage()
+  await owner.goto('./')
+  await expect(owner.locator('[data-execution-owner]')).toBeVisible()
+  await requester.goto('./')
+  await expect(requester.getByRole('heading', { name: 'Приложение уже открыто' })).toBeVisible()
+
+  const session = await context.newCDPSession(owner)
+  await session.send('Page.setWebLifecycleState', { state: 'frozen' })
+  await requester.getByRole('button', { name: 'Продолжить здесь' }).click()
+  await expect(requester.getByRole('button', { name: 'Переключаем…' })).toBeDisabled()
+  await requester.waitForTimeout(1_000)
+  const activeWhileOwnerFrozen = await Promise.all([owner, requester]
+    .map(page => page.locator('[data-execution-owner]').count()))
+  expect(activeWhileOwnerFrozen.reduce((sum, count) => sum + count, 0)).toBe(1)
+
+  await session.send('Page.setWebLifecycleState', { state: 'active' })
+  await expect(requester.locator('[data-execution-owner]')).toBeVisible()
+  await expect(owner.locator('[data-execution-owner]')).toHaveCount(0)
+  await session.detach()
+})
+
 test('a full reload releases the prior page lifecycle lock and starts only one App', async ({ context }) => {
   const owner = await context.newPage()
   const requester = await context.newPage()

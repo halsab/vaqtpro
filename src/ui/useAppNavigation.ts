@@ -27,6 +27,7 @@ export function useAppNavigation() {
   const current = useRef(HOME)
   const returnFocus = useRef<string | null>(null)
   const traversing = useRef(false)
+  const traversalTimer = useRef<number | null>(null)
   const intentGeneration = useRef(0)
 
   useEffect(() => {
@@ -34,8 +35,10 @@ export function useAppNavigation() {
     window.history.scrollRestoration = 'manual'
     window.history.replaceState({ salahNavigation: { session, entries: HOME } }, '')
     const onPop = (event: PopStateEvent) => {
-      intentGeneration.current += 1
+      if (traversalTimer.current !== null) window.clearTimeout(traversalTimer.current)
+      traversalTimer.current = null
       const next = readEntries(event.state, session) ?? HOME
+      intentGeneration.current += 1
       if (next.length < current.current.length) returnFocus.current = current.current[next.length]?.returnFocus ?? null
       traversing.current = false
       runNavigationTransition(() => {
@@ -46,6 +49,7 @@ export function useAppNavigation() {
     window.addEventListener('popstate', onPop)
     return () => {
       window.removeEventListener('popstate', onPop)
+      if (traversalTimer.current !== null) window.clearTimeout(traversalTimer.current)
       window.history.scrollRestoration = previousScrollRestoration
     }
   }, [session])
@@ -71,9 +75,10 @@ export function useAppNavigation() {
   }, [entries])
 
   const open = useCallback((target: NavigationTarget, returnFocusOverride?: string | null) => {
+    if (traversing.current) return
     intentGeneration.current += 1
     const screen = typeof target === 'string' ? target : target.screen
-    if (traversing.current || current.current.at(-1)?.screen === screen) return
+    if (current.current.at(-1)?.screen === screen) return
     const trigger = returnFocusOverride === undefined
       ? document.activeElement instanceof HTMLElement ? document.activeElement.id || null : null
       : returnFocusOverride
@@ -97,6 +102,7 @@ export function useAppNavigation() {
     })
   }, [session])
   const openPrepared = useCallback(async (target: NavigationTarget, prepare: () => Promise<void>) => {
+    if (traversing.current) return
     const generation = ++intentGeneration.current
     const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement.id || null : null
     try { await prepare() }
@@ -112,7 +118,15 @@ export function useAppNavigation() {
     intentGeneration.current += 1
     returnFocus.current = current.current.at(-1)?.returnFocus ?? null
     traversing.current = true
+    const traversal = intentGeneration.current
     window.history.back()
+    traversalTimer.current = window.setTimeout(() => {
+      // Если браузер не выпустил popstate, оставляем текущий экран рабочим.
+      if (intentGeneration.current !== traversal) return
+      traversing.current = false
+      returnFocus.current = null
+      traversalTimer.current = null
+    }, 1_000)
   }, [])
   const home = useCallback(() => {
     const depth = current.current.length - 1
@@ -120,7 +134,14 @@ export function useAppNavigation() {
     intentGeneration.current += 1
     returnFocus.current = current.current[1]?.returnFocus ?? null
     traversing.current = true
+    const traversal = intentGeneration.current
     window.history.go(-depth)
+    traversalTimer.current = window.setTimeout(() => {
+      if (intentGeneration.current !== traversal) return
+      traversing.current = false
+      returnFocus.current = null
+      traversalTimer.current = null
+    }, 1_000)
   }, [])
 
   const active = entries.at(-1) ?? { screen: 'home', returnFocus: null }

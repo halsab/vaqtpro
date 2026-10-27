@@ -1,56 +1,50 @@
 import { flushSync } from 'react-dom'
 
-export function canUseNavigationTransitions(): boolean {
-  return typeof (document as unknown as { startViewTransition?: unknown }).startViewTransition === 'function'
-    && !(typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+let animationGeneration = 0
+let activeTransition: ViewTransition | null = null
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-interface NavigationViewTransition {
-  finished: Promise<void>
-  updateCallbackDone: Promise<void>
-  skipTransition: () => void
+function skipActiveTransition(): void {
+  const transition = activeTransition
+  activeTransition = null
+  try {
+    transition?.skipTransition()
+  } catch {
+    // Завершившаяся анимация не должна блокировать следующую навигацию.
+  }
 }
-
-let activeTransition: NavigationViewTransition | null = null
-let generation = 0
 
 export function runNavigationTransition(update: () => void): void {
-  const startViewTransition = (document as unknown as { startViewTransition?: (callback: () => void) => NavigationViewTransition }).startViewTransition
+  const generation = ++animationGeneration
+  const startViewTransition = Reflect.get(document, 'startViewTransition') as
+    | ((this: Document, update: () => void) => ViewTransition)
+    | undefined
+
+  if (prefersReducedMotion() || !startViewTransition) {
+    skipActiveTransition()
+    flushSync(update)
+    return
+  }
+
   if (activeTransition) {
-    const previous = activeTransition
-    activeTransition = null
-    generation += 1
-    previous.skipTransition()
-    update()
+    skipActiveTransition()
+    flushSync(update)
     return
   }
 
-  if (!canUseNavigationTransitions() || !startViewTransition) {
-    update()
-    return
-  }
-
-  const ownGeneration = ++generation
-  const callbackState = { ran: false }
   try {
     const transition = startViewTransition.call(document, () => {
-      if (generation !== ownGeneration) return
-      callbackState.ran = true
-      flushSync(update)
+      if (generation === animationGeneration) flushSync(update)
     })
     activeTransition = transition
-    const clean = () => {
-      if (generation === ownGeneration && activeTransition === transition) activeTransition = null
-    }
-    void transition.finished.then(clean, clean)
-    void transition.updateCallbackDone.catch(clean)
+    void transition.finished.then(
+      () => { if (activeTransition === transition) activeTransition = null },
+      () => { if (activeTransition === transition) activeTransition = null },
+    )
   } catch {
-    if (!callbackState.ran) update()
+    if (generation === animationGeneration) flushSync(update)
   }
-}
-
-export function resetNavigationTransitionForTests() {
-  activeTransition?.skipTransition()
-  activeTransition = null
-  generation += 1
 }

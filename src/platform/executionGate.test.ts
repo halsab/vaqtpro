@@ -72,6 +72,46 @@ describe('execution gate', () => {
     expect(await gate.requestOwnership()).toBe(false)
   })
 
+  it('bounds stalled initial lock acquisition and drops a late grant without owning it', async () => {
+    setup()
+    let grant!: (lock: Lock | null) => Promise<void>
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (_name: string, _options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        grant = callback
+        return new Promise<void>(() => {})
+      },
+    } })
+    vi.useFakeTimers()
+    try {
+      const gate = createExecutionGate()
+      const starting = gate.start()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await expect(starting).resolves.toBe(false)
+      expect(gate.hasError()).toBe(true)
+      await grant({ name: 'test-lock', mode: 'exclusive', pending: false } as Lock)
+      expect(gate.hasError()).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('keeps the lock when lifecycle quiescence exceeds its deadline', async () => {
+    const locks = setup()
+    const gate = createExecutionGate()
+    const drain = deferred()
+    gate.onTakeover(() => drain.promise)
+    expect(await gate.start()).toBe(true)
+    vi.useFakeTimers()
+    try {
+      const relinquishing = gate.relinquish()
+      const timedOut = expect(relinquishing).rejects.toThrow('timed out')
+      await vi.advanceTimersByTimeAsync(10_000)
+      await timedOut
+      expect(locks.held).toBe(true)
+      drain.resolve()
+      await Promise.resolve()
+      expect(locks.held).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
   it('settles ID generation failures without retaining a request and recovers on retry', async () => {
     setup()
     const randomUUID = vi.fn()
@@ -180,6 +220,107 @@ describe('execution gate', () => {
     expect(gate.supported).toBe(true)
     expect(gate.hasError()).toBe(true)
     gate.close()
+  })
+
+  it('recovers from a prior lock API error and completes a safe ownership handoff', async () => {
+    const locks = setup()
+    const owner = createExecutionGate()
+    expect(await owner.start()).toBe(true)
+
+    const request = locks.request.bind(locks)
+    let failOnce = true
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (_name: string, _options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        if (failOnce) {
+          failOnce = false
+          return Promise.reject(new Error('transient lock acquisition error'))
+        }
+        return request(_name, _options, callback)
+      },
+    } })
+    const requester = createExecutionGate()
+    expect(await requester.requestOwnership()).toBe(false)
+    expect(requester.hasError()).toBe(true)
+
+    expect(await requester.requestOwnership()).toBe(true)
+    expect(requester.hasError()).toBe(false)
+    expect(locks.held).toBe(true)
+    await requester.relinquish()
+    owner.close()
+  })
+
+  it('recovers from a prior lock acquisition timeout and completes a safe ownership handoff', async () => {
+    const locks = setup()
+    const owner = createExecutionGate()
+    expect(await owner.start()).toBe(true)
+
+    const request = locks.request.bind(locks)
+    let hangOnce = true
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (name: string, options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        if (hangOnce) {
+          hangOnce = false
+          return new Promise<void>(() => {})
+        }
+        return request(name, options, callback)
+      },
+    } })
+    const requester = createExecutionGate()
+    vi.useFakeTimers()
+    try {
+      const firstRequest = requester.requestOwnership()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await expect(firstRequest).resolves.toBe(false)
+    } finally { vi.useRealTimers() }
+    expect(requester.hasError()).toBe(true)
+
+    expect(await requester.requestOwnership()).toBe(true)
+    expect(requester.hasError()).toBe(false)
+    expect(locks.held).toBe(true)
+    await requester.relinquish()
+    owner.close()
+  })
+
+  it('ignores a late rejection from a timed-out acquisition after a retry owns the lock', async () => {
+    const locks = setup()
+    const owner = createExecutionGate()
+    expect(await owner.start()).toBe(true)
+    const request = locks.request.bind(locks)
+    let rejectObsolete!: (error: Error) => void
+    let delayNext = true
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: {
+      request: (name: string, options: LockOptions, callback: (lock: Lock | null) => Promise<void>) => {
+        if (delayNext) {
+          delayNext = false
+          return new Promise<void>((_resolve, reject) => { rejectObsolete = reject })
+        }
+        return request(name, options, callback)
+      },
+    } })
+    const gate = createExecutionGate()
+    vi.useFakeTimers()
+    try {
+      const timedOut = gate.requestOwnership()
+      await vi.advanceTimersByTimeAsync(10_000)
+      await expect(timedOut).resolves.toBe(false)
+      expect(gate.hasError()).toBe(true)
+
+      const retry = gate.requestOwnership()
+      await vi.advanceTimersByTimeAsync(1_000)
+      await expect(retry).resolves.toBe(true)
+      expect(gate.hasError()).toBe(false)
+      rejectObsolete(new Error('obsolete acquisition rejected late'))
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(gate.hasError()).toBe(false)
+      expect(locks.held).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+    await gate.relinquish()
+    expect(locks.held).toBe(false)
+    owner.close()
   })
 
   it('releases a lock granted after the gate was disposed', async () => {

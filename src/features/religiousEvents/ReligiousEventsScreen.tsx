@@ -11,7 +11,7 @@ import {
   type ReligiousEventOccurrence,
 } from '../../domain/religiousEvents'
 import { BackButton, Screen } from '../../ui/Screen'
-import { ActionRow } from '../../ui/controls'
+import { ActionButton, ActionRow } from '../../ui/controls'
 import { formatReligiousEventOccurrenceDate } from './religiousEventDate'
 import { useLocalization } from '../../localization'
 import { localizedEventTitle } from '../../localization/religiousEvents'
@@ -31,13 +31,16 @@ export function ReligiousEventOccurrenceRow({ occurrence, onOpenEvent }: {
   </li>
 }
 
-export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpenEvent, onBack, loadError }: {
+export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpenEvent, onBack, loadError, loadPending, onRetryLoad, onReload }: {
   today: string
   correction: DateCorrection
   hijriSupported: boolean
   onOpenEvent: (eventId: ReligiousEventId) => void
   onBack: () => void
   loadError?: string | null
+  loadPending?: boolean
+  onRetryLoad?: () => void
+  onReload?: () => void
 }) {
   const { t } = useLocalization()
   const occurrences = useMemo(() => {
@@ -47,7 +50,9 @@ export function ReligiousEventsScreen({ today, correction, hijriSupported, onOpe
   }, [today, correction, hijriSupported])
 
   return <Screen label={t('religiousEvents')} top={<BackButton onClick={onBack} />}>
-    {loadError ? <p role="alert">{loadError}</p> : null}
+    {loadPending ? <p className="screen-load-progress" role="status" aria-live="polite">{t('loading')}</p> : null}
+    {loadError ? <div role="alert"><p>{loadError}</p>{onRetryLoad ? <ActionButton onClick={onRetryLoad}>{t('retry')}</ActionButton> : null}
+      {onReload ? <ActionButton onClick={onReload}>{t('reload')}</ActionButton> : null}</div> : null}
     <ul className="religious-events-list">
       {occurrences.map(occurrence => <ReligiousEventOccurrenceRow
         key={`${occurrence.civilDate}:${occurrence.eventId}`}

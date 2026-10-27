@@ -13,6 +13,7 @@ function NavigationExample() {
     <p>{navigation.screen}</p>
     {navigation.screen === 'home' ? <button id="open-settings" onClick={() => navigation.open('settings')}>Настройки</button> : null}
     {navigation.screen === 'settings' ? <button id="open-share" onClick={() => navigation.open('share')}>Поделиться</button> : null}
+    {navigation.screen === 'share' ? <button id="reopen-settings" onClick={() => navigation.open('settings')}>Повторно открыть настройки</button> : null}
     {navigation.screen !== 'home' ? <><button onClick={navigation.back}>Назад</button><button onClick={navigation.home}>На главную</button></> : null}
   </>
 }
@@ -25,6 +26,18 @@ function PreparedNavigationExample({ prepare, onFailure }: { prepare: () => Prom
     <button id="prepared-caller" onClick={() => { void navigation.openPrepared('share', prepare).catch(() => onFailure?.()) }}>Open when ready</button>
     <button id="other-focus">Other focus</button>
     <button onClick={() => navigation.open('settings')}>Settings</button>
+  </>
+}
+
+function TraversalRecoveryExample({ prepare }: { prepare: () => Promise<void> }) {
+  const navigation = useAppNavigation()
+  return <>
+    <p>{navigation.screen}</p>
+    <button onClick={() => navigation.open('settings')}>Settings</button>
+    <button onClick={() => navigation.open('share')}>Share</button>
+    <button onClick={() => { void navigation.openPrepared('share', prepare) }}>Prepare share</button>
+    <button onClick={navigation.back}>Back</button>
+    <button onClick={navigation.home}>Home</button>
   </>
 }
 
@@ -159,6 +172,122 @@ describe('навигация экранов', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Поделиться' })).toHaveFocus())
     act(() => { window.history.back() })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Настройки' })).toHaveFocus())
+  })
+
+  it('разблокирует внутреннюю навигацию, если history traversal не выпускает popstate', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    try {
+      render(<NavigationExample />)
+      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      expect(back).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+    }
+  })
+
+  it('keeps the Back recovery timer valid after rejected same-screen and prepared opens', async () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    let resolvePreparation: (() => void) | undefined
+    try {
+      render(<TraversalRecoveryExample prepare={() => new Promise<void>(resolve => { resolvePreparation = resolve })} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+      // Во время ожидания popstate оба действия должны остаться без побочных эффектов.
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Prepare share' }))
+      await act(async () => { resolvePreparation?.(); await Promise.resolve() })
+      act(() => { vi.advanceTimersByTime(1_000) })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+      expect(screen.getByText('share')).toBeInTheDocument()
+      expect(back).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+    }
+  })
+
+  it('ignores repeated Back and Home during traversal and recovers after a missing Home popstate', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const go = vi.spyOn(window.history, 'go').mockImplementation(() => {})
+    try {
+      render(<TraversalRecoveryExample prepare={() => Promise.resolve()} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+
+      expect(go).toHaveBeenCalledOnce()
+      expect(back).not.toHaveBeenCalled()
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+      expect(screen.getByText('settings')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+      go.mockRestore()
+    }
+  })
+
+  it('keeps a newer screen when a timed-out history traversal delivers popstate late', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => {})
+    try {
+      render(<NavigationExample />)
+      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Поделиться' }))
+      expect(screen.getByText('share')).toBeInTheDocument()
+
+      act(() => { window.dispatchEvent(new PopStateEvent('popstate', { state: null })) })
+
+      expect(screen.getByText('home')).toBeInTheDocument()
+      expect(forward).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+      forward.mockRestore()
+    }
+  })
+
+  it('treats a later Back popstate to the timed-out target as navigation', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => {})
+    try {
+      render(<NavigationExample />)
+      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+      const settingsHistoryState: unknown = window.history.state
+      fireEvent.click(screen.getByRole('button', { name: 'Поделиться' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Повторно открыть настройки' }))
+
+      act(() => {
+        const event = new PopStateEvent('popstate')
+        Object.defineProperty(event, 'state', { value: settingsHistoryState })
+        window.dispatchEvent(event)
+      })
+
+      expect(screen.getByText('settings')).toBeInTheDocument()
+      expect(forward).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+      forward.mockRestore()
+    }
   })
 
   it('завершает вложенный сценарий возвращением на главную', async () => {
