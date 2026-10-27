@@ -68,6 +68,7 @@ export function createExecutionGate(): ExecutionGate {
   let lockOwner: symbol | null = null
   let lockTask: Promise<void> | null = null
   let acquisition: Promise<{ acquired: boolean; owner?: symbol }> | null = null
+  let acquisitionGeneration = 0
   let request: Promise<boolean> | null = null
   let takeover: Promise<void> | null = null
   let takeoverRequestId: string | null = null
@@ -96,6 +97,7 @@ export function createExecutionGate(): ExecutionGate {
     let finish!: (acquired: { acquired: boolean; owner?: symbol }) => void
     const result = new Promise<{ acquired: boolean; owner?: symbol }>(resolve => { finish = resolve })
     acquisition = result
+    const generation = ++acquisitionGeneration
     let settled = false
     const settle = (value: { acquired: boolean; owner?: symbol }) => {
       if (settled) return
@@ -130,7 +132,11 @@ export function createExecutionGate(): ExecutionGate {
           releaseLock = null
         }
       })
-      lockTask = task.then(() => undefined, () => { markCoordinationError(); settle({ acquired: false }) })
+      lockTask = task.then(() => undefined, () => {
+        if (generation !== acquisitionGeneration || acquisition !== result || settled) return
+        markCoordinationError()
+        settle({ acquired: false })
+      })
     } catch {
       markCoordinationError()
       settle({ acquired: false })

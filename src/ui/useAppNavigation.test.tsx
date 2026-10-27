@@ -13,6 +13,7 @@ function NavigationExample() {
     <p>{navigation.screen}</p>
     {navigation.screen === 'home' ? <button id="open-settings" onClick={() => navigation.open('settings')}>Настройки</button> : null}
     {navigation.screen === 'settings' ? <button id="open-share" onClick={() => navigation.open('share')}>Поделиться</button> : null}
+    {navigation.screen === 'share' ? <button id="reopen-settings" onClick={() => navigation.open('settings')}>Повторно открыть настройки</button> : null}
     {navigation.screen !== 'home' ? <><button onClick={navigation.back}>Назад</button><button onClick={navigation.home}>На главную</button></> : null}
   </>
 }
@@ -191,8 +192,36 @@ describe('навигация экранов', () => {
 
       act(() => { window.dispatchEvent(new PopStateEvent('popstate', { state: null })) })
 
-      expect(screen.getByText('share')).toBeInTheDocument()
-      expect(forward).toHaveBeenCalledOnce()
+      expect(screen.getByText('home')).toBeInTheDocument()
+      expect(forward).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+      forward.mockRestore()
+    }
+  })
+
+  it('treats a later Back popstate to the timed-out target as navigation', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => {})
+    try {
+      render(<NavigationExample />)
+      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
+      const settingsHistoryState: unknown = window.history.state
+      fireEvent.click(screen.getByRole('button', { name: 'Поделиться' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Повторно открыть настройки' }))
+
+      act(() => {
+        const event = new PopStateEvent('popstate')
+        Object.defineProperty(event, 'state', { value: settingsHistoryState })
+        window.dispatchEvent(event)
+      })
+
+      expect(screen.getByText('settings')).toBeInTheDocument()
+      expect(forward).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
       back.mockRestore()

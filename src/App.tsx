@@ -289,18 +289,39 @@ export function App({
   const [screenLoadPending, setScreenLoadPending] = useState(false)
   const [failedScreenTarget, setFailedScreenTarget] = useState<AppScreen | null>(null)
   const screenLoadGeneration = useRef(0)
+  const failedScreenGeneration = useRef<number | null>(null)
   const [religiousEventScreen, setReligiousEventScreen] = useState<typeof import('./features/religiousEvents/ReligiousEventScreen')['ReligiousEventScreen'] | null>(null)
   const [religiousEventLoadError, setReligiousEventLoadError] = useState<string | null>(null)
   const [religiousEventLoadPending, setReligiousEventLoadPending] = useState(false)
   const [failedReligiousEventId, setFailedReligiousEventId] = useState<import('./domain/religiousEvents').ReligiousEventId | null>(null)
   const religiousEventLoadGeneration = useRef(0)
+  const failedReligiousEventGeneration = useRef<number | null>(null)
+  const previousNavigationScreen = useRef(navigation.screen)
+  useLayoutEffect(() => {
+    if (previousNavigationScreen.current === navigation.screen) return
+    previousNavigationScreen.current = navigation.screen
+    screenLoadGeneration.current += 1
+    religiousEventLoadGeneration.current += 1
+    failedScreenGeneration.current = null
+    failedReligiousEventGeneration.current = null
+    setScreenLoadFailed(false)
+    setFailedScreenTarget(null)
+    setScreenLoadPending(false)
+    setReligiousEventLoadError(null)
+    setFailedReligiousEventId(null)
+    setReligiousEventLoadPending(false)
+  }, [navigation.screen])
   const openScreen = useCallback((target: AppScreen) => {
     const generation = ++screenLoadGeneration.current
     religiousEventLoadGeneration.current += 1
+    failedScreenGeneration.current = null
+    failedReligiousEventGeneration.current = null
     setReligiousEventLoadPending(false)
     setScreenLoadFailed(false)
     setFailedScreenTarget(null)
     setScreenLoadPending(false)
+    setReligiousEventLoadError(null)
+    setFailedReligiousEventId(null)
     if (!secondaryScreens && SECONDARY_SCREENS.includes(target)) {
       setScreenLoadPending(true)
       void openScreenPrepared(target, async () => {
@@ -310,6 +331,7 @@ export function App({
         if (screenLoadGeneration.current === generation) {
           setScreenLoadFailed(true)
           setFailedScreenTarget(target)
+          failedScreenGeneration.current = generation
         }
       }).finally(() => {
         if (screenLoadGeneration.current === generation) setScreenLoadPending(false)
@@ -322,8 +344,14 @@ export function App({
   const cancelPendingScreenLoads = useCallback(() => {
     screenLoadGeneration.current += 1
     religiousEventLoadGeneration.current += 1
+    failedScreenGeneration.current = null
+    failedReligiousEventGeneration.current = null
     setScreenLoadPending(false)
     setReligiousEventLoadPending(false)
+    setScreenLoadFailed(false)
+    setFailedScreenTarget(null)
+    setReligiousEventLoadError(null)
+    setFailedReligiousEventId(null)
   }, [])
   const backScreen = useCallback(() => { cancelPendingScreenLoads(); navigateBack() }, [cancelPendingScreenLoads, navigateBack])
   const homeScreen = useCallback(() => { cancelPendingScreenLoads(); navigateHome() }, [cancelPendingScreenLoads, navigateHome])
@@ -639,7 +667,11 @@ export function App({
   const openReligiousEvent = useCallback((religiousEventId: import('./domain/religiousEvents').ReligiousEventId) => {
     const generation = ++religiousEventLoadGeneration.current
     screenLoadGeneration.current += 1
+    failedScreenGeneration.current = null
+    failedReligiousEventGeneration.current = null
     setScreenLoadPending(false)
+    setScreenLoadFailed(false)
+    setFailedScreenTarget(null)
     setReligiousEventLoadError(null)
     setReligiousEventLoadPending(true)
     setFailedReligiousEventId(null)
@@ -650,6 +682,7 @@ export function App({
       if (religiousEventLoadGeneration.current === generation) {
         setReligiousEventLoadError(t('eventUnavailable'))
         setFailedReligiousEventId(religiousEventId)
+        failedReligiousEventGeneration.current = generation
       }
     }).finally(() => {
       if (religiousEventLoadGeneration.current === generation) setReligiousEventLoadPending(false)
@@ -658,8 +691,12 @@ export function App({
 
   useEffect(() => {
     const retryDeferredScreen = () => {
-      if (screenLoadFailed && failedScreenTarget) openScreen(failedScreenTarget)
-      if (religiousEventLoadError && failedReligiousEventId) openReligiousEvent(failedReligiousEventId)
+      if (screenLoadFailed && failedScreenTarget && failedScreenGeneration.current === screenLoadGeneration.current) {
+        openScreen(failedScreenTarget)
+      } else if (religiousEventLoadError && failedReligiousEventId
+        && failedReligiousEventGeneration.current === religiousEventLoadGeneration.current) {
+        openReligiousEvent(failedReligiousEventId)
+      }
     }
     window.addEventListener('online', retryDeferredScreen)
     return () => window.removeEventListener('online', retryDeferredScreen)
