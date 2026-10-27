@@ -75,9 +75,10 @@ export function useAppNavigation() {
   }, [entries])
 
   const open = useCallback((target: NavigationTarget, returnFocusOverride?: string | null) => {
+    if (traversing.current) return
     intentGeneration.current += 1
     const screen = typeof target === 'string' ? target : target.screen
-    if (traversing.current || current.current.at(-1)?.screen === screen) return
+    if (current.current.at(-1)?.screen === screen) return
     const trigger = returnFocusOverride === undefined
       ? document.activeElement instanceof HTMLElement ? document.activeElement.id || null : null
       : returnFocusOverride
@@ -101,6 +102,7 @@ export function useAppNavigation() {
     })
   }, [session])
   const openPrepared = useCallback(async (target: NavigationTarget, prepare: () => Promise<void>) => {
+    if (traversing.current) return
     const generation = ++intentGeneration.current
     const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement.id || null : null
     try { await prepare() }

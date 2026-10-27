@@ -29,6 +29,18 @@ function PreparedNavigationExample({ prepare, onFailure }: { prepare: () => Prom
   </>
 }
 
+function TraversalRecoveryExample({ prepare }: { prepare: () => Promise<void> }) {
+  const navigation = useAppNavigation()
+  return <>
+    <p>{navigation.screen}</p>
+    <button onClick={() => navigation.open('settings')}>Settings</button>
+    <button onClick={() => navigation.open('share')}>Share</button>
+    <button onClick={() => { void navigation.openPrepared('share', prepare) }}>Prepare share</button>
+    <button onClick={navigation.back}>Back</button>
+    <button onClick={navigation.home}>Home</button>
+  </>
+}
+
 function CalendarNavigationExample() {
   const navigation = useAppNavigation()
   const [date, setDate] = useState('2026-09-02')
@@ -175,6 +187,55 @@ describe('навигация экранов', () => {
     } finally {
       vi.useRealTimers()
       back.mockRestore()
+    }
+  })
+
+  it('keeps the Back recovery timer valid after rejected same-screen and prepared opens', async () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    let resolvePreparation: (() => void) | undefined
+    try {
+      render(<TraversalRecoveryExample prepare={() => new Promise<void>(resolve => { resolvePreparation = resolve })} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+
+      // Во время ожидания popstate оба действия должны остаться без побочных эффектов.
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Prepare share' }))
+      await act(async () => { resolvePreparation?.(); await Promise.resolve() })
+      act(() => { vi.advanceTimersByTime(1_000) })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+      expect(screen.getByText('share')).toBeInTheDocument()
+      expect(back).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+    }
+  })
+
+  it('ignores repeated Back and Home during traversal and recovers after a missing Home popstate', () => {
+    vi.useFakeTimers()
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
+    const go = vi.spyOn(window.history, 'go').mockImplementation(() => {})
+    try {
+      render(<TraversalRecoveryExample prepare={() => Promise.resolve()} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+
+      expect(go).toHaveBeenCalledOnce()
+      expect(back).not.toHaveBeenCalled()
+      act(() => { vi.advanceTimersByTime(1_000) })
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+
+      expect(screen.getByText('settings')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+      back.mockRestore()
+      go.mockRestore()
     }
   })
 
