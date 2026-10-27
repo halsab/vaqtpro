@@ -27,6 +27,7 @@ export default defineConfig({
         '**/privacy.spec.ts',
         '**/analytics.spec.ts',
         '**/location-selection.spec.ts',
+        '**/navigation-transition.spec.ts',
         '**/deferred-loading.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',

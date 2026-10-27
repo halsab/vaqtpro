@@ -3,15 +3,27 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createElement, useState } from 'react'
 import { runNavigationTransition } from './navigationTransition'
 
+interface MockViewTransition {
+  finished: Promise<void>
+  skipTransition: ReturnType<typeof vi.fn>
+}
+
+function mockTransition(update: () => void): MockViewTransition {
+  update()
+  return { finished: Promise.resolve(), skipTransition: vi.fn() }
+}
+
 describe('navigation transitions', () => {
-  afterEach(() => {
+  afterEach(async () => {
     document.body.replaceChildren()
     Reflect.deleteProperty(document, 'startViewTransition')
+    Reflect.deleteProperty(window, 'matchMedia')
+    await Promise.resolve()
     vi.restoreAllMocks()
   })
 
-  it('commits the destination immediately and animates only its content', () => {
-    const startViewTransition = vi.fn()
+  it('commits the destination inside a native view transition', async () => {
+    const startViewTransition = vi.fn(mockTransition)
     Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
     function Example() {
       const [screenName, setScreenName] = useState('home')
@@ -23,82 +35,93 @@ describe('navigation transitions', () => {
 
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Open' })) })
 
-    expect(startViewTransition).not.toHaveBeenCalled()
+    expect(startViewTransition).toHaveBeenCalledOnce()
     expect(screen.getByText('settings')).toBeInTheDocument()
-    expect(document.querySelector('.screen-content')).toHaveClass('screen-navigation-enter')
+    await Promise.resolve()
   })
 
-  it('commits rapid navigation updates in order without deferred callbacks', () => {
-    const startViewTransition = vi.fn(() => { throw new Error('must not be used') })
+  it('skips an active transition and ignores its stale callback on rapid navigation', () => {
+    const callbacks: Array<() => void> = []
+    const skipTransition = vi.fn()
+    const startViewTransition = vi.fn((update: () => void) => {
+      callbacks.push(update)
+      return { finished: new Promise<void>(() => {}), skipTransition }
+    })
     Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
-    document.body.innerHTML = '<div class="screen-content"></div>'
     const firstUpdate = vi.fn()
-    const secondUpdate = vi.fn()
+    const latestUpdate = vi.fn()
 
     runNavigationTransition(firstUpdate)
-    runNavigationTransition(secondUpdate)
+    runNavigationTransition(latestUpdate)
+    callbacks[0]?.()
 
-    expect(startViewTransition).not.toHaveBeenCalled()
-    expect(firstUpdate).toHaveBeenCalledOnce()
-    expect(secondUpdate).toHaveBeenCalledOnce()
-    expect(document.querySelector('.screen-content')).toHaveClass('screen-navigation-enter')
+    expect(startViewTransition).toHaveBeenCalledOnce()
+    expect(skipTransition).toHaveBeenCalledOnce()
+    expect(firstUpdate).not.toHaveBeenCalled()
+    expect(latestUpdate).toHaveBeenCalledOnce()
   })
 
-  it('cannot be overwritten by a delayed native callback or a skipped transition', () => {
-    let delayedUpdate: (() => void) | undefined
+  it('keeps navigation working if an active transition cannot be skipped', () => {
+    const startViewTransition = vi.fn(() => ({
+      finished: new Promise<void>(() => {}),
+      skipTransition: () => { throw new Error('transition already finished') },
+    }))
+    Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
+    const firstUpdate = vi.fn()
+    const latestUpdate = vi.fn()
+
+    runNavigationTransition(firstUpdate)
+    expect(() => runNavigationTransition(latestUpdate)).not.toThrow()
+
+    expect(latestUpdate).toHaveBeenCalledOnce()
+  })
+
+  it('commits immediately and skips an active transition for reduced motion', () => {
+    const callbacks: Array<() => void> = []
     const skipTransition = vi.fn()
-    const startViewTransition = vi.fn((callback: () => void) => {
-      delayedUpdate = callback
-      return { finished: Promise.resolve(), skipTransition }
+    let reducedMotion = false
+    const startViewTransition = vi.fn((update: () => void) => {
+      callbacks.push(update)
+      return { finished: new Promise<void>(() => {}), skipTransition }
     })
     Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
-    function Example() {
-      const [screenName, setScreenName] = useState('home')
-      return createElement('div', { className: 'screen-content' },
-        createElement('span', null, screenName),
-        createElement('button', { onClick: () => runNavigationTransition(() => setScreenName('settings')) }, 'Settings'),
-        createElement('button', { onClick: () => runNavigationTransition(() => setScreenName('share')) }, 'Share'))
-    }
-    render(createElement(Example))
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: reducedMotion }) })
+    const firstUpdate = vi.fn()
+    const reducedMotionUpdate = vi.fn()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
-    delayedUpdate?.()
+    runNavigationTransition(firstUpdate)
+    reducedMotion = true
+    runNavigationTransition(reducedMotionUpdate)
+    callbacks[0]?.()
 
-    expect(startViewTransition).not.toHaveBeenCalled()
-    expect(skipTransition).not.toHaveBeenCalled()
-    expect(delayedUpdate).toBeUndefined()
-    expect(screen.getByText('share')).toBeInTheDocument()
-    expect(screen.queryByText('settings')).not.toBeInTheDocument()
+    expect(skipTransition).toHaveBeenCalledOnce()
+    expect(firstUpdate).not.toHaveBeenCalled()
+    expect(reducedMotionUpdate).toHaveBeenCalledOnce()
   })
 
-  it('ignores an animation-end callback from a superseded content animation', () => {
-    let firstAnimationEnd: EventListener | undefined
-    function Example() {
-      const [screenName, setScreenName] = useState('home')
-      return createElement('div', { className: 'screen-content' },
-        createElement('span', null, screenName),
-        createElement('button', { onClick: () => runNavigationTransition(() => setScreenName('settings')) }, 'Settings'),
-        createElement('button', { onClick: () => runNavigationTransition(() => setScreenName('share')) }, 'Share'))
-    }
-    render(createElement(Example))
-    const content = document.querySelector<HTMLElement>('.screen-content')
-    if (!content) throw new Error('Expected screen content')
-    const addEventListener = content.addEventListener.bind(content)
-    vi.spyOn(content, 'addEventListener').mockImplementation((type, listener, options) => {
-      if (type === 'animationend' && !firstAnimationEnd && typeof listener === 'function') firstAnimationEnd = listener
-      return addEventListener(type, listener, options)
-    })
+  it('updates immediately when the native transition API is unavailable', () => {
+    document.body.innerHTML = '<div class="screen-content"></div>'
+    const update = vi.fn()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Share' }))
-    firstAnimationEnd?.call(content, new Event('animationend'))
+    runNavigationTransition(update)
 
-    expect(screen.getByText('share')).toBeInTheDocument()
-    expect(content).toHaveClass('screen-navigation-enter')
+    expect(update).toHaveBeenCalledOnce()
   })
 
-  it('leaves controls interactive while the content animation is active', () => {
+  it('commits immediately if starting a native transition throws', () => {
+    const startViewTransition = vi.fn(() => { throw new Error('transition unavailable') })
+    Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
+    const update = vi.fn()
+
+    runNavigationTransition(update)
+
+    expect(startViewTransition).toHaveBeenCalledOnce()
+    expect(update).toHaveBeenCalledOnce()
+  })
+
+  it('leaves new controls interactive while the native crossfade runs', () => {
+    const startViewTransition = vi.fn(mockTransition)
+    Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
     function Example() {
       const [screenName, setScreenName] = useState('home')
       const [count, setCount] = useState(0)
@@ -114,24 +137,12 @@ describe('navigation transitions', () => {
 
     expect(screen.getByText('settings')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tap 1' })).toBeInTheDocument()
-    expect(document.querySelector('.screen-content')).toHaveClass('screen-navigation-enter')
   })
 
-  it('updates immediately when reduced motion is requested', () => {
-    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: true }) })
-    document.body.innerHTML = '<div class="screen-content"></div>'
-    const update = vi.fn()
-
-    runNavigationTransition(update)
-
-    expect(update).toHaveBeenCalledOnce()
-    expect(document.querySelector('.screen-content')).not.toHaveClass('screen-navigation-enter')
-  })
-
-  it('does not depend on a working browser transition API', () => {
-    const startViewTransition = vi.fn(() => { throw new Error('transition failed') })
+  it('commits immediately when reduced motion is requested', () => {
+    const startViewTransition = vi.fn(mockTransition)
     Object.defineProperty(document, 'startViewTransition', { configurable: true, value: startViewTransition })
-    document.body.innerHTML = '<div class="screen-content"></div>'
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: true }) })
     const update = vi.fn()
 
     runNavigationTransition(update)
