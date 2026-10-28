@@ -15,7 +15,6 @@ permissions:
 concurrency:
   group: production-release
   cancel-in-progress: false
-  queue: max
 
 jobs:
   verify:

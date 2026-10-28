@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { choosePlace, expect, FIXED_BROWSER_TIME, test } from './fixtures'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const serviceWorkerPath = path.join(root, process.env.SEO_STATIC_ROOT ?? 'dist', 'sw.js')
+const serviceWorkerPath = path.join(root, 'dist', 'sw.js')
 const reloadTimestampKey = 'salah:service-worker-reload-at'
 
 test.describe.configure({ mode: 'serial' })

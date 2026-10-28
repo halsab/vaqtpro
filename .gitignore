@@ -1,6 +1,5 @@
 node_modules
 dist
-dist-seo-preview
 coverage
 playwright-report
 test-results

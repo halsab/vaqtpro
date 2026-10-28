@@ -12,7 +12,6 @@ export default tseslint.config(
       'coverage/**',
       '.playwright-mcp/**',
       'dist/**',
-      'dist-seo-preview/**',
       'node_modules/**',
       'playwright-report/**',
       'public/data/**',

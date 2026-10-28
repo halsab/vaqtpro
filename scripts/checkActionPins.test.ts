@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -6,10 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   checkWorkflowActionPins,
-  checkSeoRefreshWorkflow,
   reportActionPinFailure,
   validateWorkflowActionPins,
-  validateSeoRefreshWorkflow,
 } from './checkActionPins'
 
 const CHECKOUT_SHA = 'd23441a48e516b6c34aea4fa41551a30e30af803'
@@ -140,50 +138,5 @@ describe('workflow action pins', () => {
     } finally {
       process.exitCode = previousExitCode
     }
-  })
-})
-
-describe('SEO publication workflow safety', () => {
-  it('serializes the refresh with release and validates the real checked-in policy', async () => {
-    const root = process.cwd()
-    const [refresh, release, ci] = await Promise.all([
-      readFile(join(root, '.github/workflows/seo-refresh.yml'), 'utf8'),
-      readFile(join(root, '.github/workflows/release.yml'), 'utf8'),
-      readFile(join(root, '.github/workflows/ci.yml'), 'utf8'),
-    ])
-
-    expect(validateSeoRefreshWorkflow(refresh, release)).toEqual([])
-    expect(ci).toContain('SEO_REFERENCE_INSTANT=$(date -u +\'%Y-%m-%dT%H:%M:%SZ\')')
-    expect(ci).not.toContain('github.run_started_at')
-    await expect(checkSeoRefreshWorkflow(root)).resolves.toBeUndefined()
-  })
-
-  it('fails closed if the owner gate, branch guard, release queue, rollback input, or issue alert is removed', async () => {
-    const root = process.cwd()
-    const [refresh, release] = await Promise.all([
-      readFile(join(root, '.github/workflows/seo-refresh.yml'), 'utf8'),
-      readFile(join(root, '.github/workflows/release.yml'), 'utf8'),
-    ])
-    const withoutOwnerGate = refresh.replace("if: vars.VAQT_PRO_SEO_REFRESH_APPROVED == 'true'", 'if: always()')
-    const withoutBranchGuard = refresh.replace("if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'", 'if: always()')
-    const withoutRollbackInput = refresh.replace('      reference_instant:', '      old_reference_instant:')
-    const withoutReleaseQueue = release.replace('  queue: max\n', '')
-    const withoutIssueAlert = refresh.replace('gh issue create', 'echo report').replace('gh issue comment', 'echo report')
-
-    expect(validateSeoRefreshWorkflow(withoutOwnerGate, release)).toContain(
-      'seo-refresh.yml: recurring publication must remain disabled until the owner enables its repository variable',
-    )
-    expect(validateSeoRefreshWorkflow(withoutBranchGuard, release)).toContain(
-      'seo-refresh.yml: manual production refresh must refuse workflow definitions from non-main branches',
-    )
-    expect(validateSeoRefreshWorkflow(withoutRollbackInput, release)).toContain(
-      'seo-refresh.yml: manual refresh must accept a reproducible reference instant for rollback',
-    )
-    expect(validateSeoRefreshWorkflow(refresh, withoutReleaseQueue)).toContain(
-      'release.yml: production deploys must queue instead of replacing a pending release',
-    )
-    expect(validateSeoRefreshWorkflow(withoutIssueAlert, release)).toContain(
-      'seo-refresh.yml: failed refresh must notify the owner through an actionable issue',
-    )
   })
 })

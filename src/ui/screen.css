@@ -201,10 +201,6 @@ html[data-input='pointer'] .select-field { outline: none; }
 .prayer-month-table tbody th { font-weight: 400; }
 .prayer-month-time { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .prayer-month-estimated { color: var(--text-secondary); font: var(--font-footnote); }
-.seo-app-page { min-height: 100dvh; display: flex; padding-top: max(0px, env(safe-area-inset-top, 0px)); background: var(--app-shell-background); }
-.seo-app-page .app-screen { min-height: calc(100dvh - max(0px, env(safe-area-inset-top, 0px))); flex: 1 0 auto; }
-.seo-app-page .screen-panel { display: block; overflow: visible; flex: 1 0 auto; }
-.seo-app-page .screen-content { overflow: visible; flex: 1 0 auto; min-height: 0; padding-bottom: max(var(--content-inset), env(safe-area-inset-bottom, 0px)); }
 @keyframes vaqtpro-content-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes vaqtpro-content-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {

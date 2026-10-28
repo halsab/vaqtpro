@@ -35,10 +35,8 @@ function requiredArtifacts(cityCatalog = catalog): BuildArtifact[] {
     { path: 'assets/index-a1b2c3.css', size: 20 },
     { path: 'data/cities/index.json', size: 200 },
     { path: `data/cities/${cityCatalog.version}/${cityCatalog.shards[0]?.id}.json`, size: 300 },
-    { path: '404.html', size: 120 },
     { path: 'robots.txt', size: 80 },
     { path: 'sitemap.xml', size: 100 },
-    { path: 'prayer-times-theme.css', size: 150 },
   ]
 }
 
@@ -52,6 +50,8 @@ async function writeBuildArtifacts(
     html?: string
     manifest?: Record<string, unknown>
     shareQr?: string
+    robots?: string
+    sitemap?: string
   } = {},
 ): Promise<void> {
   const cityCatalog = options.cityCatalog ?? catalog
@@ -77,15 +77,13 @@ async function writeBuildArtifacts(
   await Promise.all([
     writeFile(join(root, 'assets/index-build.js'), options.mainJavaScript ?? 'application code'),
     writeFile(join(root, 'assets/index-build.css'), options.css ?? '.app { display: block; }'),
-    writeFile(join(root, 'index.html'), options.html ?? '<meta name="apple-mobile-web-app-title" content="VaqtPro" /><title>VaqtPro — времена намаза</title>'),
+    writeFile(join(root, 'index.html'), options.html ?? '<html lang="ru"><head><meta name="description" content="Время намаза для выбранного места: независимый расчёт на устройстве. Сохранённые данные доступны офлайн." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><title>VaqtPro — времена намаза</title></head></html>'),
     writeFile(join(root, 'manifest.webmanifest'), JSON.stringify(appManifest)),
     writeFile(join(root, 'share-qr.svg'), shareQr),
-    writeFile(join(root, '404.html'), '<!doctype html><html lang="ru"><head><meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"></head><body><h1>Страница не найдена</h1></body></html>'),
-    writeFile(join(root, 'robots.txt'), 'User-agent: *\nAllow: /\nSitemap: https://vaqt.pro/sitemap.xml\n'),
-    writeFile(join(root, 'sitemap.xml'), '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>'),
-    writeFile(join(root, 'prayer-times-theme.css'), ':root{--background-secondary:#f7f1ec;--text-primary:#2e2622}@media(prefers-color-scheme:dark){}'),
+    writeFile(join(root, 'robots.txt'), options.robots ?? 'User-agent: *\nAllow: /\nSitemap: https://vaqt.pro/sitemap.xml\n'),
+    writeFile(join(root, 'sitemap.xml'), options.sitemap ?? '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://vaqt.pro/</loc></url></urlset>\n'),
     writeFile(join(root, 'assets/city-search.worker.js'), 'worker code'),
-    writeFile(join(root, 'sw.js'), 'offline worker prayer-times denylist'),
+    writeFile(join(root, 'sw.js'), 'offline worker'),
     writeFile(join(root, 'data/cities/index.json'), JSON.stringify(cityCatalog)),
     ...Object.entries(cityShards).map(([id, shard]) => writeFile(
       join(cityShardDirectory, `${id}.json`),
@@ -108,8 +106,19 @@ describe('production artifact validation', () => {
       'webManifest: artifact не найден',
       'shareQr: artifact не найден',
       'cityIndex: artifact не найден',
+      'robots: artifact не найден',
+      'sitemap: artifact не найден',
       `cities: отсутствует ${shardPath}`,
     ]))
+  })
+
+  it.each([
+    ['prayer-times/ru/moskva-524901/index.html', 'SEO city page'],
+    ['prayer-times-theme.css', 'SEO city theme'],
+    ['404.html', 'SEO-specific 404'],
+  ])('rejects the cancelled %s artifact', (path, label) => {
+    expect(validateBuildArtifacts([...requiredArtifacts(), { path, size: 1 }], catalog))
+      .toContain(`seo: cancelled ${label} artifact ${path}`)
   })
 
   it('blocks duplicate required main bundles and duplicate city paths', () => {
@@ -196,6 +205,50 @@ describe('production artifact validation', () => {
     }
   })
 
+  it.each([
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><title>VaqtPro — времена намаза</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/?city=moscow" /><title>VaqtPro — времена намаза</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><link rel="canonical" href="https://vaqt.pro/" /><title>VaqtPro — времена намаза</title></head></html>',
+  ])('rejects a missing, unstable, or duplicate canonical in initial HTML', async (html) => {
+    const root = await temporaryDirectory()
+
+    try {
+      await writeBuildArtifacts(root, { html })
+      await expect(checkBuildArtifacts(root, { log: () => undefined }))
+        .rejects.toThrow('seo: initial HTML must contain exactly one static homepage canonical')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['User-agent: *\nDisallow: /\nSitemap: https://vaqt.pro/sitemap.xml\n', 'seo: robots.txt must allow public crawling and reference the sitemap'],
+    ['User-agent: *\nAllow: /\n', 'seo: robots.txt must allow public crawling and reference the sitemap'],
+  ])('rejects nonpermissive or incomplete robots.txt', async (robots, message) => {
+    const root = await temporaryDirectory()
+
+    try {
+      await writeBuildArtifacts(root, { robots })
+      await expect(checkBuildArtifacts(root, { log: () => undefined })).rejects.toThrow(message)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://vaqt.pro/</loc><loc>https://vaqt.pro/prayer-times/ru/moskva-524901/</loc></url></urlset>', 'seo: sitemap.xml must contain exactly the homepage URL and no lastmod'],
+    ['<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://vaqt.pro/</loc><lastmod>2026-10-28</lastmod></url></urlset>', 'seo: sitemap.xml must contain exactly the homepage URL and no lastmod'],
+  ])('rejects extra or synthetic sitemap data', async (sitemap, message) => {
+    const root = await temporaryDirectory()
+
+    try {
+      await writeBuildArtifacts(root, { sitemap })
+      await expect(checkBuildArtifacts(root, { log: () => undefined })).rejects.toThrow(message)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it('rejects a QR image that differs from the verified VaqtPro destination', async () => {
     const root = await temporaryDirectory()
 
@@ -230,14 +283,14 @@ describe('production artifact validation', () => {
 
       const output = messages.join('\n')
       expect(output).toContain('Main JavaScript: 614,400 bytes raw')
-      expect(output).toContain('Total JavaScript: 614,447 bytes raw')
-      expect(output).toContain('Total CSS: 51,295 bytes raw')
+      expect(output).toContain('Total JavaScript: 614,425 bytes raw')
+      expect(output).toContain('Total CSS: 51,200 bytes raw')
       expect(output).toContain('gzip')
 
       const summary = await readFile(summaryPath, 'utf8')
       expect(summary).toContain('| Main JavaScript | 614,400 bytes |')
-      expect(summary).toContain('| Total JavaScript | 614,447 bytes |')
-      expect(summary).toContain('| Total CSS | 51,295 bytes |')
+      expect(summary).toContain('| Total JavaScript | 614,425 bytes |')
+      expect(summary).toContain('| Total CSS | 51,200 bytes |')
       expect(summary).toContain('absolute sizes are shown')
     } finally {
       await rm(root, { recursive: true, force: true })
