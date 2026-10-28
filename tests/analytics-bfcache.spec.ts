@@ -6,11 +6,19 @@ test('the production-like beacon stays silent after another tab saves OFF and hi
   const restoredStates: boolean[] = []
   await context.route('**/*', async route => {
     const url = new URL(route.request().url())
-    if (url.hostname === 'static.cloudflareinsights.com' || url.hostname === 'cloudflareinsights.com') {
-      if (url.hostname === 'cloudflareinsights.com' && url.pathname === '/cdn-cgi/rum') {
-        rumRequests.push({ url: url.href, method: route.request().method(), body: route.request().postData() })
-      }
-      await route.continue()
+    if (url.hostname === 'static.cloudflareinsights.com') {
+      await route.fulfill({ contentType: 'text/javascript', body: `
+        const sendPageView = () => fetch('https://cloudflareinsights.com/cdn-cgi/rum', {
+          method: 'POST', body: JSON.stringify({ location: location.href }),
+        }).catch(() => {});
+        sendPageView();
+        document.addEventListener('visibilitychange', sendPageView);
+      ` })
+      return
+    }
+    if (url.hostname === 'cloudflareinsights.com' && url.pathname === '/cdn-cgi/rum') {
+      rumRequests.push({ url: url.href, method: route.request().method(), body: route.request().postData() })
+      await route.fulfill({ status: 204, headers: { 'access-control-allow-origin': 'https://vaqt.pro' } })
       return
     }
     if (url.hostname !== 'vaqt.pro') {

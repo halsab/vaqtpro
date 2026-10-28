@@ -43,7 +43,7 @@ function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
           {event.dayOffset ? <small className="event-day">{formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale)}</small> : null}
         </div>
         <time dateTime={new Date(event.instant).toISOString()}>{estimated(event, [schedule])
-          ? <span aria-label={t('estimatedTime')}>≈ </span> : null}{event.time}</time>
+          ? <span aria-label={t('estimatedTime')}>{t('estimatedApproximation')} </span> : null}{event.time}</time>
       </li>
     })}
   </ol>

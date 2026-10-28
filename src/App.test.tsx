@@ -632,6 +632,28 @@ describe('VaqtPro', () => {
     await waitFor(() => expect(services.saveSettings).toHaveBeenLastCalledWith({ calendarPreferences: { calendar: 'gregorian', correction: 1 } }, expect.any(Function)))
   })
 
+  it('открывает месячное расписание из выбора даты, переключает месяц и возвращается без выбора дня', async () => {
+    render(<App services={createServices()} />)
+    await screen.findByRole('timer')
+    await userEvent.click(screen.getByRole('button', { name: 'Выбрать дату' }))
+    await userEvent.click(screen.getByRole('button', { name: /Расписание на месяц/ }))
+
+    expect(await screen.findByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
+    expect(screen.getAllByRole('row')).toHaveLength(31)
+    const firstRow = screen.getAllByRole('row')[1]
+    if (!firstRow) throw new Error('Monthly schedule must render the first date row')
+    expect(firstRow).toHaveTextContent('01.09.2026')
+    expect(within(firstRow).getAllByRole('cell')).toHaveLength(6)
+    expect(firstRow.querySelector('button, a')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))
+    expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
+    expect(screen.getAllByRole('row')).toHaveLength(32)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
+    expect(await screen.findByRole('combobox', { name: 'День' })).toBeVisible()
+  })
+
   it('сохраняет автоактивацию текущей ночи Рамадана при просмотре другой даты', async () => {
     const services = createServices({
       now: () => new Date('2026-02-17T18:30:00.000Z'),

@@ -27,10 +27,11 @@ function numbers(first: number, last: number): SelectOption[] {
   return Array.from({ length: last - first + 1 }, (_, index) => ({ value: String(first + index), label: String(first + index) }))
 }
 
-export function DateScreen({ selectedDate, today, preferences, hijriSupported, onDateChange, onPreferencesChange, onOpenReligiousEvents, onBack, notice }: {
+export function DateScreen({ selectedDate, today, preferences, hijriSupported, onDateChange, onPreferencesChange,
+  onOpenReligiousEvents, onBack, onOpenMonthlySchedule = () => {}, hasPlace = true, notice }: {
   selectedDate: string; today: string; preferences: CalendarPreferences; hijriSupported: boolean
   onDateChange: (date: string) => void; onPreferencesChange: (preferences: CalendarPreferences) => void
-  onOpenReligiousEvents: () => void; onBack: () => void; notice?: ReactNode
+  onOpenReligiousEvents: () => void; onBack: () => void; onOpenMonthlySchedule?: () => void; hasPlace?: boolean; notice?: ReactNode
 }) {
   const { locale, t } = useLocalization()
   const dayRef = useRef<HTMLSelectElement>(null)
@@ -61,6 +62,7 @@ export function DateScreen({ selectedDate, today, preferences, hijriSupported, o
         const correction = Number(value)
         if (correction === -1 || correction === 0 || correction === 1) onPreferencesChange({ ...preferences, correction })
       }} /> : null}
+      <ActionRow title={t('monthlySchedule')} disabled={!hasPlace} onClick={onOpenMonthlySchedule} />
       <ActionRow id="date-religious-events" title={t('religiousEvents')} disabled={!hijriSupported} onClick={onOpenReligiousEvents} />
       {!hijriSupported ? <p className="note" role="status">{t('hijriUnsupported')}</p> : null}
       {notice}

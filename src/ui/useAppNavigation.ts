@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { isReligiousEventId, type ReligiousEventId } from '../domain/religiousEvents'
 import { runNavigationTransition } from './navigationTransition'
 
-const SCREENS = ['home', 'date', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event'] as const
+const SCREENS = ['home', 'date', 'monthly-schedule', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event'] as const
 export type AppScreen = typeof SCREENS[number]
 interface Entry { screen: AppScreen; returnFocus: string | null; religiousEventId?: ReligiousEventId; scrollTop?: number }
 type NavigationTarget = AppScreen | { screen: 'religious-event'; religiousEventId: ReligiousEventId }

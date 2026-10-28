@@ -1,0 +1,164 @@
+name: Обновить статические расписания
+run-name: Обновление расписаний городов
+
+on:
+  schedule:
+    - cron: '31 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Точный тег ранее опубликованной версии для обновления или отката'
+        required: false
+        type: string
+      reference_instant:
+        description: 'ISO 8601 момент расчёта; задайте прежнее значение для воспроизводимого отката'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  refresh:
+    name: Пересчитать данные выпущенной версии
+    if: vars.VAQT_PRO_SEO_REFRESH_APPROVED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Проверить ветку ручного запуска
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo 'Ручное обновление можно запускать только из ветки main.'
+          exit 1
+
+      - name: Выбрать выпущенный исходный тег
+        id: source
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$REQUESTED_TAG" ]; then
+            tag="$REQUESTED_TAG"
+            gh release view "$tag" --json tagName --jq '.tagName' >/dev/null
+          else
+            tag="$(gh release view --json tagName --jq '.tagName')"
+          fi
+          echo "release_tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Получить исходники выпущенной версии
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ steps.source.outputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Зафиксировать ревизию расчётного кода
+        id: revision
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Подготовить Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Установить зависимости из lock-файла
+        run: npm ci
+
+      - name: Проверить тесты выпущенного кода
+        run: npm test
+
+      - name: Зафиксировать момент расчёта расписаний
+        id: reference
+        env:
+          REQUESTED_INSTANT: ${{ inputs.reference_instant }}
+        run: |
+          set -euo pipefail
+          if [ -n "$REQUESTED_INSTANT" ]; then
+            instant="$REQUESTED_INSTANT"
+          else
+            instant="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          fi
+          echo "reference_instant=$instant" >> "$GITHUB_OUTPUT"
+
+      - name: Собрать страницы и проверить публикационный gate
+        env:
+          SEO_REFERENCE_INSTANT: ${{ steps.reference.outputs.reference_instant }}
+          SEO_SOURCE_COMMIT: ${{ steps.revision.outputs.commit }}
+          SEO_REQUIRE_PUBLICATION: 'true'
+        run: |
+          npm run build
+          npm run build:check
+
+      - name: Настроить GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Загрузить проверенную статическую сборку
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: dist
+
+      - name: Опубликовать расписания
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+
+      - name: Записать данные для воспроизводимого отката
+        env:
+          RELEASE_TAG: ${{ steps.source.outputs.release_tag }}
+          REFERENCE_INSTANT: ${{ steps.reference.outputs.reference_instant }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          {
+            echo '## Обновлены статические расписания'
+            echo
+            echo "Опубликованный источник: $RELEASE_TAG"
+            echo "Момент расчёта: $REFERENCE_INSTANT"
+            echo "Сайт: $PAGE_URL"
+            echo
+            echo 'Для воспроизводимого отката запустите этот workflow вручную с прежним тегом и моментом расчёта из успешного запуска.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  notify-failure:
+    name: Сообщить о неудачном обновлении
+    needs: refresh
+    if: failure() && needs.refresh.result == 'failure' && vars.VAQT_PRO_SEO_REFRESH_APPROVED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Создать или обновить задачу владельцу
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          issue="$(gh issue list --state open --json number,title --jq '.[] | select(.title == "SEO timetable refresh needs attention") | .number' | head -n 1)"
+          body_file="$(mktemp)"
+          cat > "$body_file" <<EOF
+          The scheduled VaqtPro timetable refresh failed before it could complete a verified GitHub Pages deployment.
+
+          Run: $RUN_URL
+          Requested release tag: ${RELEASE_TAG:-latest released tag}
+
+          The previous Pages deployment remains the last known good unless the failure occurred during the Pages deployment itself. Review the run logs. To reproduce or roll back, manually dispatch the refresh workflow with the successful release tag and reference instant recorded in its run summary.
+          EOF
+          if [ -n "$issue" ]; then
+            gh issue comment "$issue" --body-file "$body_file"
+          else
+            gh issue create --title 'SEO timetable refresh needs attention' --body-file "$body_file"
+          fi

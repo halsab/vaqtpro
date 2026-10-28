@@ -126,6 +126,7 @@ export default defineConfig({
         importScripts: ['city-cache-cleanup.js'],
         navigateFallback: 'index.html',
         ignoreURLParametersMatching: [/^v$/, /^utm_/i, /^fbclid$/i],
+        navigateFallbackDenylist: [/^\/prayer-times(?:\/|$)/],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,json}'],
         globIgnores: [
           '**/data/cities-current.json',

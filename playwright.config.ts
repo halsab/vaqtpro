@@ -23,6 +23,7 @@ export default defineConfig({
       name: 'chromium',
       testMatch: [
         '**/smoke.spec.ts',
+        '**/seo-pages.spec.ts',
         '**/offline.spec.ts',
         '**/privacy.spec.ts',
         '**/analytics.spec.ts',
@@ -46,7 +47,7 @@ export default defineConfig({
     // Критические сценарии мобильного WebKit (portrait).
     {
       name: 'mobile-safari-portrait',
-      testMatch: ['**/mobile.spec.ts'],
+      testMatch: ['**/mobile.spec.ts', '**/seo-pages.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },
     {
@@ -72,14 +73,15 @@ export default defineConfig({
     // Обновление service worker меняет dist/sw.js; запускается строго после остальных.
     {
       name: 'chromium-sw',
-      testMatch: '**/sw-update.spec.ts',
+      testMatch: ['**/sw-update.spec.ts', '**/seo-sw.spec.ts'],
       dependencies: ['chromium', 'mobile-safari-portrait', 'chromium-execution-gate', 'webkit-execution-gate'],
       use: { ...devices['Desktop Chrome'] },
     },
   ],
   webServer: {
-    command: `npm run preview -- --host 127.0.0.1 --port ${port}`,
+    command: `node --import tsx scripts/serveBuiltSite.ts`,
     url: previewUrl,
+    env: { SEO_STATIC_ROOT: process.env.SEO_STATIC_ROOT ?? 'dist' },
     reuseExistingServer: !process.env.CI,
   },
 })

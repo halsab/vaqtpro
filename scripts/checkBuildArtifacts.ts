@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url'
 
 import { validateCityIndex, parseCityShard } from '../src/domain/citySchema'
 import { createSearchFilter, type CityIndex } from '../src/domain/cityIndex'
+import { localCivilMonth } from '../src/domain/civilMonth'
+import { SEO_CITY_CANDIDATES, SEO_PUBLICATION_APPROVAL } from './seo/cities'
 
 export interface BuildArtifact {
   path: string
@@ -27,6 +29,8 @@ export interface CheckBuildArtifactsOptions {
   baselineDirectory?: string
   log?: (message: string) => void
   summaryPath?: string
+  expectedSeoCityIds?: readonly number[]
+  referenceInstant?: string
 }
 
 const REQUIRED_ARTIFACTS: ReadonlyArray<{
@@ -39,6 +43,10 @@ const REQUIRED_ARTIFACTS: ReadonlyArray<{
   { name: 'mainJavaScript', matches: (path) => /^assets\/index-[^/]+\.js$/.test(path) },
   { name: 'mainCss', matches: (path) => /^assets\/index-[^/]+\.css$/.test(path) },
   { name: 'cityIndex', matches: (path) => path === 'data/cities/index.json' },
+  { name: 'notFoundPage', matches: (path) => path === '404.html' },
+  { name: 'robots', matches: (path) => path === 'robots.txt' },
+  { name: 'sitemap', matches: (path) => path === 'sitemap.xml' },
+  { name: 'prayerTimesThemeCss', matches: (path) => path === 'prayer-times-theme.css' },
 ]
 
 // Хеш фиксирует SVG-код, сгенерированный для официальной ссылки приложения.
@@ -205,6 +213,124 @@ async function validateCityArtifacts(
   return { catalog, errors }
 }
 
+async function validateSeoArtifacts(
+  distDirectory: string,
+  artifacts: readonly BuildArtifact[],
+  expectedSeoCityIds?: readonly number[],
+  referenceInstantValue?: string,
+): Promise<string[]> {
+  const errors: string[] = []
+  const expectedCityIds = expectedSeoCityIds ?? SEO_PUBLICATION_APPROVAL.approvedCityIds.filter(id => {
+    const candidate = SEO_CITY_CANDIDATES.find(city => city.id === id)
+    return Boolean(candidate?.ownerApproved && candidate.demandEvidence.length > 0
+      && candidate.demandEvidence.every(evidence => evidence.verification === 'verified'))
+  })
+  const expectedRoutes = expectedCityIds.map(id => {
+      const candidate = SEO_CITY_CANDIDATES.find(city => city.id === id)
+      return candidate ? `/prayer-times/${candidate.countryCode.toLowerCase()}/${candidate.slug}-${candidate.id}/` : ''
+    })
+
+  try {
+    const robots = await readFile(join(distDirectory, 'robots.txt'), 'utf8')
+    if (!robots.includes('User-agent: *\nAllow: /') || !robots.includes(`Sitemap: https://vaqt.pro/sitemap.xml`)) {
+      errors.push('seo: robots.txt должен разрешать публикацию и указывать абсолютный sitemap')
+    }
+
+    const sitemapXml = await readFile(join(distDirectory, 'sitemap.xml'), 'utf8')
+    const sitemapRoutes = [...sitemapXml.matchAll(/<loc>https:\/\/vaqt\.pro(\/[^<]*)<\/loc>/g)].map(match => match[1] ?? '')
+    if (sitemapRoutes.length !== new Set(sitemapRoutes).size) errors.push('seo: sitemap.xml содержит повторные URL')
+    if (sitemapRoutes.some(route => !/^\/prayer-times\/[a-z]{2}\/[a-z0-9-]+-\d+\/$/.test(route))) {
+      errors.push('seo: sitemap.xml содержит URL вне утверждённого маршрута')
+    }
+    if ([...sitemapXml.matchAll(/<loc>/g)].length !== sitemapRoutes.length) {
+      errors.push('seo: sitemap.xml содержит некорректный или посторонний URL')
+    }
+    if ([...sitemapRoutes].sort().join('\n') !== [...expectedRoutes].sort().join('\n')) {
+      errors.push('seo: sitemap.xml не соответствует фактически одобренным страницам')
+    }
+
+    const actualPagePaths = artifacts
+      .map(artifact => artifact.path)
+      .filter(path => /^prayer-times\/(?:.+\/)?index\.html$/.test(path))
+      .map(path => `/${path.slice(0, -'index.html'.length)}`)
+      .sort()
+    if (actualPagePaths.join('\n') !== [...expectedRoutes].sort().join('\n')) {
+      errors.push('seo: сгенерированные страницы не соответствуют публикационному manifest')
+    }
+
+    const themeCss = await readFile(join(distDirectory, 'prayer-times-theme.css'), 'utf8')
+    if (!themeCss.includes('--background-secondary') || !themeCss.includes('--text-primary')
+      || !themeCss.includes('prefers-color-scheme:dark')) {
+      errors.push('seo: сезонные токены статической страницы должны использовать палитры приложения')
+    }
+
+    const notFound = await readFile(join(distDirectory, '404.html'), 'utf8')
+    if (!/<html lang="ru"(?:\s[^>]*)?>/.test(notFound) || !/<h1\b[^>]*>Страница не найдена<\/h1>/.test(notFound)
+      || !/<meta name="referrer" content="no-referrer">/.test(notFound)
+      || !/<meta name="robots" content="noindex">/.test(notFound)
+      || /<script\b|\son[a-z]+=/i.test(notFound)) {
+      errors.push('seo: 404.html должен быть русской статической страницей без скриптов')
+    }
+
+    const referenceValue = referenceInstantValue ?? process.env.SEO_REFERENCE_INSTANT
+    const referenceInstant = referenceValue ? new Date(referenceValue) : undefined
+    if (expectedCityIds.length > 0 && (!referenceInstant || !Number.isFinite(referenceInstant.getTime()))) {
+      errors.push('seo: отсутствует корректный SEO_REFERENCE_INSTANT для проверки календарного месяца')
+    }
+    for (const route of expectedRoutes) {
+      const idMatch = /-(\d+)\/$/.exec(route)
+      const id = Number(idMatch?.[1])
+      const candidate = SEO_CITY_CANDIDATES.find(city => city.id === id)
+      if (!candidate) continue
+      const html = await readFile(join(distDirectory, route.slice(1), 'index.html'), 'utf8')
+      const canonical = `https://vaqt.pro${route}`
+      const headHasPolicy = /<html lang="ru" data-theme="seasonal" data-season="(?:winter|spring|summer|autumn)">/.test(html)
+        && /<meta name="referrer" content="no-referrer">/.test(html)
+        && /<meta http-equiv="Content-Security-Policy" content="[^"]*script-src 'none';/.test(html)
+      if (!/<html lang="ru" data-theme="seasonal" data-season="(?:winter|spring|summer|autumn)">/.test(html) || !headHasPolicy
+        || !new RegExp(`<link rel="canonical" href="${canonical}">`).test(html)
+        || (html.match(/<h1\b/g) ?? []).length !== 1
+        || /<script\b|\son[a-z]+=|static\.cloudflareinsights\.com|googletagmanager|google-analytics|metrika\.yandex/i.test(html)) {
+        errors.push(`seo: страница ${route} нарушает статический HTML, canonical, CSP или privacy contract`)
+      }
+      if (!/<table class="prayer-month-table">/.test(html) || !/<caption>Расписание намаза за месяц<\/caption>/.test(html)
+        || !/href="\/assets\/index-[^"]+\.css"/.test(html) || !/href="\/prayer-times-theme\.css"/.test(html)) {
+        errors.push(`seo: страница ${route} не содержит семантическую таблицу расписания`)
+      }
+      const rows = [...html.matchAll(/<tr><th scope="row"><time datetime="(\d{4}-\d{2}-\d{2})">(\d{2}\.\d{2}\.\d{4})<\/time><\/th>([\s\S]*?)<\/tr>/g)]
+      const rowDates = rows.map(match => match[1] ?? '')
+      const displayedDates = rows.map(match => match[2] ?? '')
+      const expectedDates = referenceInstant ? localCivilMonth(referenceInstant, candidate.timeZone) : []
+      const expectedLabels = expectedDates.map(date => `${date.slice(8, 10)}.${date.slice(5, 7)}.${date.slice(0, 4)}`)
+      if (rowDates.length === 0 || new Set(rowDates).size !== rowDates.length
+        || rowDates.join('\n') !== expectedDates.join('\n')
+        || displayedDates.join('\n') !== expectedLabels.join('\n')) {
+        errors.push(`seo: страница ${route} должна содержать каждую дату текущего местного календарного месяца в формате ДД.ММ.ГГГГ`)
+      }
+      for (const row of rows) {
+        const cells = row[3] ?? ''
+        if ((cells.match(/<td>/g) ?? []).length !== 6 || (cells.match(/<time datetime=/g) ?? []).length !== 6
+          || /<a\b|<button\b/.test(row[0])) {
+          errors.push(`seo: строка даты ${route} должна содержать дату и шесть неинтерактивных времён`)
+          break
+        }
+      }
+      if (!/<details class="prayer-month-method">/.test(html) || /<details class="prayer-month-method"[^>]*\bopen(?:\s|>)/.test(html)
+        || html.includes('≈')) errors.push(`seo: страница ${route} должна кратко показывать и сворачивать методику без символа ≈`)
+    }
+
+    const serviceWorker = await readFile(join(distDirectory, 'sw.js'), 'utf8')
+    if (!serviceWorker.includes('prayer-times')) errors.push('seo: service worker должен исключать маршруты расписаний из navigation fallback')
+    if (expectedCityIds.some(id => serviceWorker.includes(`/${id}/`))) {
+      errors.push('seo: сгенерированные страницы городов не должны входить в precache service worker')
+    }
+  } catch (error) {
+    errors.push(`seo: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  return errors
+}
+
 function isJavaScript(path: string): boolean {
   return /\.(?:js|mjs|cjs)$/.test(path)
 }
@@ -338,6 +464,7 @@ export async function checkBuildArtifacts(
   const errors = [
     ...validateBuildArtifacts(artifacts, city.catalog),
     ...await validateApplicationIdentity(distDirectory, artifacts),
+    ...await validateSeoArtifacts(distDirectory, artifacts, options.expectedSeoCityIds, options.referenceInstant),
     ...city.errors,
   ]
 
