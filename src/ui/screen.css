@@ -87,7 +87,20 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 ::view-transition-group(root),
 ::view-transition-old(root),
 ::view-transition-new(root),
-::view-transition-group(screen-content) { animation: none; transform: none; }
+::view-transition-group(screen-content) { animation: none; }
+/* У снимков View Transition сбрасываем все виды трансформации: остаётся только alpha fade. */
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-group(screen-content),
+::view-transition-old(screen-content),
+::view-transition-new(screen-content) {
+  transform: none;
+  translate: none;
+  rotate: none;
+  scale: none;
+  filter: none;
+}
 ::view-transition-old(screen-content),
 ::view-transition-new(screen-content) { animation-duration: var(--navigation-fade-duration); animation-timing-function: var(--navigation-transition-easing); animation-fill-mode: both; }
 ::view-transition-old(screen-content) { animation-name: vaqtpro-content-fade-out; }
