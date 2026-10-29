@@ -92,7 +92,7 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
   await expect(firstDay).toHaveAttribute('datetime', '2026-09-01')
   await expect(firstDay).toHaveAttribute('aria-label', '01.09.2026')
   await expect(table.locator('thead th')).toHaveCount(8)
-  await expect(table.locator('thead th').allTextContents()).resolves.toEqual(
+  expect(await table.locator('thead th').allTextContents()).toEqual(
     ['Дата', 'Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша'],
   )
   await expect(table.locator('tbody tr').first().locator('td')).toHaveCount(7)
