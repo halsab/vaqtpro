@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
+import type { CalculatedPrayerKey } from '../../domain/types'
 import { ScheduleContent } from './ScheduleContent'
 
 const date = '2026-05-05'
@@ -48,5 +49,13 @@ describe('calculated schedule view', () => {
     expect(screen.getByRole('timer')).toBeVisible()
     expect(screen.getAllByRole('listitem')).toHaveLength(7)
     expect(screen.queryByText(/в мечети/u)).not.toBeInTheDocument()
+  })
+
+  it('labels estimated times with a word instead of an approximation symbol', () => {
+    const estimatedDay = { ...day, estimatedPrayers: ['fajr'] as CalculatedPrayerKey[] }
+    render(<ScheduleContent {...base} schedule={estimatedDay} schedules={[estimatedDay]} />)
+
+    expect(screen.getByText('примерно')).toBeVisible()
+    expect(screen.queryByText('≈')).not.toBeInTheDocument()
   })
 })

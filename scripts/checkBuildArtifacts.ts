@@ -39,6 +39,8 @@ const REQUIRED_ARTIFACTS: ReadonlyArray<{
   { name: 'mainJavaScript', matches: (path) => /^assets\/index-[^/]+\.js$/.test(path) },
   { name: 'mainCss', matches: (path) => /^assets\/index-[^/]+\.css$/.test(path) },
   { name: 'cityIndex', matches: (path) => path === 'data/cities/index.json' },
+  { name: 'robots', matches: (path) => path === 'robots.txt' },
+  { name: 'sitemap', matches: (path) => path === 'sitemap.xml' },
 ]
 
 // Хеш фиксирует SVG-код, сгенерированный для официальной ссылки приложения.
@@ -66,6 +68,15 @@ export function validateBuildArtifacts(
   }
   if (artifacts.some(({ path }) => /prayer-times-(?:current|manifest)\.json$/i.test(path))) {
     errors.push('prayerData: obsolete timetable artifacts must not be bundled')
+  }
+  for (const { path } of artifacts) {
+    if (/^prayer-times\//.test(path)) {
+      errors.push(`seo: cancelled SEO city page artifact ${path}`)
+    } else if (path === 'prayer-times-theme.css') {
+      errors.push(`seo: cancelled SEO city theme artifact ${path}`)
+    } else if (path === '404.html') {
+      errors.push(`seo: cancelled SEO-specific 404 artifact ${path}`)
+    }
   }
 
   const cityArtifacts = artifacts.filter((artifact) => artifact.path.startsWith('data/cities/'))
@@ -98,11 +109,30 @@ async function validateApplicationIdentity(
   const errors: string[] = []
   if (artifacts.some((artifact) => artifact.path === 'index.html')) {
     const html = await readFile(join(distDirectory, 'index.html'), 'utf8')
-    if (!/<title>VaqtPro — времена намаза<\/title>/i.test(html)) {
-      errors.push('appTitle: index.html не содержит название VaqtPro')
+    const titles = [...html.matchAll(/<title>([\s\S]*?)<\/title>/gi)]
+    if (titles.length !== 1 || titles[0]?.[1] !== 'Время намаза — расписание молитв | VaqtPro') {
+      errors.push('seo: initial HTML must contain exactly one approved homepage title')
     }
     if (!/<meta\s+name="apple-mobile-web-app-title"\s+content="VaqtPro"\s*\/>/i.test(html)) {
       errors.push('appleTitle: index.html не содержит название VaqtPro')
+    }
+    const descriptions = [...html.matchAll(/<meta\s+name="description"\s+content="([^"]*)"\s*\/?>/gi)]
+    if (descriptions.length !== 1 || descriptions[0]?.[1] !== 'Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета.') {
+      errors.push('seo: initial HTML must preserve exactly one accurate title and description')
+    }
+    const keywordTags = [...html.matchAll(/<meta\s+name="keywords"\s+content="([^"]*)"\s*\/?\s*>/gi)]
+    const approvedKeywords = 'время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro'
+    if (keywordTags.length !== 1 || keywordTags[0]?.[1] !== approvedKeywords) {
+      errors.push('seo: initial HTML must contain exactly one approved concise keywords tag')
+    }
+    const canonicalLinks = [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/gi)]
+    const hasHomepageCanonical = canonicalLinks.length === 1
+      && /\bhref="https:\/\/vaqt\.pro\/"/.test(canonicalLinks[0]?.[0] ?? '')
+    if (!hasHomepageCanonical) {
+      errors.push('seo: initial HTML must contain exactly one static homepage canonical')
+    }
+    if (!/<html\b[^>]*\blang="ru"/i.test(html)) {
+      errors.push('seo: homepage HTML language must remain Russian')
     }
   }
 
@@ -139,6 +169,29 @@ async function validateApplicationIdentity(
     if (checksum !== VAQTPRO_SHARE_QR_SHA256) {
       errors.push('shareQr: QR-код не соответствует проверенной ссылке https://vaqt.pro/')
     }
+  }
+  return errors
+}
+
+async function validateHomepageCrawlerFiles(distDirectory: string): Promise<string[]> {
+  const errors: string[] = []
+  try {
+    const robots = await readFile(join(distDirectory, 'robots.txt'), 'utf8')
+    if (robots !== 'User-agent: *\nAllow: /\nSitemap: https://vaqt.pro/sitemap.xml\n') {
+      errors.push('seo: robots.txt must allow public crawling and reference the sitemap')
+    }
+  } catch {
+    errors.push('seo: robots.txt is missing or unreadable')
+  }
+
+  try {
+    const sitemap = await readFile(join(distDirectory, 'sitemap.xml'), 'utf8')
+    const homepageOnlySitemap = /^\s*(?:<\?xml version="1\.0" encoding="UTF-8"\?>\s*)?<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9"><url><loc>https:\/\/vaqt\.pro\/<\/loc><\/url><\/urlset>\s*$/.test(sitemap)
+    if (!homepageOnlySitemap || /<lastmod\b/i.test(sitemap)) {
+      errors.push('seo: sitemap.xml must contain exactly the homepage URL and no lastmod')
+    }
+  } catch {
+    errors.push('seo: sitemap.xml is missing or unreadable')
   }
   return errors
 }
@@ -338,6 +391,7 @@ export async function checkBuildArtifacts(
   const errors = [
     ...validateBuildArtifacts(artifacts, city.catalog),
     ...await validateApplicationIdentity(distDirectory, artifacts),
+    ...await validateHomepageCrawlerFiles(distDirectory),
     ...city.errors,
   ]
 

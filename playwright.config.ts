@@ -23,6 +23,7 @@ export default defineConfig({
       name: 'chromium',
       testMatch: [
         '**/smoke.spec.ts',
+        '**/homepage-seo.spec.ts',
         '**/offline.spec.ts',
         '**/privacy.spec.ts',
         '**/analytics.spec.ts',
@@ -61,7 +62,7 @@ export default defineConfig({
     },
     {
       name: 'webkit-mobile-jelly',
-      testMatch: ['**/jelly-pointer.spec.ts'],
+      testMatch: ['**/jelly-pointer.spec.ts', '**/navigation-transition.spec.ts'],
       use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
     },
     {

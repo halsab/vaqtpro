@@ -98,7 +98,7 @@ function loadDeferredScreenModule<T>(moduleName: string, load: () => Promise<T>)
 
 const secondaryScreenImporter = () => import('./features/SecondaryScreens')
 const loadSecondaryScreens = () => loadDeferredScreenModule('SecondaryScreens', secondaryScreenImporter)
-const SECONDARY_SCREENS: readonly AppScreen[] = ['settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about']
+const SECONDARY_SCREENS: readonly AppScreen[] = ['settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'monthly-schedule']
 const religiousEventScreenImporter = () => import('./features/religiousEvents/ReligiousEventScreen')
 const loadReligiousEventScreen = () => loadDeferredScreenModule('ReligiousEventScreen', religiousEventScreenImporter)
 const SCREEN_MODULE_TIMEOUT_MS = 15_000
@@ -340,6 +340,7 @@ export function App({
   }, [openImmediately, openScreenPrepared, secondaryScreens])
   const SettingsScreens = secondaryScreens?.SettingsScreens
   const SourceInfo = secondaryScreens?.SourceInfo
+  const PrayerMonthScreen = secondaryScreens?.PrayerMonthScreen
   const MethodologyDialog = secondaryScreens?.MethodologyDialog
   const cancelPendingScreenLoads = useCallback(() => {
     screenLoadGeneration.current += 1
@@ -754,6 +755,7 @@ export function App({
     || navigation.screen === 'religious-events'
     || navigation.screen === 'religious-event'
     || navigation.screen === 'date'
+    || navigation.screen === 'monthly-schedule'
 
   const persistenceNotice = persistence.status === 'failed' ? (
         <div className="screen-status" role="status">
@@ -828,7 +830,12 @@ export function App({
 
       {navigation.screen === 'date' ? <DateScreen selectedDate={selectedDate} today={today} preferences={calendarPreferences} hijriSupported={hijriSupported}
         onDateChange={changeScheduleDate} onPreferencesChange={updateCalendarPreferences} onOpenReligiousEvents={() => openScreen('religious-events')}
+        onOpenMonthlySchedule={() => openScreen('monthly-schedule')} hasPlace={Boolean(place)}
         onBack={backScreen} notice={persistenceNotice} /> : null}
+
+      {navigation.screen === 'monthly-schedule' && PrayerMonthScreen
+        ? <PrayerMonthScreen place={place} context={context} scheduleError={scheduleError} selectedDate={selectedDate}
+          onBack={backScreen} onOpenLocation={openLocationDialog} onRetrySchedule={retrySchedule} /> : null}
 
       {navigation.screen === 'religious-events' ? <ReligiousEventsScreen today={today} correction={calendarPreferences.correction}
         hijriSupported={hijriSupported} onOpenEvent={openReligiousEvent} onBack={backScreen} loadError={religiousEventLoadError}

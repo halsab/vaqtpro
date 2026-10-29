@@ -36,6 +36,22 @@ test('Mobile Safari выбирает место и открывает кален
   await expectSchedule(page)
 })
 
+test('Mobile Safari opens a complete monthly timetable responsively', async ({ page }) => {
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-date').click()
+  await expect(page.getByRole('region', { name: 'Установка даты' })).toBeVisible()
+  await page.evaluate(() => performance.mark('monthly-timetable-open-start'))
+  await page.getByRole('button', { name: 'Расписание на месяц' }).click()
+  await expect(page.getByRole('region', { name: 'Расписание намаза за месяц' })).toBeVisible()
+  await expect(page.getByRole('row')).toHaveCount(31)
+  const elapsed = await page.evaluate(() => {
+    performance.mark('monthly-timetable-open-end')
+    return performance.measure('monthly-timetable-open', 'monthly-timetable-open-start', 'monthly-timetable-open-end').duration
+  })
+  expect(elapsed).toBeLessThan(1_000)
+})
+
 test('Mobile Safari сохраняет настройку поста после перезапуска', async ({ page }) => {
   await page.goto('./')
   await choosePlace(page)

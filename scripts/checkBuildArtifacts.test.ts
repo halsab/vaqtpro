@@ -35,6 +35,8 @@ function requiredArtifacts(cityCatalog = catalog): BuildArtifact[] {
     { path: 'assets/index-a1b2c3.css', size: 20 },
     { path: 'data/cities/index.json', size: 200 },
     { path: `data/cities/${cityCatalog.version}/${cityCatalog.shards[0]?.id}.json`, size: 300 },
+    { path: 'robots.txt', size: 80 },
+    { path: 'sitemap.xml', size: 100 },
   ]
 }
 
@@ -48,6 +50,8 @@ async function writeBuildArtifacts(
     html?: string
     manifest?: Record<string, unknown>
     shareQr?: string
+    robots?: string
+    sitemap?: string
   } = {},
 ): Promise<void> {
   const cityCatalog = options.cityCatalog ?? catalog
@@ -73,9 +77,11 @@ async function writeBuildArtifacts(
   await Promise.all([
     writeFile(join(root, 'assets/index-build.js'), options.mainJavaScript ?? 'application code'),
     writeFile(join(root, 'assets/index-build.css'), options.css ?? '.app { display: block; }'),
-    writeFile(join(root, 'index.html'), options.html ?? '<meta name="apple-mobile-web-app-title" content="VaqtPro" /><title>VaqtPro — времена намаза</title>'),
+    writeFile(join(root, 'index.html'), options.html ?? '<html lang="ru"><head><meta name="description" content="Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета." /><meta name="keywords" content="время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>'),
     writeFile(join(root, 'manifest.webmanifest'), JSON.stringify(appManifest)),
     writeFile(join(root, 'share-qr.svg'), shareQr),
+    writeFile(join(root, 'robots.txt'), options.robots ?? 'User-agent: *\nAllow: /\nSitemap: https://vaqt.pro/sitemap.xml\n'),
+    writeFile(join(root, 'sitemap.xml'), options.sitemap ?? '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://vaqt.pro/</loc></url></urlset>\n'),
     writeFile(join(root, 'assets/city-search.worker.js'), 'worker code'),
     writeFile(join(root, 'sw.js'), 'offline worker'),
     writeFile(join(root, 'data/cities/index.json'), JSON.stringify(cityCatalog)),
@@ -100,8 +106,19 @@ describe('production artifact validation', () => {
       'webManifest: artifact не найден',
       'shareQr: artifact не найден',
       'cityIndex: artifact не найден',
+      'robots: artifact не найден',
+      'sitemap: artifact не найден',
       `cities: отсутствует ${shardPath}`,
     ]))
+  })
+
+  it.each([
+    ['prayer-times/ru/moskva-524901/index.html', 'SEO city page'],
+    ['prayer-times-theme.css', 'SEO city theme'],
+    ['404.html', 'SEO-specific 404'],
+  ])('rejects the cancelled %s artifact', (path, label) => {
+    expect(validateBuildArtifacts([...requiredArtifacts(), { path, size: 1 }], catalog))
+      .toContain(`seo: cancelled ${label} artifact ${path}`)
   })
 
   it('blocks duplicate required main bundles and duplicate city paths', () => {
@@ -177,12 +194,73 @@ describe('production artifact validation', () => {
       } catch (error) {
         errorMessage = error instanceof Error ? error.message : String(error)
       }
-      expect(errorMessage).toContain('appTitle: index.html не содержит название VaqtPro')
+      expect(errorMessage).toContain('seo: initial HTML must contain exactly one approved homepage title')
       expect(errorMessage).toContain('appleTitle: index.html не содержит название VaqtPro')
       expect(errorMessage).toContain('webManifest: имя приложения должно быть VaqtPro')
       expect(errorMessage).toContain('webManifest: id должен указывать на корень сайта')
       expect(errorMessage).toContain('webManifest: start_url должен указывать на корень сайта')
       expect(errorMessage).toContain('webManifest: scope должен указывать на корень сайта')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="keywords" content="слово" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="keywords" content="слово" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/?city=moscow" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="keywords" content="слово" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><link rel="canonical" href="https://vaqt.pro/" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>',
+  ])('rejects a missing, unstable, or duplicate canonical in initial HTML', async (html) => {
+    const root = await temporaryDirectory()
+
+    try {
+      await writeBuildArtifacts(root, { html })
+      await expect(checkBuildArtifacts(root, { log: () => undefined }))
+        .rejects.toThrow('seo: initial HTML must contain exactly one static homepage canonical')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('requires the approved, unique homepage title, description, and keyword metadata', async () => {
+    const root = await temporaryDirectory()
+    const validHtml = '<html lang="ru"><head><meta name="description" content="Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета." /><meta name="keywords" content="время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>'
+    try {
+      await writeBuildArtifacts(root, { html: validHtml })
+      await expect(checkBuildArtifacts(root, { log: () => undefined })).resolves.toBeUndefined()
+      await writeBuildArtifacts(root, { html: validHtml.replace('name="keywords"', 'name="keywords-old"') })
+      await expect(checkBuildArtifacts(root, { log: () => undefined }))
+        .rejects.toThrow('seo: initial HTML must contain exactly one approved concise keywords tag')
+      await writeBuildArtifacts(root, { html: `${validHtml}${validHtml.match(/<meta name="keywords"[^>]*>/)?.[0] ?? ''}` })
+      await expect(checkBuildArtifacts(root, { log: () => undefined }))
+        .rejects.toThrow('seo: initial HTML must contain exactly one approved concise keywords tag')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['User-agent: *\nDisallow: /\nSitemap: https://vaqt.pro/sitemap.xml\n', 'seo: robots.txt must allow public crawling and reference the sitemap'],
+    ['User-agent: *\nAllow: /\n', 'seo: robots.txt must allow public crawling and reference the sitemap'],
+  ])('rejects nonpermissive or incomplete robots.txt', async (robots, message) => {
+    const root = await temporaryDirectory()
+
+    try {
+      await writeBuildArtifacts(root, { robots })
+      await expect(checkBuildArtifacts(root, { log: () => undefined })).rejects.toThrow(message)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it.each([
+    ['<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://vaqt.pro/</loc><loc>https://vaqt.pro/prayer-times/ru/moskva-524901/</loc></url></urlset>', 'seo: sitemap.xml must contain exactly the homepage URL and no lastmod'],
+    ['<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://vaqt.pro/</loc><lastmod>2026-10-28</lastmod></url></urlset>', 'seo: sitemap.xml must contain exactly the homepage URL and no lastmod'],
+  ])('rejects extra or synthetic sitemap data', async (sitemap, message) => {
+    const root = await temporaryDirectory()
+
+    try {
+      await writeBuildArtifacts(root, { sitemap })
+      await expect(checkBuildArtifacts(root, { log: () => undefined })).rejects.toThrow(message)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
