@@ -26,7 +26,7 @@ export function PrayerMonthTable({ rows, labels, dateLabel, tableLabel }: {
         createElement('th', { scope: 'col' }, dateLabel),
         ...PRAYER_MONTH_KEYS.map(key => createElement('th', { key, scope: 'col' }, labels[key])))),
       createElement('tbody', null, ...rows.map(({ date, schedule }) => createElement('tr', { key: date },
-        createElement('th', { scope: 'row' }, createElement('time', { dateTime: date }, formatDate(date))),
+        createElement('th', { scope: 'row' }, createElement('time', { dateTime: date, 'aria-label': formatDate(date) }, date.slice(-2))),
         ...PRAYER_MONTH_KEYS.map(key => {
           const entry = schedule?.entries[key]
           if (!entry) return createElement('td', { key, 'aria-label': t('monthlyTimeUnavailable') }, '—')

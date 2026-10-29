@@ -70,3 +70,91 @@ test('Mobile Safari сохраняет настройку поста после 
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
   await expect(page.getByRole('progressbar')).toBeVisible()
 })
+
+test('monthly timetable remains usable at 320px, wide viewports and 200% text', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-date').click()
+  await page.getByRole('button', { name: 'Расписание на месяц' }).click()
+
+  const region = page.getByRole('region', { name: 'Расписание намаза за месяц' })
+  const table = region.locator('table')
+  await expect(table.locator('tbody tr')).toHaveCount(30)
+  const firstDay = table.locator('tbody tr').first().locator('th time')
+  await expect(firstDay).toHaveText('01')
+  await expect(firstDay).toHaveAttribute('datetime', '2026-09-01')
+  await expect(firstDay).toHaveAttribute('aria-label', '01.09.2026')
+  await expect(table.locator('thead th')).toHaveCount(7)
+  await expect(table.locator('tbody tr').first().locator('td')).toHaveCount(6)
+
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({ width, height: 640 })
+    for (const scale of ['100%', '200%']) {
+      await page.evaluate(value => { document.documentElement.style.fontSize = value }, scale)
+      const layout = await page.evaluate(() => {
+        const scroll = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+        const row = document.querySelector<HTMLElement>('.prayer-month-table tbody tr')
+        const heading = document.querySelector<HTMLElement>('.prayer-month-heading')
+        const column = document.querySelector<HTMLElement>('.prayer-month-table thead th')
+        const cell = document.querySelector<HTMLElement>('.prayer-month-table tbody td')
+        if (!scroll || !row || !heading || !column || !cell) throw new Error('Missing monthly timetable')
+        return {
+          documentWidth: document.documentElement.scrollWidth,
+          clientWidth: scroll.clientWidth,
+          scrollWidth: scroll.scrollWidth,
+          rowHeight: row.getBoundingClientRect().height,
+          titleFont: getComputedStyle(heading).fontSize,
+          headingFont: getComputedStyle(column).fontSize,
+          bodyFont: getComputedStyle(cell).fontSize,
+          numericStyle: getComputedStyle(cell).fontVariantNumeric,
+        }
+      })
+      expect(layout.documentWidth).toBeLessThanOrEqual(width)
+      expect(layout.clientWidth).toBeLessThanOrEqual(width)
+      expect(layout.scrollWidth).toBeGreaterThanOrEqual(layout.clientWidth)
+      expect(layout.numericStyle).toContain('tabular-nums')
+      if (width === 320) expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth)
+      if (scale === '100%') {
+        expect(layout.rowHeight).toBeGreaterThanOrEqual(43)
+        expect(layout.rowHeight).toBeLessThanOrEqual(46)
+        expect(layout.titleFont).toBe('20px')
+        expect(layout.headingFont).toBe('14px')
+        expect(layout.bodyFont).toBe('16px')
+      } else {
+        expect(layout.rowHeight).toBeGreaterThan(44)
+      }
+    }
+  }
+
+  await page.setViewportSize({ width: 320, height: 640 })
+  await page.evaluate(() => { document.documentElement.style.fontSize = '100%' })
+  const scroll = region
+  await scroll.evaluate(element => { element.scrollLeft = 0 })
+  await scroll.focus()
+  await expect(scroll).toBeFocused()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(() => scroll.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+  await scroll.evaluate(element => { element.scrollLeft = element.scrollWidth })
+  await expect.poll(() => scroll.evaluate(element =>
+    Math.abs(element.scrollWidth - element.clientWidth - element.scrollLeft))).toBeLessThanOrEqual(1)
+
+  await table.locator('thead th').last().evaluate(cell => {
+    cell.textContent = 'Очень длинное локализованное название молитвы'
+  })
+  expect(await scroll.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Simulate left and right safe-area insets without changing the global Screen shell.
+  await page.locator('.app-screen').evaluate(element => {
+    element.style.setProperty('--screen-inset-left', '32px')
+    element.style.setProperty('--screen-inset-right', '32px')
+  })
+  const insets = await page.locator('.screen-panel').evaluate(element => {
+    const style = getComputedStyle(element)
+    return { left: style.paddingLeft, right: style.paddingRight }
+  })
+  expect(insets).toEqual({ left: '32px', right: '32px' })
+  expect(await scroll.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
