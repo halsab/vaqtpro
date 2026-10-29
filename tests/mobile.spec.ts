@@ -129,7 +129,7 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
 
   await page.setViewportSize({ width: 320, height: 640 })
   await page.evaluate(() => { document.documentElement.style.fontSize = '100%' })
-  const scroll = region.locator('.prayer-month-table-scroll')
+  const scroll = region
   await scroll.evaluate(element => { element.scrollLeft = 0 })
   await scroll.focus()
   await expect(scroll).toBeFocused()
