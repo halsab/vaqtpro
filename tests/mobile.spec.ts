@@ -107,11 +107,13 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
           titleFont: getComputedStyle(heading).fontSize,
           headingFont: getComputedStyle(column).fontSize,
           bodyFont: getComputedStyle(cell).fontSize,
+          numericStyle: getComputedStyle(cell).fontVariantNumeric,
         }
       })
       expect(layout.documentWidth).toBeLessThanOrEqual(width)
       expect(layout.clientWidth).toBeLessThanOrEqual(width)
       expect(layout.scrollWidth).toBeGreaterThanOrEqual(layout.clientWidth)
+      expect(layout.numericStyle).toContain('tabular-nums')
       if (width === 320) expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth)
       if (scale === '100%') {
         expect(layout.rowHeight).toBeGreaterThanOrEqual(43)
@@ -140,6 +142,19 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
   await table.locator('thead th').last().evaluate(cell => {
     cell.textContent = 'Очень длинное локализованное название молитвы'
   })
+  expect(await scroll.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Simulate left and right safe-area insets without changing the global Screen shell.
+  await page.locator('.app-screen').evaluate(element => {
+    element.style.setProperty('--screen-inset-left', '32px')
+    element.style.setProperty('--screen-inset-right', '32px')
+  })
+  const insets = await page.locator('.screen-panel').evaluate(element => {
+    const style = getComputedStyle(element)
+    return { left: style.paddingLeft, right: style.paddingRight }
+  })
+  expect(insets).toEqual({ left: '32px', right: '32px' })
   expect(await scroll.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
