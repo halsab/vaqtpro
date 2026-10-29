@@ -9,6 +9,8 @@ import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import { resolvePrayerTimeSource } from '../../domain/prayerSource'
 import type { ScheduleContext } from '../../domain/scheduleContext'
 import { PrayerMonthScreen } from './PrayerMonthScreen'
+import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
+import { buildScheduleEvents, SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
 
 const place = createCityPlace({ id: 524901, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва',
   latitude: 55.7522, longitude: 37.6156, population: 10_381_222, timeZone: 'Europe/Moscow' }, 0)
@@ -30,7 +32,7 @@ function renderMonth() {
     onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
 }
 
-it('shows one table row per date with the date and six prayer times in the same row', () => {
+it('shows one table row per date with all seven Home events in the same row', () => {
   renderMonth()
   expect(screen.queryByRole('heading', { name: 'Расписание на месяц' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
@@ -45,11 +47,65 @@ it('shows one table row per date with the date and six prayer times in the same 
   expect(firstDay).toHaveTextContent(/^01$/)
   expect(firstDay.querySelector('time')).toHaveAttribute('dateTime', '2026-10-01')
   expect(firstDay.querySelector('time')).toHaveAttribute('aria-label', '01.10.2026')
-  expect(within(firstRow).getAllByRole('cell')).toHaveLength(6)
+  expect(within(firstRow).getAllByRole('cell')).toHaveLength(7)
   expect(firstRow.querySelector('button, a')).toBeNull()
   expect(screen.getByText(/Профиль расчёта/).closest('details')).not.toHaveAttribute('open')
   expect(screen.getByRole('button', { name: 'Предыдущий месяц' })).toHaveClass('jelly-action')
   expect(screen.getByRole('button', { name: 'Следующий месяц' })).toHaveClass('jelly-action')
+})
+
+
+it('matches Home event labels, order, instants, values, and estimation for every date', () => {
+  renderMonth()
+  const expectedKeys = ['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha']
+  const expectedHeadings = ['Дата', 'Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша']
+  expect(SCHEDULE_EVENT_KEYS).toEqual(expectedKeys)
+  expect(PRAYER_MONTH_KEYS).toEqual(expectedKeys)
+  expect(screen.getAllByRole('columnheader').map(header => header.textContent)).toEqual(expectedHeadings)
+
+  const rows = screen.getAllByRole('row').slice(1)
+  expect(rows).toHaveLength(31)
+  for (const [index, row] of rows.entries()) {
+    const date = `2026-10-${String(index + 1).padStart(2, '0')}`
+    const schedule = calculatePrayerSchedule(context.location, date, context.timeZone, context.settings)
+    const events = buildScheduleEvents(schedule)
+    expect(events.map(event => event.key)).toEqual(expectedKeys)
+    const cells = within(row).getAllByRole('cell')
+    expect(cells).toHaveLength(7)
+    for (const [column, key] of PRAYER_MONTH_KEYS.entries()) {
+      const event = events[column]
+      if (!event) throw new Error('Missing schedule event for ' + key)
+      const cell = cells[column]
+      if (!cell) throw new Error('Missing month cell for ' + key)
+      const time = cell.querySelector('time')
+      expect(event.timeZone).toBe(context.timeZone)
+      expect(time).toHaveAttribute('dateTime', new Date(event.instant).toISOString())
+      expect(time).toHaveTextContent(event.time)
+      const approx = cell.querySelector('.prayer-month-estimated')
+      if (schedule.estimatedPrayers.includes(key)) {
+        expect(approx).toHaveAccessibleName('Приблизительное время')
+        expect(approx).toHaveTextContent('примерно')
+      } else {
+        expect(approx).toBeNull()
+      }
+    }
+  }
+})
+
+it('preserves the Home estimated marker for Zenith without an alternate calculation', () => {
+  vi.spyOn(prayerCalculation, 'calculatePrayerSchedule').mockImplementation((location, date, timeZone, settings) => {
+    const schedule = originalCalculatePrayerSchedule(location, date, timeZone, settings)
+    if (date !== '2026-10-10') return schedule
+    return { ...schedule, estimatedPrayers: [...schedule.estimatedPrayers, 'zenith'] }
+  })
+  renderMonth()
+  const row = screen.getByRole('row', { name: /10\.10\.2026/ })
+  const zenith = within(row).getAllByRole('cell')[2]
+  if (!zenith) throw new Error('Zenith column is missing')
+  expect(zenith.querySelector('.prayer-month-estimated')).toHaveTextContent('примерно')
+  expect(zenith.querySelector('time')).toHaveTextContent(
+    originalCalculatePrayerSchedule(context.location, '2026-10-10', context.timeZone, context.settings).entries.zenith.time,
+  )
 })
 
 it('renders all day numbers with full calendar dates for assistive technology', () => {
@@ -92,8 +148,9 @@ it('keeps the monthly screen usable when a location has a skipped civil date', (
     onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)).not.toThrow()
   expect(screen.getByRole('region', { name: 'Расписание намаза за месяц' })).toBeVisible()
   const skippedDate = screen.getByRole('row', { name: /30\.12\.2011/ })
-  expect(within(skippedDate).getAllByRole('cell')).toHaveLength(6)
-  expect(within(skippedDate).getAllByLabelText('Время недоступно')).toHaveLength(6)
+  expect(within(skippedDate).getAllByRole('cell')).toHaveLength(7)
+  expect(within(skippedDate).getAllByLabelText('Время недоступно')).toHaveLength(7)
+  expect(within(skippedDate).getAllByRole('cell').map(cell => cell.textContent)).toEqual(Array(7).fill('—'))
   expect(within(screen.getByRole('row', { name: /29\.12\.2011/ })).queryByLabelText('Время недоступно')).not.toBeInTheDocument()
   expect(within(screen.getByRole('row', { name: /31\.12\.2011/ })).queryByLabelText('Время недоступно')).not.toBeInTheDocument()
 })
@@ -152,7 +209,7 @@ it('keeps isolated calculation failures as unavailable placeholders without a br
   renderMonth()
 
   const failedRow = screen.getByRole('row', { name: /15\.10\.2026/ })
-  expect(within(failedRow).getAllByLabelText('Время недоступно')).toHaveLength(6)
+  expect(within(failedRow).getAllByLabelText('Время недоступно')).toHaveLength(7)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(within(screen.getByRole('row', { name: /14\.10\.2026/ })).queryAllByLabelText('Время недоступно')).toHaveLength(0)
   expect(within(screen.getByRole('row', { name: /16\.10\.2026/ })).queryAllByLabelText('Время недоступно')).toHaveLength(0)

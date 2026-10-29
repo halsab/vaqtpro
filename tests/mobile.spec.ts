@@ -75,6 +75,12 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
   await page.setViewportSize({ width: 320, height: 640 })
   await page.goto('./')
   await choosePlace(page)
+  const homeEvents = await page.locator('.event-list .event-row').evaluateAll(rows => rows.map(row => ({
+    name: row.querySelector('.event-name > span')?.textContent,
+    time: row.querySelector('time')?.textContent?.trim(),
+    instant: row.querySelector('time')?.getAttribute('datetime'),
+  })))
+  expect(homeEvents.map(event => event.name)).toEqual(['Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша'])
   await page.locator('#home-date').click()
   await page.getByRole('button', { name: 'Расписание на месяц' }).click()
 
@@ -85,8 +91,18 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
   await expect(firstDay).toHaveText('01')
   await expect(firstDay).toHaveAttribute('datetime', '2026-09-01')
   await expect(firstDay).toHaveAttribute('aria-label', '01.09.2026')
-  await expect(table.locator('thead th')).toHaveCount(7)
-  await expect(table.locator('tbody tr').first().locator('td')).toHaveCount(6)
+  await expect(table.locator('thead th')).toHaveCount(8)
+  await expect(table.locator('thead th').allTextContents()).resolves.toEqual(
+    ['Дата', 'Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша'],
+  )
+  await expect(table.locator('tbody tr').first().locator('td')).toHaveCount(7)
+  const selectedDay = table.locator('tbody tr').nth(3)
+  await expect(selectedDay.locator('th time')).toHaveAttribute('datetime', '2026-09-04')
+  const monthEvents = await selectedDay.locator('td').evaluateAll(cells => cells.map(cell => ({
+    time: cell.textContent?.trim(),
+    instant: cell.querySelector('time')?.getAttribute('datetime'),
+  })))
+  expect(monthEvents).toEqual(homeEvents.map(event => ({ time: event.time, instant: event.instant })))
 
   for (const width of [320, 390, 1280]) {
     await page.setViewportSize({ width, height: 640 })

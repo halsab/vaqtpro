@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { DEFAULT_CALENDAR_PREFERENCES, type CalendarPreferences } from '../../domain/calendar'
 import { resolveReligiousBanner, type ReligiousEventId } from '../../domain/religiousEvents'
 import { buildScheduleEvents, selectEventPair, type ResolvedScheduleEvent } from '../../domain/scheduleEvents'
+import { SCHEDULE_EVENT_LABEL_KEYS } from './scheduleEventLabels'
 import type { CalculatedPrayerKey } from '../../domain/types'
 import { Screen } from '../../ui/Screen'
 import { ActionButton, ScreenFooter } from '../../ui/controls'
@@ -16,10 +17,6 @@ import { FastingCard } from '../fasting/FastingCard'
 import { DEFAULT_FASTING_MODE_PREFERENCES, buildFastingScheduleEvents, type FastingModePreferences, type FastingScheduleEvents } from '../../domain/fasting'
 import { useClockCorrection } from '../../ui/useLiveClock'
 
-const LABELS: Record<CalculatedPrayerKey, Parameters<ReturnType<typeof useLocalization>['t']>[0]> = {
-  fajr: 'prayerFajr', sunrise: 'prayerSunrise',
-  zenith: 'prayerZenith', dhuhr: 'prayerDhuhr', asr: 'prayerAsr', maghrib: 'prayerMaghrib', isha: 'prayerIsha',
-}
 const COUNTDOWN: Record<CalculatedPrayerKey, Parameters<ReturnType<typeof useLocalization>['t']>[0]> = {
   fajr: 'countdownFajr', sunrise: 'countdownSunrise',
   zenith: 'countdownZenith', dhuhr: 'countdownDhuhr', asr: 'countdownAsr', maghrib: 'countdownMaghrib', isha: 'countdownIsha',
@@ -39,7 +36,7 @@ function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
       const active = live && event.key === current?.key && event.scheduleDate === current.scheduleDate
       const past = live && !active && event.instant <= now.getTime()
       return <li key={event.key} className={`event-row${past ? ' event-past' : ''}${active ? ' event-current' : ''}`} aria-current={active || undefined}>
-        <div className="event-name"><span>{t(LABELS[event.key])}</span>
+        <div className="event-name"><span>{t(SCHEDULE_EVENT_LABEL_KEYS[event.key])}</span>
           {event.dayOffset ? <small className="event-day">{formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale)}</small> : null}
         </div>
         <time dateTime={new Date(event.instant).toISOString()}>{estimated(event, [schedule])

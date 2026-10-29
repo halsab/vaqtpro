@@ -1,10 +1,10 @@
 import { createElement } from 'react'
 
 import type { CalculatedPrayerKey } from '../../domain/types'
-import type { PrayerSchedule } from '../../domain/scheduleEvents'
+import { SCHEDULE_EVENT_KEYS, type PrayerSchedule } from '../../domain/scheduleEvents'
 import { useLocalization } from '../../localization'
 
-export const PRAYER_MONTH_KEYS = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const satisfies readonly CalculatedPrayerKey[]
+export const PRAYER_MONTH_KEYS = SCHEDULE_EVENT_KEYS
 
 function formatDate(date: string): string {
   const [year, month, day] = date.split('-')
@@ -31,7 +31,7 @@ export function PrayerMonthTable({ rows, labels, dateLabel, tableLabel }: {
           const entry = schedule?.entries[key]
           if (!entry) return createElement('td', { key, 'aria-label': t('monthlyTimeUnavailable') }, '—')
           return createElement('td', { key }, createElement('span', { className: 'prayer-month-time' },
-            entry.estimated ? createElement('span', { className: 'prayer-month-estimated', 'aria-label': t('estimatedTime') }, `${t('estimatedApproximation')} `) : null,
+            schedule?.estimatedPrayers.includes(key) ? createElement('span', { className: 'prayer-month-estimated', 'aria-label': t('estimatedTime') }, `${t('estimatedApproximation')} `) : null,
             createElement('time', { dateTime: new Date(entry.instant).toISOString() }, entry.time)))
         }))))))
 }

@@ -645,7 +645,7 @@ describe('VaqtPro', () => {
     const firstDate = within(firstRow).getByRole('rowheader', { name: '01.09.2026' })
     expect(firstDate).toHaveTextContent(/^01$/)
     expect(firstDate.querySelector('time')).toHaveAttribute('dateTime', '2026-09-01')
-    expect(within(firstRow).getAllByRole('cell')).toHaveLength(6)
+    expect(within(firstRow).getAllByRole('cell')).toHaveLength(7)
     expect(firstRow.querySelector('button, a')).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))

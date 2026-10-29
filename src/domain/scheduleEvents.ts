@@ -20,11 +20,14 @@ export interface ResolvedScheduleEvent {
 
 export type ScheduleEvent = ResolvedScheduleEvent
 
+// Canonical event set and column order for Home and monthly timetable.
+export const SCHEDULE_EVENT_KEYS = ['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha'] as const satisfies readonly CalculatedPrayerKey[]
+
 const MARKER_KEYS: ReadonlySet<CalculatedPrayerKey> = new Set(['sunrise', 'zenith'])
 
 export function buildScheduleEvents(schedule: PrayerSchedule): ScheduleEvent[] {
   const clock = createLocationClock(schedule.timeZone)
-  return (Object.keys(schedule.entries) as CalculatedPrayerKey[]).map(key => {
+  return SCHEDULE_EVENT_KEYS.map(key => {
     const entry = schedule.entries[key]
     const date = clock.getCivilDate(new Date(entry.instant))
     const dayOffset = (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${schedule.date}T00:00:00Z`)) / 86_400_000

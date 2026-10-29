@@ -10,16 +10,8 @@ import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
 import { PrayerMonthTable, PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { PrayerMonthView } from './PrayerMonthView'
+import { SCHEDULE_EVENT_LABEL_KEYS } from './scheduleEventLabels'
 import type { ScheduleError } from './usePrayerSchedules'
-
-const PRAYER_LABEL_KEYS = {
-  fajr: 'prayerFajr',
-  sunrise: 'prayerSunrise',
-  dhuhr: 'prayerDhuhr',
-  asr: 'prayerAsr',
-  maghrib: 'prayerMaghrib',
-  isha: 'prayerIsha',
-} as const
 
 function monthLabel(firstDate: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric', timeZone: 'UTC' })
@@ -53,7 +45,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
   const failedDateCount = monthSchedules.reduce((count, entry) => count + (entry.schedule ? 0 : 1), 0)
   const allDatesFailed = context !== null && monthSchedules.length > 0 && failedDateCount === monthSchedules.length
   const currentMonthLabel = monthLabel(month, locale)
-  const labels = Object.fromEntries(PRAYER_MONTH_KEYS.map(key => [key, t(PRAYER_LABEL_KEYS[key])])) as Record<(typeof PRAYER_MONTH_KEYS)[number], string>
+  const labels = Object.fromEntries(PRAYER_MONTH_KEYS.map(key => [key, t(SCHEDULE_EVENT_LABEL_KEYS[key])])) as Record<(typeof PRAYER_MONTH_KEYS)[number], string>
   const error = scheduleError?.code === 'unsupported-profile'
     ? t('unsupportedProfile', { profile: t(PROFILE_LABEL_KEYS[scheduleError.profile]) })
     : null
