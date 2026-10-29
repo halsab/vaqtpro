@@ -77,7 +77,7 @@ async function writeBuildArtifacts(
   await Promise.all([
     writeFile(join(root, 'assets/index-build.js'), options.mainJavaScript ?? 'application code'),
     writeFile(join(root, 'assets/index-build.css'), options.css ?? '.app { display: block; }'),
-    writeFile(join(root, 'index.html'), options.html ?? '<html lang="ru"><head><meta name="description" content="Время намаза для выбранного места: независимый расчёт на устройстве. Сохранённые данные доступны офлайн." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><title>VaqtPro — времена намаза</title></head></html>'),
+    writeFile(join(root, 'index.html'), options.html ?? '<html lang="ru"><head><meta name="description" content="Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета." /><meta name="keywords" content="время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>'),
     writeFile(join(root, 'manifest.webmanifest'), JSON.stringify(appManifest)),
     writeFile(join(root, 'share-qr.svg'), shareQr),
     writeFile(join(root, 'robots.txt'), options.robots ?? 'User-agent: *\nAllow: /\nSitemap: https://vaqt.pro/sitemap.xml\n'),
@@ -194,7 +194,7 @@ describe('production artifact validation', () => {
       } catch (error) {
         errorMessage = error instanceof Error ? error.message : String(error)
       }
-      expect(errorMessage).toContain('appTitle: index.html не содержит название VaqtPro')
+      expect(errorMessage).toContain('seo: initial HTML must contain exactly one approved homepage title')
       expect(errorMessage).toContain('appleTitle: index.html не содержит название VaqtPro')
       expect(errorMessage).toContain('webManifest: имя приложения должно быть VaqtPro')
       expect(errorMessage).toContain('webManifest: id должен указывать на корень сайта')
@@ -206,9 +206,9 @@ describe('production artifact validation', () => {
   })
 
   it.each([
-    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><title>VaqtPro — времена намаза</title></head></html>',
-    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/?city=moscow" /><title>VaqtPro — времена намаза</title></head></html>',
-    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><link rel="canonical" href="https://vaqt.pro/" /><title>VaqtPro — времена намаза</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="keywords" content="слово" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="keywords" content="слово" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/?city=moscow" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>',
+    '<html lang="ru"><head><meta name="description" content="Описание." /><meta name="keywords" content="слово" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><link rel="canonical" href="https://vaqt.pro/" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>',
   ])('rejects a missing, unstable, or duplicate canonical in initial HTML', async (html) => {
     const root = await temporaryDirectory()
 
@@ -216,6 +216,23 @@ describe('production artifact validation', () => {
       await writeBuildArtifacts(root, { html })
       await expect(checkBuildArtifacts(root, { log: () => undefined }))
         .rejects.toThrow('seo: initial HTML must contain exactly one static homepage canonical')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('requires the approved, unique homepage title, description, and keyword metadata', async () => {
+    const root = await temporaryDirectory()
+    const validHtml = '<html lang="ru"><head><meta name="description" content="Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета." /><meta name="keywords" content="время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro" /><meta name="apple-mobile-web-app-title" content="VaqtPro" /><link rel="canonical" href="https://vaqt.pro/" /><title>Время намаза — расписание молитв | VaqtPro</title></head></html>'
+    try {
+      await writeBuildArtifacts(root, { html: validHtml })
+      await expect(checkBuildArtifacts(root, { log: () => undefined })).resolves.toBeUndefined()
+      await writeBuildArtifacts(root, { html: validHtml.replace('name="keywords"', 'name="keywords-old"') })
+      await expect(checkBuildArtifacts(root, { log: () => undefined }))
+        .rejects.toThrow('seo: initial HTML must contain exactly one approved concise keywords tag')
+      await writeBuildArtifacts(root, { html: `${validHtml}${validHtml.match(/<meta name="keywords"[^>]*>/)?.[0] ?? ''}` })
+      await expect(checkBuildArtifacts(root, { log: () => undefined }))
+        .rejects.toThrow('seo: initial HTML must contain exactly one approved concise keywords tag')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

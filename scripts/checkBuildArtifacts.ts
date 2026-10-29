@@ -110,15 +110,20 @@ async function validateApplicationIdentity(
   if (artifacts.some((artifact) => artifact.path === 'index.html')) {
     const html = await readFile(join(distDirectory, 'index.html'), 'utf8')
     const titles = [...html.matchAll(/<title>([\s\S]*?)<\/title>/gi)]
-    if (titles.length !== 1 || titles[0]?.[1] !== 'VaqtPro — времена намаза') {
-      errors.push('appTitle: index.html не содержит название VaqtPro')
+    if (titles.length !== 1 || titles[0]?.[1] !== 'Время намаза — расписание молитв | VaqtPro') {
+      errors.push('seo: initial HTML must contain exactly one approved homepage title')
     }
     if (!/<meta\s+name="apple-mobile-web-app-title"\s+content="VaqtPro"\s*\/>/i.test(html)) {
       errors.push('appleTitle: index.html не содержит название VaqtPro')
     }
     const descriptions = [...html.matchAll(/<meta\s+name="description"\s+content="([^"]*)"\s*\/?>/gi)]
-    if (descriptions.length !== 1 || descriptions[0]?.[1] !== 'Время намаза для выбранного места: независимый расчёт на устройстве. Сохранённые данные доступны офлайн.') {
+    if (descriptions.length !== 1 || descriptions[0]?.[1] !== 'Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета.') {
       errors.push('seo: initial HTML must preserve exactly one accurate title and description')
+    }
+    const keywordTags = [...html.matchAll(/<meta\s+name="keywords"\s+content="([^"]*)"\s*\/?\s*>/gi)]
+    const approvedKeywords = 'время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro'
+    if (keywordTags.length !== 1 || keywordTags[0]?.[1] !== approvedKeywords) {
+      errors.push('seo: initial HTML must contain exactly one approved concise keywords tag')
     }
     const canonicalLinks = [...html.matchAll(/<link\b[^>]*\brel="canonical"[^>]*>/gi)]
     const hasHomepageCanonical = canonicalLinks.length === 1

@@ -62,7 +62,7 @@ export default defineConfig({
     },
     {
       name: 'webkit-mobile-jelly',
-      testMatch: ['**/jelly-pointer.spec.ts'],
+      testMatch: ['**/jelly-pointer.spec.ts', '**/navigation-transition.spec.ts'],
       use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
     },
     {

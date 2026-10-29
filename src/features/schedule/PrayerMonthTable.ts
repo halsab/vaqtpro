@@ -12,8 +12,8 @@ function formatDate(date: string): string {
   return `${day}.${month}.${year}`
 }
 
-export function PrayerMonthTable({ schedules, labels, dateLabel, tableLabel }: {
-  schedules: readonly PrayerSchedule[]
+export function PrayerMonthTable({ rows, labels, dateLabel, tableLabel }: {
+  rows: readonly { date: string; schedule: PrayerSchedule | null }[]
   labels: Record<(typeof PRAYER_MONTH_KEYS)[number], string>
   dateLabel: string
   tableLabel: string
@@ -25,10 +25,11 @@ export function PrayerMonthTable({ schedules, labels, dateLabel, tableLabel }: {
       createElement('thead', null, createElement('tr', null,
         createElement('th', { scope: 'col' }, dateLabel),
         ...PRAYER_MONTH_KEYS.map(key => createElement('th', { key, scope: 'col' }, labels[key])))),
-      createElement('tbody', null, ...schedules.map(schedule => createElement('tr', { key: schedule.date },
-        createElement('th', { scope: 'row' }, createElement('time', { dateTime: schedule.date }, formatDate(schedule.date))),
+      createElement('tbody', null, ...rows.map(({ date, schedule }) => createElement('tr', { key: date },
+        createElement('th', { scope: 'row' }, createElement('time', { dateTime: date }, formatDate(date))),
         ...PRAYER_MONTH_KEYS.map(key => {
-          const entry = schedule.entries[key]
+          const entry = schedule?.entries[key]
+          if (!entry) return createElement('td', { key, 'aria-label': t('monthlyTimeUnavailable') }, '—')
           return createElement('td', { key }, createElement('span', { className: 'prayer-month-time' },
             entry.estimated ? createElement('span', { className: 'prayer-month-estimated', 'aria-label': t('estimatedTime') }, `${t('estimatedApproximation')} `) : null,
             createElement('time', { dateTime: new Date(entry.instant).toISOString() }, entry.time)))

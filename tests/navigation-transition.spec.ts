@@ -13,6 +13,10 @@ interface TransitionSnapshot {
   newTranslate: string
   oldFilter: string
   newFilter: string
+  oldDuration: string
+  newDuration: string
+  oldEasing: string
+  newEasing: string
   groupAnimation: string
   groupTransform: string
   rootOldAnimation: string
@@ -25,12 +29,14 @@ interface TransitionSnapshot {
 
 interface TransitionProbeWindow extends Window {
   __navigationTransitionSnapshot: TransitionSnapshot | null
+  __navigationTransitionCalls: number
 }
 
 async function installTransitionProbe(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     const probeWindow = window as unknown as TransitionProbeWindow
     probeWindow.__navigationTransitionSnapshot = null
+    probeWindow.__navigationTransitionCalls = 0
     const startViewTransition = Reflect.get(document, 'startViewTransition') as
       | ((callback?: ViewTransitionUpdateCallback) => ViewTransition)
       | undefined
@@ -38,6 +44,7 @@ async function installTransitionProbe(page: import('@playwright/test').Page) {
     const nativeStart = startViewTransition.bind(document)
 
     document.startViewTransition = (callback) => {
+      probeWindow.__navigationTransitionCalls += 1
       const transition = nativeStart(callback)
       void transition.ready.then(() => {
         const animations = document.getAnimations().flatMap((animation) => {
@@ -70,6 +77,10 @@ async function installTransitionProbe(page: import('@playwright/test').Page) {
           newTranslate: newStyle.getPropertyValue('translate'),
           oldFilter: oldStyle.filter,
           newFilter: newStyle.filter,
+          oldDuration: oldStyle.animationDuration,
+          newDuration: newStyle.animationDuration,
+          oldEasing: oldStyle.animationTimingFunction,
+          newEasing: newStyle.animationTimingFunction,
           groupAnimation: group.animationName,
           groupTransform: group.transform,
           rootOldAnimation: rootOld.animationName,
@@ -83,6 +94,10 @@ async function installTransitionProbe(page: import('@playwright/test').Page) {
       return transition
     }
   })
+}
+
+async function transitionCallCount(page: import('@playwright/test').Page) {
+  return page.evaluate(() => (window as unknown as TransitionProbeWindow).__navigationTransitionCalls)
 }
 
 async function clearTransitionProbe(page: import('@playwright/test').Page) {
@@ -112,6 +127,10 @@ async function expectOpacityOnlyTransition(page: import('@playwright/test').Page
     newTranslate: 'none',
     oldFilter: 'none',
     newFilter: 'none',
+    oldDuration: '0.3s',
+    newDuration: '0.3s',
+    oldEasing: 'ease-in-out',
+    newEasing: 'ease-in-out',
     groupAnimation: 'none',
     groupTransform: 'matrix(1, 0, 0, 1, 0, 0)',
     rootOldAnimation: 'none',
@@ -171,4 +190,72 @@ test('uses the same opacity-only crossfade for event detail and Back', async ({ 
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
   await expectOpacityOnlyTransition(page)
   await expect(page.getByRole('region', { name: 'Праздники и события' })).toBeVisible()
+})
+
+test('browser Back and Forward restore the route through opacity-only transitions', async ({ page }) => {
+  await installTransitionProbe(page)
+  await page.goto('./')
+  await choosePlace(page)
+  await waitForPreviousTransition(page)
+  test.skip(await page.evaluate(() => typeof document.startViewTransition !== 'function'), 'Native View Transitions are unavailable in this browser')
+
+  await page.locator('#home-date').click()
+  await expect(page.getByRole('region', { name: 'Установка даты' })).toBeVisible()
+  await page.goBack()
+  await expectOpacityOnlyTransition(page)
+  await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+  await waitForPreviousTransition(page)
+
+  await clearTransitionProbe(page)
+  await page.goForward()
+  await expectOpacityOnlyTransition(page)
+  await expect(page.getByRole('region', { name: 'Установка даты' })).toBeVisible()
+})
+
+test('reduced motion performs functional navigation without starting a transition', async ({ page }) => {
+  await installTransitionProbe(page)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-settings').click()
+  await expect(page.getByRole('region', { name: 'Настройки' })).toBeVisible()
+  await expect.poll(() => transitionCallCount(page)).toBe(0)
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+  await expect.poll(() => transitionCallCount(page)).toBe(0)
+})
+
+test('rapid navigation intents remain interactive and finish on the latest screen', async ({ page }) => {
+  await installTransitionProbe(page)
+  await page.goto('./')
+  await choosePlace(page)
+  await waitForPreviousTransition(page)
+  test.skip(await page.evaluate(() => typeof document.startViewTransition !== 'function'), 'Native View Transitions are unavailable in this browser')
+
+  await page.locator('#home-settings').click()
+  await expect(page.getByRole('region', { name: 'Настройки' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click({ noWaitAfter: true })
+  await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => {
+    const state: unknown = window.history.state
+    if (!state || typeof state !== 'object' || !('salahNavigation' in state)) return null
+    const navigation: unknown = state.salahNavigation
+    if (!navigation || typeof navigation !== 'object' || !('entries' in navigation) || !Array.isArray(navigation.entries)) return null
+    const entry: unknown = navigation.entries.at(-1)
+    return entry && typeof entry === 'object' && 'screen' in entry && typeof entry.screen === 'string' ? entry.screen : null
+  })).toBe('home')
+})
+
+test('Back restores the previous scroll position and trigger focus', async ({ page }) => {
+  await page.goto('./')
+  await choosePlace(page)
+  const content = page.locator('.screen-content')
+  await content.evaluate(element => { element.scrollTop = element.scrollHeight })
+  const scrollBefore = await content.evaluate(element => element.scrollTop)
+  await page.locator('#home-settings').focus()
+  await page.locator('#home-settings').click()
+  await expect(page.getByRole('region', { name: 'Настройки' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expect(page.locator('#home-settings')).toBeFocused()
+  await expect.poll(() => content.evaluate(element => element.scrollTop)).toBe(scrollBefore)
 })

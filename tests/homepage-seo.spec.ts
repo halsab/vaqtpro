@@ -5,9 +5,11 @@ test('homepage exposes one stable canonical and homepage-only crawler files', as
   expect(response.ok()).toBe(true)
   const html = await response.text()
   expect(html.match(/<title>/gi)).toHaveLength(1)
-  expect(html).toContain('<title>VaqtPro — времена намаза</title>')
+  expect(html).toContain('<title>Время намаза — расписание молитв | VaqtPro</title>')
   expect(html.match(/<meta\s+name="description"/gi)).toHaveLength(1)
-  expect(html).toContain('name="description" content="Время намаза для выбранного места: независимый расчёт на устройстве. Сохранённые данные доступны офлайн."')
+  expect(html).toContain('name="description" content="Время намаза для выбранного города или геолокации. Расписание молитв на день и месяц, настройки расчёта и работа без интернета."')
+  expect(html.match(/<meta\s+name="keywords"/gi)).toHaveLength(1)
+  expect(html).toContain('name="keywords" content="время намаза, времена намаза, расписание намаза, время намаза сегодня, расписание молитв, время молитвы, время намаза на месяц, время намаза по городам, время намаза по геолокации, время намаза без интернета, приложение время намаза, VaqtPro"')
   expect(html.match(/<link\b[^>]*\brel="canonical"[^>]*>/gi)).toEqual([
     '<link rel="canonical" href="https://vaqt.pro/" />',
   ])
@@ -22,4 +24,12 @@ test('homepage exposes one stable canonical and homepage-only crawler files', as
   expect([...sitemap.matchAll(/<loc>/g)]).toHaveLength(1)
   expect(sitemap).toContain('<loc>https://vaqt.pro/</loc>')
   expect(sitemap).not.toMatch(/<lastmod\b/i)
+})
+
+test('homepage metadata remains static under harmless query parameters', async ({ request }) => {
+  const [root, queried] = await Promise.all([request.get('/'), request.get('/?utm_source=search&city=moscow')])
+  expect(root.ok()).toBe(true)
+  expect(queried.ok()).toBe(true)
+  const metadata = (html: string) => html.match(/<(?:title>[\s\S]*?<\/title>|meta\s+name="(?:description|keywords)"[^>]*|link\s+rel="canonical"[^>]*>)/gi)
+  expect(metadata(await queried.text())).toEqual(metadata(await root.text()))
 })
