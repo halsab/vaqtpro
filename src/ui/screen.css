@@ -184,7 +184,7 @@ html[data-input='pointer'] .select-field { outline: none; }
 .prayer-month-table thead th { color: var(--text-secondary); font: var(--font-footnote); }
 .prayer-month-table tbody tr { height: 44px; }
 .prayer-month-table tbody tr + tr { border-top: 1px solid var(--background-tertiary); }
-.prayer-month-table tbody th, .prayer-month-table tbody td { font: var(--font-body); }
+.prayer-month-table tbody th, .prayer-month-table tbody td { font: var(--font-body); font-variant-numeric: tabular-nums; }
 .prayer-month-table tbody th { font-weight: 400; }
 .prayer-month-time { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .prayer-month-estimated { color: var(--text-secondary); font: var(--font-footnote); }
