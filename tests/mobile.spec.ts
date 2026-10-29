@@ -77,7 +77,7 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
   await choosePlace(page)
   const homeEvents = await page.locator('.event-list .event-row').evaluateAll(rows => rows.map(row => ({
     name: row.querySelector('.event-name > span')?.textContent,
-    time: row.querySelector('time')?.textContent?.trim(),
+    time: row.querySelector('time')?.textContent.trim(),
     instant: row.querySelector('time')?.getAttribute('datetime'),
   })))
   expect(homeEvents.map(event => event.name)).toEqual(['Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша'])
@@ -99,7 +99,7 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
   const selectedDay = table.locator('tbody tr').nth(3)
   await expect(selectedDay.locator('th time')).toHaveAttribute('datetime', '2026-09-04')
   const monthEvents = await selectedDay.locator('td').evaluateAll(cells => cells.map(cell => ({
-    time: cell.textContent?.trim(),
+    time: cell.textContent.trim(),
     instant: cell.querySelector('time')?.getAttribute('datetime'),
   })))
   expect(monthEvents).toEqual(homeEvents.map(event => ({ time: event.time, instant: event.instant })))
