@@ -83,6 +83,7 @@ export const RU_MESSAGES = Object.freeze({
   monthlySchedule: 'Расписание на месяц',
   monthlyScheduleTableLabel: 'Расписание намаза за месяц',
   monthlyTimeUnavailable: 'Время недоступно',
+  monthlyCalculationFailed: 'Не удалось рассчитать расписание на месяц. Время не показано. Попробуйте ещё раз.',
   previousMonth: 'Предыдущий месяц',
   nextMonth: 'Следующий месяц',
   monthlyApproximationNote: 'Слово «примерно» рядом со временем означает, что для этой даты применяется правило высоких широт.',

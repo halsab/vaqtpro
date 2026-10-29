@@ -1,9 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import { automaticPreferences } from '../../domain/sourcePreferences'
 import { createCityPlace } from '../../domain/place'
+import * as prayerCalculation from '../../domain/prayerCalculation'
 import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import { resolvePrayerTimeSource } from '../../domain/prayerSource'
 import type { ScheduleContext } from '../../domain/scheduleContext'
@@ -11,15 +12,22 @@ import { PrayerMonthScreen } from './PrayerMonthScreen'
 
 const place = createCityPlace({ id: 524901, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва',
   latitude: 55.7522, longitude: 37.6156, population: 10_381_222, timeZone: 'Europe/Moscow' }, 0)
+const originalCalculatePrayerSchedule = calculatePrayerSchedule
 const resolution = resolvePrayerTimeSource(place, automaticPreferences())
 const context: ScheduleContext = {
   location: { id: place.id, latitude: place.latitude, longitude: place.longitude },
   date: '2026-10-28', timeZone: resolution.timeZone, mode: 'automatic', source: 'calculated', settings: resolution.settings,
 }
+const onRetrySchedule = vi.fn()
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  onRetrySchedule.mockReset()
+})
 
 function renderMonth() {
   render(<PrayerMonthScreen place={place} context={context} scheduleError={null} selectedDate="2026-10-28"
-    onBack={() => {}} onOpenLocation={() => {}} />)
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
 }
 
 it('shows one table row per date with the date and six prayer times in the same row', () => {
@@ -62,7 +70,7 @@ it('keeps the monthly screen usable when a location has a skipped civil date', (
     date: '2011-12-15', timeZone: 'Pacific/Apia' }
 
   expect(() => render(<PrayerMonthScreen place={apiaPlace} context={apiaContext} scheduleError={{ code: 'load-failed' }} selectedDate="2011-12-30"
-    onBack={() => {}} onOpenLocation={() => {}} />)).not.toThrow()
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)).not.toThrow()
   expect(screen.getByRole('region', { name: 'Расписание намаза за месяц' })).toBeVisible()
   const skippedDate = screen.getByRole('row', { name: /30\.12\.2011/ })
   expect(within(skippedDate).getAllByRole('cell')).toHaveLength(6)
@@ -73,7 +81,7 @@ it('keeps the monthly screen usable when a location has a skipped civil date', (
 
 it('recalculates every month row from the current place, profile, and timezone', async () => {
   const { rerender } = render(<PrayerMonthScreen place={place} context={context} scheduleError={null} selectedDate="2026-10-28"
-    onBack={() => {}} onOpenLocation={() => {}} />)
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
   await userEvent.click(screen.getByRole('button', { name: 'Предыдущий месяц' }))
   expect(screen.getByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
 
@@ -84,7 +92,7 @@ it('recalculates every month row from the current place, profile, and timezone',
     location: { id: kazan.id, latitude: kazan.latitude, longitude: kazan.longitude }, timeZone: kazanResolution.timeZone,
     settings: kazanResolution.settings }
   rerender(<PrayerMonthScreen place={kazan} context={kazanContext} scheduleError={null} selectedDate="2026-10-28"
-    onBack={() => {}} onOpenLocation={() => {}} />)
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
   expect(screen.getByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
   expect(screen.getByText(/Казань · Профиль расчёта/)).toBeVisible()
 
@@ -95,7 +103,7 @@ it('recalculates every month row from the current place, profile, and timezone',
   const profileContext: ScheduleContext = { ...kazanContext,
     settings: { ...kazanContext.settings, profile: 'turkey', asrMethod: 'hanafi' } }
   rerender(<PrayerMonthScreen place={kazan} context={profileContext} scheduleError={null} selectedDate="2026-10-28"
-    onBack={() => {}} onOpenLocation={() => {}} />)
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
   expect(screen.getByText(/Казань · Профиль расчёта · Турция/)).toBeVisible()
   const expectedTurkeyFajr = calculatePrayerSchedule(profileContext.location, '2026-09-01', profileContext.timeZone, profileContext.settings).entries.fajr
   expect(firstFajr()?.getAttribute('dateTime')).toBe(new Date(expectedTurkeyFajr.instant).toISOString())
@@ -107,10 +115,65 @@ it('recalculates every month row from the current place, profile, and timezone',
     location: { id: auckland.id, latitude: auckland.latitude, longitude: auckland.longitude },
     timeZone: aucklandResolution.timeZone, settings: aucklandResolution.settings }
   rerender(<PrayerMonthScreen place={auckland} context={aucklandContext} scheduleError={null} selectedDate="2026-10-28"
-    onBack={() => {}} onOpenLocation={() => {}} />)
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
   expect(screen.getByText(/Окленд · Профиль расчёта/)).toBeVisible()
   const expectedAucklandFajr = calculatePrayerSchedule(aucklandContext.location, '2026-09-01', aucklandContext.timeZone, aucklandContext.settings).entries.fajr
   expect(firstFajr()?.getAttribute('dateTime')).toBe(new Date(expectedAucklandFajr.instant).toISOString())
   expect(firstFajr()).toHaveTextContent(expectedAucklandFajr.time)
   expect(screen.getByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
+})
+
+it('keeps isolated calculation failures as unavailable placeholders without a broad error', () => {
+  const calculate = vi.spyOn(prayerCalculation, 'calculatePrayerSchedule')
+  calculate.mockImplementation((location, date, timeZone, settings) => {
+    if (date === '2026-10-15') throw new RangeError('Skipped civil date')
+    return originalCalculatePrayerSchedule(location, date, timeZone, settings)
+  })
+
+  renderMonth()
+
+  const failedRow = screen.getByRole('row', { name: /15\.10\.2026/ })
+  expect(within(failedRow).getAllByLabelText('Время недоступно')).toHaveLength(6)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(within(screen.getByRole('row', { name: /14\.10\.2026/ })).queryAllByLabelText('Время недоступно')).toHaveLength(0)
+  expect(within(screen.getByRole('row', { name: /16\.10\.2026/ })).queryAllByLabelText('Время недоступно')).toHaveLength(0)
+})
+
+it('shows an accessible retry when every date in the month fails', () => {
+  vi.spyOn(prayerCalculation, 'calculatePrayerSchedule').mockImplementation(() => {
+    throw new RangeError('Calculation unavailable')
+  })
+
+  renderMonth()
+
+  expect(screen.queryByRole('table', { name: 'Расписание намаза за месяц' })).not.toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('Не удалось рассчитать расписание на месяц')
+  expect(screen.getByRole('button', { name: 'Повторить' })).toBeVisible()
+})
+
+it('recovers a fully failed month after retry without showing invented times', async () => {
+  let shouldFail = true
+  vi.spyOn(prayerCalculation, 'calculatePrayerSchedule').mockImplementation((location, date, timeZone, settings) => {
+    if (shouldFail) throw new RangeError('Calculation unavailable')
+    return originalCalculatePrayerSchedule(location, date, timeZone, settings)
+  })
+  renderMonth()
+  expect(screen.getByRole('alert')).toBeVisible()
+
+  shouldFail = false
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+
+  await waitFor(() => expect(screen.getByRole('table', { name: 'Расписание намаза за месяц' })).toBeVisible())
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(onRetrySchedule).toHaveBeenCalledOnce()
+})
+
+it('shows and retries an existing load-failed state when there is no calculation context', async () => {
+  render(<PrayerMonthScreen place={place} context={null} scheduleError={{ code: 'load-failed' }} selectedDate="2026-10-28"
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
+
+  expect(screen.getByRole('alert')).toHaveTextContent('Не удалось загрузить расписание')
+  expect(screen.queryByText('Сначала выберите место')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
+  expect(onRetrySchedule).toHaveBeenCalledOnce()
 })

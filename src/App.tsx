@@ -835,7 +835,7 @@ export function App({
 
       {navigation.screen === 'monthly-schedule' && PrayerMonthScreen
         ? <PrayerMonthScreen place={place} context={context} scheduleError={scheduleError} selectedDate={selectedDate}
-          onBack={backScreen} onOpenLocation={openLocationDialog} /> : null}
+          onBack={backScreen} onOpenLocation={openLocationDialog} onRetrySchedule={retrySchedule} /> : null}
 
       {navigation.screen === 'religious-events' ? <ReligiousEventsScreen today={today} correction={calendarPreferences.correction}
         hijriSupported={hijriSupported} onOpenEvent={openReligiousEvent} onBack={backScreen} loadError={religiousEventLoadError}
