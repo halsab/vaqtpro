@@ -62,7 +62,7 @@ export function DateScreen({ selectedDate, today, preferences, hijriSupported, o
         const correction = Number(value)
         if (correction === -1 || correction === 0 || correction === 1) onPreferencesChange({ ...preferences, correction })
       }} /> : null}
-      <ActionRow title={t('monthlySchedule')} disabled={!hasPlace} onClick={onOpenMonthlySchedule} />
+      <ActionRow id="date-monthly-schedule" title={t('monthlySchedule')} disabled={!hasPlace} onClick={onOpenMonthlySchedule} />
       <ActionRow id="date-religious-events" title={t('religiousEvents')} disabled={!hijriSupported} onClick={onOpenReligiousEvents} />
       {!hijriSupported ? <p className="note" role="status">{t('hijriUnsupported')}</p> : null}
       {notice}

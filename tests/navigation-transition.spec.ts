@@ -142,6 +142,25 @@ async function expectOpacityOnlyTransition(page: import('@playwright/test').Page
   })
 }
 
+async function openMonthlyTimetableWithKeyboard(page: import('@playwright/test').Page) {
+  await page.locator('#home-date').click()
+  await expect(page.getByRole('region', { name: 'Установка даты' })).toBeVisible()
+  await page.waitForTimeout(350)
+
+  const content = page.locator('.screen-content')
+  await content.evaluate(element => { element.scrollTop = element.scrollHeight })
+  await page.locator('#date-religious-events').focus()
+  await page.keyboard.press('Shift+Tab')
+  const trigger = page.locator('#date-monthly-schedule')
+  await expect(trigger).toBeFocused()
+  const scrollTop = await content.evaluate(element => element.scrollTop)
+  expect(scrollTop).toBeGreaterThan(0)
+
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('region', { name: 'Расписание намаза за месяц' })).toBeVisible()
+  return { content, scrollTop, trigger }
+}
+
 test('uses an opacity-only native crossfade for forward and Back navigation', async ({ page }) => {
   await installTransitionProbe(page)
   await page.goto('./')
@@ -258,4 +277,44 @@ test('Back restores the previous scroll position and trigger focus', async ({ pa
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
   await expect(page.locator('#home-settings')).toBeFocused()
   await expect.poll(() => content.evaluate(element => element.scrollTop)).toBe(scrollBefore)
+})
+
+test('keyboard entry and in-app Back restore monthly action focus and scroll through opacity transitions', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 400 })
+  await installTransitionProbe(page)
+  await page.goto('./')
+  await choosePlace(page)
+  await waitForPreviousTransition(page)
+  test.skip(await page.evaluate(() => typeof document.startViewTransition !== 'function'), 'Native View Transitions are unavailable in this browser')
+
+  const { content, scrollTop, trigger } = await openMonthlyTimetableWithKeyboard(page)
+  await expectOpacityOnlyTransition(page)
+  await waitForPreviousTransition(page)
+  await clearTransitionProbe(page)
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+
+  await expectOpacityOnlyTransition(page)
+  await expect(page.getByRole('region', { name: 'Установка даты' })).toBeVisible()
+  await expect(trigger).toBeFocused()
+  await expect.poll(() => content.evaluate(element => element.scrollTop)).toBe(scrollTop)
+})
+
+test('browser Back restores monthly action focus and scroll through the same transition', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 400 })
+  await installTransitionProbe(page)
+  await page.goto('./')
+  await choosePlace(page)
+  await waitForPreviousTransition(page)
+  test.skip(await page.evaluate(() => typeof document.startViewTransition !== 'function'), 'Native View Transitions are unavailable in this browser')
+
+  const { content, scrollTop, trigger } = await openMonthlyTimetableWithKeyboard(page)
+  await expectOpacityOnlyTransition(page)
+  await waitForPreviousTransition(page)
+  await clearTransitionProbe(page)
+  await page.goBack()
+
+  await expectOpacityOnlyTransition(page)
+  await expect(page.getByRole('region', { name: 'Установка даты' })).toBeVisible()
+  await expect(trigger).toBeFocused()
+  await expect.poll(() => content.evaluate(element => element.scrollTop)).toBe(scrollTop)
 })

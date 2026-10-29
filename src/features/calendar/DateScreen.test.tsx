@@ -37,6 +37,7 @@ it('opens the monthly timetable for the selected date without changing date pref
   const { onDateChange, onOpenMonthlySchedule, onPreferencesChange } = renderDateScreen()
   const monthlyScheduleButton = screen.getByRole('button', { name: 'Расписание на месяц' })
   expect(monthlyScheduleButton).toHaveTextContent(/^Расписание на месяц$/)
+  expect(monthlyScheduleButton).toHaveAttribute('id', 'date-monthly-schedule')
   await userEvent.click(monthlyScheduleButton)
 
   expect(onOpenMonthlySchedule).toHaveBeenCalledOnce()
