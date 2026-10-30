@@ -1565,7 +1565,8 @@ describe('VaqtPro', () => {
     expect(document.documentElement.dataset.season).toBe('autumn')
     expect(document.documentElement.style.getPropertyValue('--background-primary')).toBe('#D6B29B')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Выбрать дату' }))
+    // Theme bootstrap can settle before asynchronous place initialization finishes.
+    await userEvent.click(await screen.findByRole('button', { name: 'Выбрать дату' }))
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Месяц' }), '1')
     await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
     expect(document.documentElement.dataset.season).toBe('autumn')
