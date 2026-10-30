@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { calculatePrayerSchedule } from './prayerCalculation'
-import { buildScheduleEvents, selectEventPair } from './scheduleEvents'
+import { buildScheduleEvents, selectEventPair, SCHEDULE_EVENT_KEYS } from './scheduleEvents'
 
 function schedule(date = '2026-05-05', timeZone = 'Europe/Moscow') {
   return calculatePrayerSchedule({ latitude: 55.79, longitude: 49.12 }, date, timeZone)
@@ -11,6 +11,8 @@ describe('calculated schedule chronology', () => {
     const value = schedule()
     const events = buildScheduleEvents(value)
     expect(events).toHaveLength(7)
+    expect(events.map(event => event.key)).toEqual(SCHEDULE_EVENT_KEYS)
+    expect(SCHEDULE_EVENT_KEYS).toEqual(['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha'])
     expect(events.find(({ key }) => key === 'fajr')).toMatchObject({ kind: 'prayer', provenance: 'calculated', scheduleDate: value.date })
     expect(events.filter(({ kind }) => kind === 'marker').map(({ key }) => key).sort()).toEqual(['sunrise', 'zenith'])
     expect(events.every(event => event.instant === value.entries[event.key].instant)).toBe(true)

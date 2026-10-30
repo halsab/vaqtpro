@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import type { CalculatedPrayerKey } from '../../domain/types'
 import { ScheduleContent } from './ScheduleContent'
+import { SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
 
 const date = '2026-05-05'
 const day = calculatePrayerSchedule({ latitude: 55.79, longitude: 49.12 }, date, 'Europe/Moscow')
@@ -43,6 +44,14 @@ describe('calculated schedule view', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(7)
     expect(zenith?.querySelector('time')).toHaveAttribute('datetime', new Date(day.entries.zenith.instant).toISOString())
   })
+
+  it('uses the same canonical seven-event set and localized labels as the month table', () => {
+    render(<ScheduleContent {...base} />)
+    expect(SCHEDULE_EVENT_KEYS).toEqual(['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha'])
+    expect(screen.getAllByRole('listitem').map(row => row.querySelector('.event-name > span')?.textContent))
+      .toEqual(['Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша'])
+  })
+
   it('shows calculated prayers without obsolete congregation times', () => {
     render(<ScheduleContent {...base} />)
     expect(screen.getByRole('list')).toBeVisible()
