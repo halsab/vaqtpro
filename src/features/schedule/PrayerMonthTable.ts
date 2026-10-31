@@ -1,9 +1,17 @@
-import { createElement } from 'react'
+import { createElement, type KeyboardEvent } from 'react'
 
 import { SCHEDULE_EVENT_KEYS, type PrayerSchedule } from '../../domain/scheduleEvents'
 import { useLocalization } from '../../localization'
 
 export const PRAYER_MONTH_KEYS = SCHEDULE_EVENT_KEYS
+
+function handleTableScrollKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  const element = event.currentTarget
+  if (element.scrollWidth <= element.clientWidth) return
+  event.preventDefault()
+  element.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * Math.max(80, element.clientWidth * 0.8)
+}
 
 function formatDate(date: string): string {
   const [year, month, day] = date.split('-')
@@ -18,7 +26,7 @@ export function PrayerMonthTable({ rows, labels, dateLabel, tableLabel }: {
   tableLabel: string
 }) {
   const { t } = useLocalization()
-  return createElement('div', { className: 'prayer-month-table-scroll', role: 'region', 'aria-label': tableLabel, tabIndex: 0 },
+  return createElement('div', { className: 'prayer-month-table-scroll', role: 'region', 'aria-label': tableLabel, tabIndex: 0, onKeyDown: handleTableScrollKeyDown },
     createElement('table', { className: 'prayer-month-table' },
       createElement('caption', null, tableLabel),
       createElement('thead', null, createElement('tr', null,

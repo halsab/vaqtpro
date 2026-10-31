@@ -32,6 +32,7 @@ export default defineConfig({
         '**/deferred-loading.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
+        '**/monthly-export.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], launchOptions: {
         args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],
@@ -47,7 +48,7 @@ export default defineConfig({
     // Критические сценарии мобильного WebKit (portrait).
     {
       name: 'mobile-safari-portrait',
-      testMatch: ['**/mobile.spec.ts'],
+      testMatch: ['**/mobile.spec.ts', '**/monthly-export.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },
     {

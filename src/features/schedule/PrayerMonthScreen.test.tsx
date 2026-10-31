@@ -12,6 +12,11 @@ import { PrayerMonthScreen } from './PrayerMonthScreen'
 import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { buildScheduleEvents, SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
 
+const { prepareMonthlyExportFiles } = vi.hoisted(() => ({
+  prepareMonthlyExportFiles: vi.fn().mockResolvedValue({ pdf: { name: 'month.pdf', type: 'application/pdf' }, png: { name: 'month.png', type: 'image/png' } }),
+}))
+vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyExportFiles }))
+
 const place = createCityPlace({ id: 524901, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва',
   latitude: 55.7522, longitude: 37.6156, population: 10_381_222, timeZone: 'Europe/Moscow' }, 0)
 const originalCalculatePrayerSchedule = calculatePrayerSchedule
