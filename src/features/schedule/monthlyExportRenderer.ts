@@ -12,9 +12,20 @@ const PAGE = { width: 210, height: 297, inset: 15 }
 const ROW_HEIGHT = 7
 const TABLE_Y = 44
 const TABLE_HEADER_HEIGHT = 9.2
+const TABLE_HEADER_TEXT_Y = 48.95
+const HEADER_LOGO_Y = 15.2
+const HEADER_PRIMARY_TEXT_Y = 23.28
+const HEADER_SECONDARY_TEXT_Y = 29.104
 const PATTERN_SIZE = 166
-const PNG_WIDTH = 1600
+const PNG_WIDTH = 1136
 const PNG_HEIGHT = Math.round(PNG_WIDTH * PAGE.height / PAGE.width)
+// В референсе правый край заголовка смещён на 0,124 мм относительно подписи города.
+const MONTH_TITLE_RIGHT_OFFSET = 0.124
+// Ширина заголовка в референсе — 73,44 pt, в jsPDF без коррекции — 75,6 pt.
+const HEADER_TITLE_HORIZONTAL_SCALE = 73.44 / 75.6
+const PNG_MIN_BYTES = 1_000_000
+const PNG_TARGET_BYTES = 1_100_000
+const PNG_MAX_BYTES = 1_200_000
 const PATTERN_URLS = { spring: springPattern, summer: summerPattern, autumn: autumnPattern, winter: winterPattern }
 
 type Season = keyof typeof PATTERN_URLS
@@ -47,6 +58,7 @@ function seasonFor(month: string): Season {
 function createLayout(view: MonthlyExportView, measure: (text: string, size: number) => number): DrawCommand[] {
   const columns = Array.from({ length: 8 }, (_, index) => PAGE.inset + (index + 0.5) * 22.5)
   const monthX = PAGE.width - PAGE.inset
+  const monthTitleX = monthX + MONTH_TITLE_RIGHT_OFFSET
   const rowTop = TABLE_Y + TABLE_HEADER_HEIGHT
   const locationWidth = measure(view.location, 10.5)
   if (locationWidth > 87 * MM_TO_PT) throw new RangeError('Location label is too long for the approved export header')
@@ -56,15 +68,15 @@ function createLayout(view: MonthlyExportView, measure: (text: string, size: num
     { type: 'image', source: 'pattern', x: PATTERN_SIZE, y: 0, width: PATTERN_SIZE, height: PATTERN_SIZE },
     { type: 'image', source: 'pattern', x: 0, y: PATTERN_SIZE, width: PATTERN_SIZE, height: PATTERN_SIZE },
     { type: 'image', source: 'pattern', x: PATTERN_SIZE, y: PATTERN_SIZE, width: PATTERN_SIZE, height: PATTERN_SIZE },
-    { type: 'image', source: 'logo', x: 15, y: 15, width: 17, height: 17 },
-    { type: 'text', text: 'VaqtPro', x: 35, y: 20.2, size: 18, tone: 'primary' },
-    { type: 'text', text: view.monthTitle, x: monthX, y: 20.2, size: 18, tone: 'primary', align: 'right' },
-    { type: 'text', text: view.brandSubtitle, x: 35, y: 30.2, size: 10.5, tone: 'secondary' },
-    { type: 'text', text: view.location, x: monthX, y: 30.2, size: 10.5, tone: 'secondary', align: 'right' },
+    { type: 'image', source: 'logo', x: 15, y: HEADER_LOGO_Y, width: 17, height: 17 },
+    { type: 'text', text: 'VaqtPro', x: 35, y: HEADER_PRIMARY_TEXT_Y, size: 18, tone: 'primary' },
+    { type: 'text', text: view.monthTitle, x: monthTitleX, y: HEADER_PRIMARY_TEXT_Y, size: 18, tone: 'primary', align: 'right' },
+    { type: 'text', text: view.brandSubtitle, x: 35, y: HEADER_SECONDARY_TEXT_Y, size: 10.5, tone: 'secondary' },
+    { type: 'text', text: view.location, x: monthX, y: HEADER_SECONDARY_TEXT_Y, size: 10.5, tone: 'secondary', align: 'right' },
   ]
 
   for (const [index, label] of view.headers.entries()) {
-    commands.push({ type: 'text', text: label, x: columns[index] ?? PAGE.inset, y: TABLE_Y + 6.3, size: 10.5, tone: 'secondary', align: 'center' })
+    commands.push({ type: 'text', text: label, x: columns[index] ?? PAGE.inset, y: TABLE_HEADER_TEXT_Y, size: 10.5, tone: 'secondary', align: 'center' })
   }
   commands.push({ type: 'line', x1: PAGE.inset, y1: rowTop, x2: PAGE.width - PAGE.inset, y2: rowTop, tone: 'rule' })
 
@@ -196,42 +208,62 @@ function positionText(context: CanvasRenderingContext2D, command: Extract<DrawCo
   context.textAlign = command.align ?? 'left'
   context.textBaseline = 'alphabetic'
   context.fillStyle = command.tone === 'primary' ? '#171717' : '#525252'
-  context.fillText(command.text, command.x * scale, command.y * scale)
+  if (command.size === 18) {
+    context.save()
+    context.translate(command.x * scale, 0)
+    context.scale(HEADER_TITLE_HORIZONTAL_SCALE, 1)
+    context.fillText(command.text, 0, command.y * scale)
+    context.restore()
+  } else {
+    context.fillText(command.text, command.x * scale, command.y * scale)
+  }
+}
+
+function drawPng(context: CanvasRenderingContext2D, commands: DrawCommand[], assets: ExportAssets, width: number): void {
+  const scale = width / PAGE.width
+  context.fillStyle = '#fff'
+  context.fillRect(0, 0, context.canvas.width, context.canvas.height)
+  for (const command of commands) {
+    if (command.type === 'text') positionText(context, command, scale)
+    else if (command.type === 'line') {
+      context.strokeStyle = '#c8c8c8'
+      context.lineWidth = 0.2 * scale
+      context.beginPath()
+      context.moveTo(command.x1 * scale, command.y1 * scale)
+      context.lineTo(command.x2 * scale, command.y2 * scale)
+      context.stroke()
+    } else if (command.type === 'rect') {
+      context.fillStyle = 'rgba(0,0,0,0.09)'
+      context.fillRect(command.x * scale, command.y * scale, command.width * scale, command.height * scale)
+    } else {
+      context.drawImage(command.source === 'logo' ? assets.logoCanvas : assets.patternCanvas,
+        command.x * scale, command.y * scale, command.width * scale, command.height * scale)
+    }
+  }
 }
 
 export async function renderMonthlyPng(view: MonthlyExportView, month: string, filename: string): Promise<File> {
   const assets = await loadAssets(month)
-  const scale = PNG_WIDTH / PAGE.width
   const canvas = document.createElement('canvas')
   canvas.width = PNG_WIDTH
   canvas.height = PNG_HEIGHT
   try {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Could not render the export image')
-    context.fillStyle = '#fff'
-    context.fillRect(0, 0, canvas.width, canvas.height)
+    const scale = PNG_WIDTH / PAGE.width
     const commands = createLayout(view, (text, size) => {
       context.font = `${size * scale / MM_TO_PT}px MonthlyExportMono`
       return context.measureText(text).width / scale * MM_TO_PT
     })
-    for (const command of commands) {
-      if (command.type === 'text') positionText(context, command, scale)
-      else if (command.type === 'line') {
-        context.strokeStyle = '#c8c8c8'
-        context.lineWidth = 0.2 * scale
-        context.beginPath()
-        context.moveTo(command.x1 * scale, command.y1 * scale)
-        context.lineTo(command.x2 * scale, command.y2 * scale)
-        context.stroke()
-      } else if (command.type === 'rect') {
-        context.fillStyle = 'rgba(0,0,0,0.09)'
-        context.fillRect(command.x * scale, command.y * scale, command.width * scale, command.height * scale)
-      } else {
-        context.drawImage(command.source === 'logo' ? assets.logoCanvas : assets.patternCanvas,
-          command.x * scale, command.y * scale, command.width * scale, command.height * scale)
-      }
+    drawPng(context, commands, assets, PNG_WIDTH)
+    let blob = await canvasBlob(canvas, 'image/png')
+    if (blob.size < PNG_MIN_BYTES || blob.size > PNG_MAX_BYTES) {
+      const adjustedWidth = Math.round(PNG_WIDTH * Math.sqrt(PNG_TARGET_BYTES / blob.size))
+      canvas.width = adjustedWidth
+      canvas.height = Math.round(adjustedWidth * PAGE.height / PAGE.width)
+      drawPng(context, commands, assets, adjustedWidth)
+      blob = await canvasBlob(canvas, 'image/png')
     }
-    const blob = await canvasBlob(canvas, 'image/png')
     return new File([blob], filename, { type: 'image/png' })
   } finally {
     canvas.width = 0
@@ -247,12 +279,22 @@ export async function renderMonthlyPdf(view: MonthlyExportView, month: string, f
   pdf.setFont('MonthlyExportMono', 'normal')
   pdf.setFontSize(10.5)
   const commands = createLayout(view, (text, size) => pdf.getTextWidth(text) * MM_TO_PT * (size / 10.5))
+  let currentHorizontalScale = 1
   for (const command of commands) {
     if (command.type === 'text') {
       pdf.setFontSize(command.size)
       if (command.tone === 'primary') pdf.setTextColor(23, 23, 23)
       else pdf.setTextColor(82, 82, 82)
-      pdf.text(command.text, command.x, command.y, { align: command.align ?? 'left', baseline: 'alphabetic' })
+      const horizontalScale = command.size === 18 ? HEADER_TITLE_HORIZONTAL_SCALE : 1
+      const x = command.align === 'right' && command.size === 18
+        ? command.x + pdf.getTextWidth(command.text) * (1 - horizontalScale)
+        : command.x
+      const scaleOption = horizontalScale === currentHorizontalScale ? {} : { horizontalScale }
+      currentHorizontalScale = horizontalScale
+      pdf.text(command.text, x, command.y, {
+        align: command.align ?? 'left', baseline: 'alphabetic',
+        ...scaleOption,
+      })
     } else if (command.type === 'line') {
       pdf.setDrawColor(199, 199, 199)
       pdf.setLineWidth(0.2)
