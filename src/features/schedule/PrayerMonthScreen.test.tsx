@@ -13,7 +13,9 @@ import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { buildScheduleEvents, SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
 
 const { prepareMonthlyExportFiles } = vi.hoisted(() => ({
-  prepareMonthlyExportFiles: vi.fn().mockResolvedValue({ pdf: { name: 'month.pdf', type: 'application/pdf' }, png: { name: 'month.png', type: 'image/png' } }),
+  prepareMonthlyExportFiles: vi.fn().mockResolvedValue({
+    pdf: { name: 'month.pdf', type: 'application/pdf' }, png: { name: 'month.png', type: 'image/png' }, failures: [],
+  }),
 }))
 vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyExportFiles }))
 

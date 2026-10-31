@@ -84,7 +84,7 @@ export const RU_MESSAGES = Object.freeze({
   monthlyScheduleTableLabel: 'Расписание намаза за месяц',
   monthlyTimeUnavailable: 'Время недоступно',
   shareMonthlyTimetable: 'Экспортировать расписание на месяц',
-  monthlyExportFailed: 'Не удалось поделиться файлом. Попробуйте ещё раз.',
+  monthlyExportFailed: 'Не удалось выполнить экспорт. Попробуйте ещё раз.',
   exportPdf: 'PDF',
   exportPng: 'PNG',
   exportDay: 'День',
