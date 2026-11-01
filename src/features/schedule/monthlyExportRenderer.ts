@@ -17,15 +17,12 @@ const HEADER_LOGO_Y = 15.2
 const HEADER_PRIMARY_TEXT_Y = 23.28
 const HEADER_SECONDARY_TEXT_Y = 29.104
 const PATTERN_SIZE = 166
-const PNG_MIN_WIDTH = 1136
-const PNG_MAX_WIDTH = Math.round(PAGE.width * 300 / 25.4)
+const PNG_EXPORT_WIDTH = 1800
 // В референсе правый край заголовка смещён на 0,124 мм относительно подписи города.
 const MONTH_TITLE_RIGHT_OFFSET = 0.124
 // Ширина заголовка в референсе — 73,44 pt, в jsPDF без коррекции — 75,6 pt.
 const HEADER_TITLE_HORIZONTAL_SCALE = 73.44 / 75.6
 const PNG_MAX_BYTES = 1_200_000
-const PNG_MAX_ATTEMPTS = 6
-const PNG_WIDTH_TOLERANCE = 16
 const PREPARATION_CACHE_LIMIT = 3
 const PATTERN_URLS = { spring: springPattern, summer: summerPattern, autumn: autumnPattern, winter: winterPattern }
 
@@ -291,47 +288,12 @@ function createPngEncoder(): { encode: (context: CanvasRenderingContext2D) => Pr
   }
 }
 
-export interface PngOptimizationOptions {
-  minWidth: number
-  maxWidth: number
-  maxBytes: number
-  maxAttempts?: number
-}
-
-export async function optimizePngResolution(render: (width: number) => Promise<Blob>, options: PngOptimizationOptions): Promise<{ width: number; blob: Blob }> {
-  const { minWidth, maxWidth, maxBytes, maxAttempts = PNG_MAX_ATTEMPTS } = options
-  let width = maxWidth
-  let lowerWidth = minWidth - 1
-  let upperWidth = maxWidth + 1
-  let best: { width: number; blob: Blob } | undefined
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const blob = await render(width)
-    if (blob.size <= maxBytes) {
-      if (!best || width > best.width) best = { width, blob }
-      lowerWidth = Math.max(lowerWidth, width)
-    } else {
-      upperWidth = Math.min(upperWidth, width)
-    }
-
-    if (upperWidth - lowerWidth <= PNG_WIDTH_TOLERANCE) break
-
-    const estimatedWidth = Math.floor(width * Math.sqrt(maxBytes / blob.size) * 0.99)
-    const isWithinBounds = estimatedWidth > lowerWidth && estimatedWidth < upperWidth
-    width = isWithinBounds
-      ? estimatedWidth
-      : Math.floor((lowerWidth + upperWidth) / 2)
-    width = Math.max(minWidth, Math.min(maxWidth, width))
+export async function encodePngOnceWithinLimit(render: () => Promise<Blob>, maxBytes: number): Promise<Blob> {
+  const blob = await render()
+  if (blob.size > maxBytes) {
+    throw new RangeError(`The export image exceeds the ${maxBytes.toLocaleString('en-US')}-byte size limit`)
   }
-
-  if (!best && width !== minWidth) {
-    const blob = await render(minWidth)
-    if (blob.size <= maxBytes) best = { width: minWidth, blob }
-  }
-  if (!best || best.blob.size > maxBytes) {
-    throw new RangeError('The export image cannot fit the 1,200,000-byte size limit at readable resolution')
-  }
-  return best
+  return blob
 }
 
 export async function renderMonthlyPng(view: MonthlyExportView, month: string, filename: string): Promise<File> {
@@ -341,18 +303,18 @@ export async function renderMonthlyPng(view: MonthlyExportView, month: string, f
   try {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Could not render the export image')
-    const { blob } = await optimizePngResolution(imageWidth => {
-      const height = Math.round(imageWidth * PAGE.height / PAGE.width)
-      canvas.width = imageWidth
+    const blob = await encodePngOnceWithinLimit(() => {
+      const height = Math.round(PNG_EXPORT_WIDTH * PAGE.height / PAGE.width)
+      canvas.width = PNG_EXPORT_WIDTH
       canvas.height = height
-      const scale = imageWidth / PAGE.width
+      const scale = PNG_EXPORT_WIDTH / PAGE.width
       const commands = createLayout(view, (text, size) => {
         context.font = `${size * scale / MM_TO_PT}px MonthlyExportMono`
         return context.measureText(text).width / scale * MM_TO_PT
       })
-      drawPng(context, commands, assets, imageWidth)
+      drawPng(context, commands, assets, PNG_EXPORT_WIDTH)
       return pngEncoder.encode(context)
-    }, { minWidth: PNG_MIN_WIDTH, maxWidth: PNG_MAX_WIDTH, maxBytes: PNG_MAX_BYTES })
+    }, PNG_MAX_BYTES)
     const file = new File([blob], filename, { type: 'image/png' })
     if (file.size > PNG_MAX_BYTES) {
       throw new RangeError('The encoded export image exceeds the 1,200,000-byte size limit')

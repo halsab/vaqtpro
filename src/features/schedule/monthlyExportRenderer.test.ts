@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 
 import type { MonthlyExportView } from './monthlyExportModel'
-import { optimizePngResolution, prepareMonthlyExportFiles } from './monthlyExportRenderer'
+import { encodePngOnceWithinLimit, prepareMonthlyExportFiles } from './monthlyExportRenderer'
 
 const view: MonthlyExportView = {
   month: '2026-10', monthTitle: 'Октябрь 2026', location: 'Казань',
@@ -43,26 +43,20 @@ it('reports failure only when both independent renderers fail', async () => {
   expect(renderers.png).toHaveBeenCalledOnce()
 })
 
-it('chooses a high-resolution PNG candidate using measured encoded sizes', async () => {
-  const widths: number[] = []
-  const { width, blob } = await optimizePngResolution(candidateWidth => {
-    widths.push(candidateWidth)
-    return Promise.resolve(new Blob([new Uint8Array(Math.ceil(candidateWidth ** 2 / 3))]))
-  }, { minWidth: 1136, maxWidth: 2000, maxBytes: 1_200_000 })
+it('encodes a PNG once and accepts a file at the byte limit', async () => {
+  const render = vi.fn(() => Promise.resolve(new Blob([new Uint8Array(1_200_000)])))
 
-  expect(blob.size).toBeLessThanOrEqual(1_200_000)
-  expect(width).toBeGreaterThan(1800)
-  expect(widths.length).toBeLessThanOrEqual(7)
-  expect(widths.some(candidateWidth => candidateWidth > width)).toBe(true)
+  const blob = await encodePngOnceWithinLimit(render, 1_200_000)
+
+  expect(blob.size).toBe(1_200_000)
+  expect(render).toHaveBeenCalledOnce()
 })
 
-it('fails safely when no readable PNG candidate fits the byte limit', async () => {
+it('fails safely without a second render when the PNG exceeds the byte limit', async () => {
   const render = vi.fn(() => Promise.resolve(new Blob([new Uint8Array(1_200_001)])))
 
-  await expect(optimizePngResolution(render, {
-    minWidth: 1136, maxWidth: 2000, maxBytes: 1_200_000, maxAttempts: 3,
-  })).rejects.toThrow('cannot fit the 1,200,000-byte size limit')
-  expect(render).toHaveBeenCalledTimes(4)
+  await expect(encodePngOnceWithinLimit(render, 1_200_000)).rejects.toThrow('exceeds the 1,200,000-byte size limit')
+  expect(render).toHaveBeenCalledOnce()
 })
 
 it('reuses the last three prepared month/location documents and evicts the least recently used', async () => {

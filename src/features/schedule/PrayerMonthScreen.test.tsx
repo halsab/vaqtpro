@@ -41,6 +41,9 @@ function renderMonth() {
 
 it('shows one table row per date with all seven Home events in the same row', () => {
   renderMonth()
+  const exportButton = screen.getByRole('button', { name: 'Экспортировать расписание на месяц' })
+  expect(exportButton).toHaveClass('icon-button')
+  expect(exportButton).toBeEnabled()
   expect(screen.queryByRole('heading', { name: 'Расписание на месяц' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
   expect(screen.getByText('Москва · Профиль расчёта · Россия')).toBeVisible()
