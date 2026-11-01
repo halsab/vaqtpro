@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -42,6 +43,14 @@ it('uses the Home-sized circular share action and a native select with exactly P
   expect(control?.querySelector('svg path')).toHaveAttribute('d', expect.stringContaining('M12 15V3'))
   await userEvent.setup().tab()
   expect(select).toHaveFocus()
+})
+
+it('prepares export files only once when StrictMode replays effects', async () => {
+  prepareMonthlyExportFiles.mockResolvedValue({ pdf, png, failures: [] })
+  render(<StrictMode><MonthlyExportAction snapshot={snapshot} labels={labels} /></StrictMode>)
+
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })).toBeEnabled())
+  expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
 })
 
 it('permits repeated selection of the same format and falls back when file sharing is unavailable', async () => {

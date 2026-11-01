@@ -30,12 +30,14 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   const [failed, setFailed] = useState(false)
   const [retry, setRetry] = useState(0)
   const busy = useRef(false)
+  const preparation = useRef<Promise<MonthlyExportPreparation> | null>(null)
 
   useEffect(() => {
     let current = true
     if (view) {
-      void import('./monthlyExportRenderer').then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view))
-        .then(result => {
+      preparation.current ??= import('./monthlyExportRenderer')
+        .then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view))
+      void preparation.current.then(result => {
           if (!current) return
           setPrepared(result)
           setFailed(false)
@@ -80,6 +82,7 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
       <button type="button" className="monthly-export-retry" onClick={() => {
         setPrepared(null)
         setFailed(false)
+        preparation.current = null
         setRetry(value => value + 1)
       }}>{t('retry')}</button>
     </span> : null}
