@@ -14,13 +14,14 @@ test('monthly table keeps its header, date column, and separators frozen on both
   await openMonth(page)
 
   const geometry = async () => page.evaluate(() => {
-    const scroller = document.querySelector<HTMLElement>('.prayer-month-content')
+    const scroller = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    const screenContent = document.querySelector<HTMLElement>('.prayer-month-content')
     const table = document.querySelector<HTMLTableElement>('.prayer-month-table')
     const header = table?.querySelector<HTMLElement>('.prayer-month-date-heading')
     const secondHeader = table?.querySelectorAll<HTMLElement>('thead th')[1]
     const dateCell = table?.querySelector<HTMLElement>('tbody th')
     const firstTime = table?.querySelector<HTMLElement>('tbody td')
-    if (!scroller || !header || !secondHeader || !dateCell || !firstTime) throw new Error('Missing monthly table geometry')
+    if (!scroller || !screenContent || !header || !secondHeader || !dateCell || !firstTime) throw new Error('Missing monthly table geometry')
     const rect = (element: Element) => {
       const value = element.getBoundingClientRect()
       return { x: value.x, y: value.y, width: value.width, height: value.height }
@@ -29,6 +30,9 @@ test('monthly table keeps its header, date column, and separators frozen on both
       scroller: { x: scroller.getBoundingClientRect().x, y: scroller.getBoundingClientRect().y,
         width: scroller.clientWidth, height: scroller.clientHeight, scrollWidth: scroller.scrollWidth,
         scrollHeight: scroller.scrollHeight, left: scroller.scrollLeft, top: scroller.scrollTop },
+      screenContent: { width: screenContent.clientWidth, height: screenContent.clientHeight,
+        scrollWidth: screenContent.scrollWidth, scrollHeight: screenContent.scrollHeight,
+        left: screenContent.scrollLeft, top: screenContent.scrollTop },
       header: rect(header), secondHeader: rect(secondHeader), dateCell: rect(dateCell), firstTime: rect(firstTime),
       separatorX: getComputedStyle(header, '::after').backgroundColor,
       separatorY: getComputedStyle(header, '::before').backgroundColor,
@@ -49,14 +53,15 @@ test('monthly table keeps its header, date column, and separators frozen on both
   const before = await geometry()
   expect(before.scroller.scrollWidth).toBeGreaterThan(before.scroller.width)
   expect(before.scroller.scrollHeight).toBeGreaterThan(before.scroller.height)
-  expect(Math.max(...before.columnWidths) - Math.min(...before.columnWidths)).toBeLessThan(1)
+  expect(before.screenContent.scrollWidth).toBe(before.screenContent.width)
+  expect(before.screenContent.scrollHeight).toBe(before.screenContent.height)
   expect(before.alignments.every(alignment => alignment === 'center')).toBe(true)
   expect(before.contentFits).toBe(true)
   expect(before.rowBackgrounds[0]).not.toBe(before.rowBackgrounds[1])
   expect(before.separatorX).not.toBe('rgba(0, 0, 0, 0)')
   expect(before.separatorY).not.toBe('rgba(0, 0, 0, 0)')
 
-  const scroller = page.locator('.prayer-month-content')
+  const scroller = page.locator('.prayer-month-table-scroll')
   await scroller.evaluate(element => {
     element.scrollLeft = element.scrollWidth
     element.scrollTop = 220
@@ -65,7 +70,7 @@ test('monthly table keeps its header, date column, and separators frozen on both
   const after = await geometry()
   await page.screenshot({ path: testInfo.outputPath('monthly-sticky-diagonal.png') })
   expect(after.header.x).toBeCloseTo(before.header.x, 0)
-  expect(after.header.y).toBeCloseTo(before.scroller.y + 16, 0)
+  expect(after.header.y).toBeCloseTo(before.scroller.y, 0)
   expect(after.dateCell.x).toBeCloseTo(before.dateCell.x, 0)
   expect(after.secondHeader.x).toBeLessThan(before.secondHeader.x)
   expect(after.firstTime.x).toBeLessThan(before.firstTime.x)
@@ -84,7 +89,7 @@ test('monthly table keeps its header, date column, and separators frozen on both
 
   await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; element.scrollLeft = element.scrollWidth })
   const lastCells = await page.locator('.prayer-month-table tbody tr').last().evaluate(row => {
-    const scroller = row.closest('.screen-content')
+    const scroller = row.closest('.prayer-month-table-scroll')
     const date = row.querySelector('th')
     const lastCell = row.querySelector('td:last-child')
     if (!scroller || !date || !lastCell) throw new Error('Missing last row geometry')
@@ -103,7 +108,7 @@ test('expanded calculation details and 200% text remain reachable on a short vie
   const details = page.locator('.prayer-month-method')
   await details.locator('summary').click()
 
-  const scroller = page.locator('.prayer-month-content')
+  const scroller = page.locator('.screen-content.prayer-month-content')
   const dimensions = await scroller.evaluate(element => ({
     clientHeight: element.clientHeight,
     scrollHeight: element.scrollHeight,
@@ -123,19 +128,31 @@ test('expanded calculation details and 200% text remain reachable on a short vie
 test('month navigation preserves one scroll owner and keeps changed rows reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 720 })
   await openMonth(page)
-  const scroller = page.locator('.prayer-month-content')
+  const scroller = page.locator('.prayer-month-table-scroll')
   const tableRegion = page.getByRole('region', { name: 'Расписание намаза за месяц' })
   await tableRegion.focus()
   await page.keyboard.press('ArrowDown')
   await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
   await page.keyboard.press('ArrowRight')
   await expect.poll(() => scroller.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
-  await page.locator('.prayer-month-controls').scrollIntoViewIfNeeded()
   await page.getByRole('button', { name: 'Следующий месяц' }).click()
   await expect(page.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
   await expect(page.locator('.prayer-month-table tbody tr')).toHaveCount(31)
   await expect(page.locator('.prayer-month-table tbody th time').first()).toHaveText('01 чт')
   expect(await page.evaluate(() => document.querySelectorAll('.prayer-month-content').length)).toBe(1)
+})
+
+test('monthly table uses available width before enabling horizontal scrolling', async ({ page }) => {
+  await openMonth(page)
+  const region = page.locator('.prayer-month-table-scroll')
+  for (const [width, shouldOverflow] of [[740, false], [320, true]] as const) {
+    await page.setViewportSize({ width, height: 740 })
+    await expect.poll(() => region.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(shouldOverflow)
+    if (!shouldOverflow) {
+      const widths = await region.locator('thead th').evaluateAll(cells => cells.map(cell => cell.getBoundingClientRect().width))
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1)
+    }
+  }
 })
 
 test('civil weekdays stay the same in distant browser timezones', async ({ browser }) => {

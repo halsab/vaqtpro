@@ -7,11 +7,17 @@ import { civilWeekday } from '../../domain/civilMonth'
 export const PRAYER_MONTH_KEYS = SCHEDULE_EVENT_KEYS
 
 function handleTableScrollKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-  const element = event.currentTarget.closest('.screen-content')
-  if (!(element instanceof HTMLElement)) return
   const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
   const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'PageUp' || event.key === 'PageDown'
   if (!horizontal && !vertical) return
+  const tableViewport = event.currentTarget
+  const screenContent = tableViewport.closest('.screen-content')
+  const overflow = getComputedStyle(tableViewport)
+  const tableOwnsAxis = horizontal
+    ? overflow.overflowX === 'auto' || overflow.overflowX === 'scroll'
+    : overflow.overflowY === 'auto' || overflow.overflowY === 'scroll'
+  const element = tableOwnsAxis ? tableViewport : screenContent
+  if (!(element instanceof HTMLElement)) return
   if (horizontal && element.scrollWidth <= element.clientWidth) return
   if (vertical && element.scrollHeight <= element.clientHeight) return
   event.preventDefault()
@@ -36,6 +42,8 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
   return createElement('div', { className: 'prayer-month-table-scroll', role: 'region', 'aria-label': tableLabel, tabIndex: 0, onKeyDown: handleTableScrollKeyDown },
     createElement('table', { className: 'prayer-month-table' },
       createElement('caption', null, tableLabel),
+      createElement('colgroup', null, ...Array.from({ length: PRAYER_MONTH_KEYS.length + 1 }, (_, index) =>
+        createElement('col', { key: index }))),
       createElement('thead', null, createElement('tr', null,
         createElement('th', { scope: 'col', className: 'prayer-month-date-heading' }, dateLabel),
         ...PRAYER_MONTH_KEYS.map(key => createElement('th', { key, scope: 'col' }, labels[key])))),

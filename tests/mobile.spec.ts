@@ -86,7 +86,7 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
 
   const region = page.getByRole('region', { name: 'Расписание намаза за месяц' })
   const table = region.locator('table')
-  const scroll = page.locator('.prayer-month-content')
+  const scroll = page.locator('.prayer-month-table-scroll')
   await expect(table.locator('tbody tr')).toHaveCount(30)
   const firstDay = table.locator('tbody tr').first().locator('th time')
   await expect(firstDay).toHaveText('01 вт')
@@ -110,7 +110,7 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
     for (const scale of ['100%', '200%']) {
       await page.evaluate(value => { document.documentElement.style.fontSize = value }, scale)
       const layout = await page.evaluate(() => {
-        const scroll = document.querySelector<HTMLElement>('.prayer-month-content')
+        const scroll = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
         const row = document.querySelector<HTMLElement>('.prayer-month-table tbody tr')
         const heading = document.querySelector<HTMLElement>('.prayer-month-heading')
         const column = document.querySelector<HTMLElement>('.prayer-month-table thead th')
