@@ -32,7 +32,6 @@ export default defineConfig({
         '**/deferred-loading.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
-        '**/monthly-export.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], launchOptions: {
         args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],
@@ -48,7 +47,9 @@ export default defineConfig({
     // Критические сценарии мобильного WebKit (portrait).
     {
       name: 'mobile-safari-portrait',
-      testMatch: ['**/mobile.spec.ts', '**/monthly-export.spec.ts'],
+      // Экспортные E2E сняты по запросу владельца: Playwright не проверяет системный picker/share sheet и качество файлов на устройствах.
+      // Спиннер, автозапуск picker, повторный тап, отправку файлов и внешний вид владелец проверяет вручную.
+      testMatch: ['**/mobile.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },
     {

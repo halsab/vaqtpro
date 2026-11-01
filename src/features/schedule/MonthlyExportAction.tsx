@@ -12,6 +12,12 @@ function ShareIcon() {
   </svg>
 }
 
+function LoadingSpinner() {
+  return <svg className="monthly-export-spinner" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" strokeDasharray="36 18" />
+  </svg>
+}
+
 export function MonthlyExportAction({ snapshot, labels }: {
   snapshot: MonthlyExportSnapshot | null
   labels: Record<string, string>
@@ -32,19 +38,14 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   const [preparing, setPreparing] = useState(false)
   const busy = useRef(false)
   const preparation = useRef<Promise<MonthlyExportPreparation> | null>(null)
+  const select = useRef<HTMLSelectElement>(null)
+  const autoOpenPicker = useRef(false)
 
   useEffect(() => {
     let current = true
     if (view && preparationRequest > 0) {
       preparation.current ??= import('./monthlyExportRenderer')
-        .then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view, undefined, (format, file) => {
-          if (!current) return
-          setPrepared(value => ({
-            pdf: format === 'pdf' ? file : value?.pdf ?? null,
-            png: format === 'png' ? file : value?.png ?? null,
-            failures: value?.failures ?? [],
-          }))
-        }))
+        .then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view))
       void preparation.current.then(result => {
           if (!current) return
           setPrepared(result)
@@ -59,7 +60,18 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   const hasAvailableFormat = Boolean(result?.pdf || result?.png)
   const error = failed || Boolean(result?.failures.length)
 
+  useEffect(() => {
+    if (!hasAvailableFormat || preparing || !autoOpenPicker.current) return
+    autoOpenPicker.current = false
+    try {
+      select.current?.showPicker()
+    } catch {
+      // При блокировке браузером готовый селектор остаётся доступен по следующему тапу.
+    }
+  }, [hasAvailableFormat, preparing])
+
   const onChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    autoOpenPicker.current = false
     const format = event.currentTarget.value
     event.currentTarget.value = ''
     if (!result || busy.current || (format !== 'pdf' && format !== 'png')) return
@@ -79,9 +91,9 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
     <span className={`monthly-export-control${!view || (preparing && !hasAvailableFormat) ? ' is-disabled' : ''}`}>
       {hasAvailableFormat ? <>
         <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')} aria-hidden="true" tabIndex={-1} disabled>
-          <ShareIcon />
+          {preparing ? <LoadingSpinner /> : <ShareIcon />}
         </IconActionButton>
-        <select aria-label={t('shareMonthlyTimetable')} aria-busy={preparing || undefined}
+        <select ref={select} aria-label={t('shareMonthlyTimetable')} aria-busy={preparing || undefined}
           value="" onChange={onChange}>
           <option value="" hidden />
           <option value="pdf" disabled={!result?.pdf}>{t('exportPdf')}</option>
@@ -90,10 +102,11 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
       </> : <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')}
         aria-busy={preparing || undefined} disabled={!view || preparing}
         onClick={() => {
+          autoOpenPicker.current = true
           setPreparing(true)
           setPreparationRequest(value => value + 1)
         }}>
-        <ShareIcon />
+        {preparing ? <LoadingSpinner /> : <ShareIcon />}
       </IconActionButton>}
     </span>
     {error ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}
@@ -101,6 +114,7 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
         setPrepared(null)
         setFailed(false)
         preparation.current = null
+        autoOpenPicker.current = true
         setPreparing(true)
         setPreparationRequest(value => value + 1)
       }}>{t('retry')}</button>

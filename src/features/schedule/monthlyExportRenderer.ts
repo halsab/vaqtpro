@@ -48,11 +48,7 @@ let logoCanvasPromise: Promise<HTMLCanvasElement> | undefined
 let patternCache: { season: Season; promise: Promise<HTMLCanvasElement> } | undefined
 let activePreparations = 0
 const preparationCache = new Map<string, MonthlyExportPreparation>()
-const inFlightPreparations = new Map<string, {
-  promise: Promise<MonthlyExportPreparation>
-  files: Partial<Record<'pdf' | 'png', File>>
-  listeners: Set<MonthlyExportFormatReady>
-}>()
+const inFlightPreparations = new Map<string, Promise<MonthlyExportPreparation>>()
 const rendererCacheNamespaces = new WeakMap<MonthlyExportRenderers, number>()
 let nextRendererCacheNamespace = 1
 
@@ -435,8 +431,6 @@ export interface MonthlyExportRenderers {
   png(view: MonthlyExportView, month: string, filename: string): Promise<File>
 }
 
-export type MonthlyExportFormatReady = (format: 'pdf' | 'png', file: File) => void
-
 const DEFAULT_RENDERERS: MonthlyExportRenderers = { pdf: renderMonthlyPdf, png: renderMonthlyPng }
 
 function cacheKeyFor(view: MonthlyExportView, renderers: MonthlyExportRenderers | undefined): string {
@@ -464,8 +458,7 @@ function rememberPreparation(key: string, result: MonthlyExportPreparation): voi
 }
 
 async function prepareUncachedMonthlyExportFiles(view: MonthlyExportView,
-  renderers: MonthlyExportRenderers, cached: MonthlyExportPreparation | undefined,
-  onFormatReady?: MonthlyExportFormatReady): Promise<MonthlyExportPreparation> {
+  renderers: MonthlyExportRenderers, cached: MonthlyExportPreparation | undefined): Promise<MonthlyExportPreparation> {
   const slug = view.location.normalize('NFKD').replace(/[^\p{Letter}\p{Number}]+/gu, '_').replace(/^_|_$/g, '').toLocaleLowerCase('ru-RU') || 'location'
   const prefix = `VaqtPro_${slug}_${view.month}`
   activePreparations += 1
@@ -473,21 +466,17 @@ async function prepareUncachedMonthlyExportFiles(view: MonthlyExportView,
   let png = cached?.png ?? null
   const failures: ('pdf' | 'png')[] = []
   try {
-    if (pdf) onFormatReady?.('pdf', pdf)
-    else {
+    if (!pdf) {
       try {
         pdf = await renderers.pdf(view, view.month, `${prefix}.pdf`)
-        onFormatReady?.('pdf', pdf)
       } catch {
         failures.push('pdf')
       }
     }
     await new Promise<void>(resolve => window.setTimeout(resolve, 0))
-    if (png) onFormatReady?.('png', png)
-    else {
+    if (!png) {
       try {
         png = await renderers.png(view, view.month, `${prefix}.png`)
-        onFormatReady?.('png', png)
       } catch {
         failures.push('png')
       }
@@ -501,8 +490,7 @@ async function prepareUncachedMonthlyExportFiles(view: MonthlyExportView,
 }
 
 export function prepareMonthlyExportFiles(view: MonthlyExportView,
-  renderers?: MonthlyExportRenderers,
-  onFormatReady?: MonthlyExportFormatReady): Promise<MonthlyExportPreparation> {
+  renderers?: MonthlyExportRenderers): Promise<MonthlyExportPreparation> {
   const key = cacheKeyFor(view, renderers)
   const cached = preparationCache.get(key)
   const actualRenderers = renderers ?? DEFAULT_RENDERERS
@@ -510,37 +498,20 @@ export function prepareMonthlyExportFiles(view: MonthlyExportView,
   if (cached?.pdf && cached.png) {
     preparationCache.delete(key)
     preparationCache.set(key, cached)
-    onFormatReady?.('pdf', cached.pdf)
-    onFormatReady?.('png', cached.png)
     return Promise.resolve(cached)
   }
 
-  const activePreparation = inFlightPreparations.get(key)
-  if (activePreparation) {
-    if (onFormatReady) {
-      activePreparation.listeners.add(onFormatReady)
-      if (activePreparation.files.pdf) onFormatReady('pdf', activePreparation.files.pdf)
-      if (activePreparation.files.png) onFormatReady('png', activePreparation.files.png)
-    }
-    return activePreparation.promise
-  }
+  const active = inFlightPreparations.get(key)
+  if (active) return active
 
-  const active = { promise: Promise.resolve({ pdf: null, png: null, failures: [] } as MonthlyExportPreparation),
-    files: {} as Partial<Record<'pdf' | 'png', File>>, listeners: new Set<MonthlyExportFormatReady>() }
-  if (onFormatReady) active.listeners.add(onFormatReady)
-  const publish = (format: 'pdf' | 'png', file: File) => {
-    active.files[format] = file
-    for (const listener of active.listeners) listener(format, file)
-  }
-  const promise = prepareUncachedMonthlyExportFiles(view, actualRenderers, cached, publish)
+  const promise = prepareUncachedMonthlyExportFiles(view, actualRenderers, cached)
     .then(result => {
       rememberPreparation(key, result)
       return result
     })
     .finally(() => {
-      if (inFlightPreparations.get(key) === active) inFlightPreparations.delete(key)
+      if (inFlightPreparations.get(key) === promise) inFlightPreparations.delete(key)
     })
-  active.promise = promise
-  inFlightPreparations.set(key, active)
+  inFlightPreparations.set(key, promise)
   return promise
 }

@@ -59,6 +59,9 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 .monthly-export-control { position: relative; display: inline-flex; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; }
 .monthly-export-control > button { pointer-events: auto; }
 .monthly-export-control:has(select) > button { pointer-events: none; }
+.monthly-export-spinner { display: block; width: 24px; height: 24px; animation: monthly-export-spin 800ms linear infinite; }
+@keyframes monthly-export-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .monthly-export-spinner { animation: none; } }
 .monthly-export-control > select {
   position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; margin: 0;
   border: 0; opacity: 0; cursor: pointer; appearance: none; -webkit-appearance: none;

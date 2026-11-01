@@ -65,23 +65,6 @@ it('fails safely when no readable PNG candidate fits the byte limit', async () =
   expect(render).toHaveBeenCalledTimes(4)
 })
 
-it('publishes a ready format before preparing the other format', async () => {
-  const pdf = new File(['pdf'], 'month.pdf', { type: 'application/pdf' })
-  const png = new File(['png'], 'month.png', { type: 'image/png' })
-  let finishPng: ((file: File) => void) | undefined
-  const renderers = {
-    pdf: vi.fn().mockResolvedValue(pdf),
-    png: vi.fn(() => new Promise<File>(resolve => { finishPng = resolve })),
-  }
-  const onFormatReady = vi.fn()
-  const preparation = prepareMonthlyExportFiles(view, renderers, onFormatReady)
-
-  await vi.waitFor(() => expect(onFormatReady).toHaveBeenCalledWith('pdf', pdf))
-  expect(renderers.png).toHaveBeenCalledOnce()
-  finishPng?.(png)
-  await expect(preparation).resolves.toEqual({ pdf, png, failures: [] })
-})
-
 it('reuses the last three prepared month/location documents and evicts the least recently used', async () => {
   const renderers = {
     pdf: vi.fn((_view: MonthlyExportView, _month: string, filename: string) => Promise.resolve(new File(['pdf'], filename, { type: 'application/pdf' }))),
