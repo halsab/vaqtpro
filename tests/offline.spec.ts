@@ -38,6 +38,12 @@ test('сохранённое расписание и поиск города р�
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expectSchedule(page, 7)
+    await page.locator('#home-qibla').click()
+    await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+    await expect(page.getByText('152°')).toBeVisible()
+    await expect(page.getByText(/Живое направление телефона пока недоступно/)).toBeVisible()
+    await page.getByRole('button', { name: 'Назад' }).click()
+    await expectSchedule(page, 7)
     await page.locator('#home-settings').click()
     await expect(page.getByRole('button', { name: 'Данные и конфиденциальность' })).toBeVisible()
     await page.goBack()

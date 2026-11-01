@@ -16,6 +16,11 @@ type EventCountdownParams = { event: string; count: number }
 type FastingDurationParams = { hours: number; minutes: number }
 type PercentParams = { percent: number }
 type FastingEndpointsParams = { first: string; second: string }
+type QiblaDialDescriptionParams = { azimuth: number }
+type QiblaLocationAccuracyParams = { meters: number }
+type QiblaPlaceSourceParams = { source: string }
+type QiblaOriginBearingUncertaintyParams = { degrees: string }
+type QiblaLocationRecordedAtParams = { value: string }
 
 export const RU_MESSAGES = Object.freeze({
   screenLoadFailed: 'Не удалось открыть экран. Перезапустите приложение и попробуйте снова.',
@@ -37,6 +42,27 @@ export const RU_MESSAGES = Object.freeze({
   back: 'Назад',
   cancel: 'Отмена',
   settings: 'Настройки',
+  qiblaCompass: 'Компас киблы',
+  qiblaTitle: 'Направление на киблу',
+  qiblaNorth: 'С',
+  qiblaSouth: 'Ю',
+  qiblaEast: 'В',
+  qiblaWest: 'З',
+  qiblaDialDescription: ({ azimuth }: QiblaDialDescriptionParams) => `Указатель на киблу. Азимут ${azimuth} градусов от истинного севера.`,
+  qiblaTrueNorth: 'от истинного севера',
+  qiblaLocationGps: 'GPS-координаты',
+  qiblaLocationCity: 'выбранный город',
+  qiblaPlaceSource: ({ source }: QiblaPlaceSourceParams) => `Источник места: ${source}.`,
+  qiblaLocationAccuracy: ({ meters }: QiblaLocationAccuracyParams) => `Точность геопозиции: около ${meters} м; это не точность компаса.`,
+  qiblaLocationRecordedAt: ({ value }: QiblaLocationRecordedAtParams) => `Время фиксации GPS: ${value}.`,
+  qiblaOriginBearingUncertainty: ({ degrees }: QiblaOriginBearingUncertaintyParams) => `Влияние точности места на азимут: около ±${degrees}°; точность компаса неизвестна.`,
+  qiblaOriginBearingUncertaintyUnbounded: 'Точности места недостаточно для устойчивого азимута; уточните координаты.',
+  qiblaCityAccuracyUnknown: 'Для выбранного города точность текущего местоположения неизвестна.',
+  qiblaStaticMode: 'Показан расчётный азимут относительно истинного севера.',
+  qiblaLiveUnavailable: 'Живое направление телефона пока недоступно: датчик и поворот экрана не проверены на устройствах.',
+  qiblaRefinePlace: 'Уточнить место',
+  qiblaNoValidPlace: 'Выберите место с корректными координатами, чтобы рассчитать азимут.',
+  qiblaDirectionUndefined: 'Для этой точки направление на киблу однозначно не определяется.',
   appBrand: 'VaqtPro',
   selectPlace: 'Выберите место',
   locationPrayerTimesIntro: 'Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.',

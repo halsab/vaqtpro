@@ -184,6 +184,27 @@ describe('VaqtPro', () => {
     view.unmount()
   })
 
+  it('opens the offline Qibla bearing and restores focus without requesting location or sensor permission', async () => {
+    const services = createServices()
+    render(<App services={services} />)
+
+    const compassButton = await screen.findByRole('button', { name: 'Компас киблы' })
+    expect(compassButton).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Настройки' })).toBeVisible()
+    await userEvent.click(compassButton)
+
+    expect(await screen.findByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+    expect(screen.getByText('195°')).toBeVisible()
+    expect(screen.getByText(/выбранный город/)).toBeVisible()
+    expect(screen.getByText(/Живое направление телефона пока недоступно/)).toBeVisible()
+    expect(services.getPosition).not.toHaveBeenCalled()
+    expect(services.getPermission).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
+    expect(await screen.findByRole('region', { name: 'Главная' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Настройки' })).toBeVisible()
+  })
+
   it('continues using the calculated snapshot without requesting legacy schedule data', async () => {
     const initialization = deferred<Awaited<ReturnType<AppServices['initialize']>>>()
     const services = createServices({ initialize: vi.fn(() => initialization.promise),

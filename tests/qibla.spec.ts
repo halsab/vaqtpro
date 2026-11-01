@@ -1,0 +1,32 @@
+import { choosePlace, expect, test } from './fixtures'
+
+test('Qibla action fits the compact home toolbar and returns focus in mobile WebKit', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 })
+  await page.goto('./')
+  await choosePlace(page)
+
+  const compass = page.locator('#home-qibla')
+  const settings = page.locator('#home-settings')
+  const [compassBox, settingsBox] = await Promise.all([compass.boundingBox(), settings.boundingBox()])
+  expect(compassBox).not.toBeNull()
+  expect(settingsBox).not.toBeNull()
+  if (!compassBox || !settingsBox) throw new Error('Home actions did not expose layout bounds')
+  expect(compassBox.width).toBe(44)
+  expect(compassBox.height).toBe(44)
+  expect(settingsBox.width).toBe(44)
+  expect(settingsBox.height).toBe(44)
+  expect(compassBox.x).toBeLessThan(settingsBox.x)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await compass.click()
+  await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+  await expect(page.getByText('195°')).toBeVisible()
+  await expect(page.getByText('от истинного севера', { exact: true })).toBeVisible()
+  await page.goBack()
+  await expect(page.getByRole('region', { name: 'Главная' })).toBeVisible()
+  await expect(compass).toBeFocused()
+  await page.goForward()
+  await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(compass).toBeFocused()
+})
