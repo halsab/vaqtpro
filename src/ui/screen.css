@@ -211,6 +211,8 @@ html[data-input='pointer'] .select-field { outline: none; }
 .qibla-screen-content { display: grid; grid-template-rows: minmax(0, 1fr); place-items: stretch; padding-top: 0; padding-bottom: 0; }
 .qibla-screen { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; width: 100%; min-width: 0; min-height: 0; padding-block: 8px; }
 .qibla-dial { position: relative; width: min(100%, 72dvh, 640px); max-height: 100%; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--text-secondary) 42%, transparent); border-radius: 50%; }
+.qibla-rose { position: absolute; inset: 0; transform: rotate(var(--qibla-rose-angle, 0deg)); }
+.qibla-dial:not([data-live='true']) .qibla-rose { visibility: hidden; }
 .qibla-cardinal { position: absolute; z-index: 1; color: var(--text-secondary); font: var(--font-footnote); line-height: 1; }
 .qibla-cardinal-north { top: 8px; left: 50%; transform: translateX(-50%); }
 .qibla-cardinal-east { top: 50%; right: 8px; transform: translateY(-50%); }

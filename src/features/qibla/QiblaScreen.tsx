@@ -60,7 +60,7 @@ function deriveRelativePointer(
   model: WmmResult,
   bearing: QiblaBearing,
   originUncertainty: BearingOriginUncertainty,
-): { kind: 'direction'; relativeDegrees: number } | { kind: 'unavailable'; reason: 'model-unavailable' | 'blackout' | 'bearing' | 'uncertainty' | 'tilt' | 'heading' } {
+): { kind: 'direction'; relativeDegrees: number; northRotationDegrees: number } | { kind: 'unavailable'; reason: 'model-unavailable' | 'blackout' | 'bearing' | 'uncertainty' | 'tilt' | 'heading' } {
   if (model.kind !== 'calculated') return { kind: 'unavailable', reason: 'model-unavailable' }
   if (model.horizontalIntensityNt < 2000) return { kind: 'unavailable', reason: 'blackout' }
   if (bearing.kind !== 'bearing') return { kind: 'unavailable', reason: 'bearing' }
@@ -69,7 +69,8 @@ function deriveRelativePointer(
   const trueHeading = toTrueHeading(reading.headingMagneticDegrees, reading.northReference, model.declinationEastDegrees)
   if (trueHeading.kind !== 'true-heading') return { kind: 'unavailable', reason: 'heading' }
   const relativeDegrees = qiblaRelativeAngle(bearing.azimuth, trueHeading.degrees)
-  return relativeDegrees === null ? { kind: 'unavailable', reason: 'heading' } : { kind: 'direction', relativeDegrees }
+  return relativeDegrees === null ? { kind: 'unavailable', reason: 'heading' }
+    : { kind: 'direction', relativeDegrees, northRotationDegrees: -trueHeading.degrees }
 }
 
 function orientationIssue(status: OrientationStatus, reason: CompassState['reason'], t: ReturnType<typeof useLocalization>['t']): string | null {
@@ -111,8 +112,10 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const session = useRef<ReturnType<typeof createOrientationSession> | null>(null)
   const traceRef = useRef<QiblaDiagnosticTrace | null>(null)
   const pointerRef = useRef<HTMLSpanElement>(null)
+  const roseRef = useRef<HTMLDivElement>(null)
   const frameRequest = useRef<number | null>(null)
   const pendingPointerAngle = useRef(0)
+  const pendingNorthRotation = useRef(0)
   const pointerAngle = useRef<number | null>(null)
   const unwrappedPointerAngle = useRef(0)
   const latestReading = useRef<OrientationReading | null>(null)
@@ -143,7 +146,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const bearingRef = useRef<QiblaBearing>(bearing)
   const uncertaintyRef = useRef<BearingOriginUncertainty>(originUncertainty)
 
-  const queuePointer = (relativeDegrees: number) => {
+  const queuePointer = (relativeDegrees: number, northRotationDegrees: number) => {
     const next = wrapSigned(relativeDegrees)
     const previous = pointerAngle.current
     unwrappedPointerAngle.current = previous === null
@@ -151,10 +154,12 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       : unwrappedPointerAngle.current + shortestAngleDelta(previous, next)
     pointerAngle.current = next
     pendingPointerAngle.current = unwrappedPointerAngle.current
+    pendingNorthRotation.current = northRotationDegrees
     if (frameRequest.current !== null) return
     const handle = window.requestAnimationFrame(() => {
       if (frameRequest.current === handle) frameRequest.current = null
       if (pointerRef.current) pointerRef.current.style.setProperty('--qibla-angle', `${pendingPointerAngle.current}deg`)
+      if (roseRef.current) roseRef.current.style.setProperty('--qibla-rose-angle', `${pendingNorthRotation.current}deg`)
     })
     frameRequest.current = handle
   }
@@ -170,6 +175,8 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     frameRequest.current = null
     pointerAngle.current = null
     unwrappedPointerAngle.current = 0
+    pendingNorthRotation.current = 0
+    roseRef.current?.style.setProperty('--qibla-rose-angle', '0deg')
     publishPointerVisibility(false)
   }, [publishPointerVisibility])
 
@@ -229,7 +236,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       publishCompassState({ status, reason })
       return
     }
-    queuePointer(derived.relativeDegrees)
+    queuePointer(derived.relativeDegrees, derived.northRotationDegrees)
     publishPointerVisibility(true)
     scheduleAccessibleDirection(derived.relativeDegrees)
     const reason = modelRef.current.kind === 'calculated' && modelRef.current.horizontalIntensityNt < 6000 ? 'caution' : null
@@ -362,11 +369,13 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     </div> : undefined}
     contentClassName="qibla-screen-content">
     <div className="qibla-screen">
-      <div className="qibla-dial" role="img" aria-label={dialLabel}>
-        <span className="qibla-cardinal qibla-cardinal-north" aria-hidden="true">{t('qiblaNorth')}</span>
-        <span className="qibla-cardinal qibla-cardinal-east" aria-hidden="true">{t('qiblaEast')}</span>
-        <span className="qibla-cardinal qibla-cardinal-south" aria-hidden="true">{t('qiblaSouth')}</span>
-        <span className="qibla-cardinal qibla-cardinal-west" aria-hidden="true">{t('qiblaWest')}</span>
+      <div className="qibla-dial" data-live={pointerVisible || undefined} role="img" aria-label={dialLabel}>
+        <div ref={roseRef} className="qibla-rose" aria-hidden="true">
+          <span className="qibla-cardinal qibla-cardinal-north">{t('qiblaNorth')}</span>
+          <span className="qibla-cardinal qibla-cardinal-east">{t('qiblaEast')}</span>
+          <span className="qibla-cardinal qibla-cardinal-south">{t('qiblaSouth')}</span>
+          <span className="qibla-cardinal qibla-cardinal-west">{t('qiblaWest')}</span>
+        </div>
         <span ref={pointerRef} className="qibla-pointer" data-visible={pointerVisible || undefined} aria-hidden="true" />
         <span className="qibla-center" aria-hidden="true" />
       </div>

@@ -185,6 +185,8 @@ describe('VaqtPro', () => {
   })
 
   it('opens the offline Qibla bearing and restores focus without requesting location or sensor permission', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('iPhone')
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone)')
     const services = createServices()
     render(<App services={services} />)
 

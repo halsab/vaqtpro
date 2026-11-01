@@ -102,6 +102,7 @@ describe('QiblaScreen orientation presentation', () => {
     const pointer = document.querySelector('.qibla-pointer')
     expect(pointer).toHaveAttribute('data-visible', 'true')
     expect(pointer?.getAttribute('style')).toMatch(/--qibla-angle:/)
+    expect(document.querySelector('.qibla-rose')?.getAttribute('style')).toMatch(/--qibla-rose-angle:/)
     const liveRegion = document.querySelector('.qibla-screen .sr-only[aria-live="polite"]')
     expect(liveRegion).toHaveTextContent(/Поверните телефон (налево|направо)|Кибла позади/)
     expect(liveRegion).toHaveClass('sr-only')

@@ -1,5 +1,6 @@
 import { DEFAULT_CALENDAR_PREFERENCES, restoreCalendarPreferences, supportsHijriCalendar, type CalendarPreferences } from './domain/calendar'
 import { DateScreen } from './features/calendar/DateScreen'
+import { isDesktopPlatform } from './platform/devicePlatform'
 import {
   useCallback,
   useEffect,
@@ -833,13 +834,13 @@ export function App({
             top={<AppHeader locationButtonRef={locationButtonRef} locationLabel={homeLocationLabel} locationTime={locationTime} selectedDate={selectedDate}
               calendarPreferences={calendarPreferences} onOpenLocation={openLocationDialog} onOpenDate={() => openScreen('date')} />}
             actions={<div className="home-toolbar-actions">
-              <IconActionButton id="home-qibla" label={t('qiblaCompass')} title={t('qiblaCompass')} onClick={() => openScreen('qibla')}>
+              {!isDesktopPlatform(navigator) ? <IconActionButton id="home-qibla" label={t('qiblaCompass')} title={t('qiblaCompass')} onClick={() => openScreen('qibla')}>
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.5" />
                   <path d="m14.7 9.3-1.8 4.05-3.6 1.35 1.35-3.6 4.05-1.8Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
                   <path d="M12 3.75v1.5M20.25 12h-1.5M12 20.25v-1.5M3.75 12h1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
                 </svg>
-              </IconActionButton>
+              </IconActionButton> : null}
               <IconActionButton id="home-settings" ref={settingsButtonRef} label={t('settings')} title={t('settings')} onClick={openSettingsDialog}>
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M12 3.75 19.15 7.9v8.2L12 20.25 4.85 16.1V7.9L12 3.75Z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round" />
