@@ -16,7 +16,9 @@ export function wrap360(degrees: number): number {
 }
 
 export function wrapSigned(degrees: number): number {
-  return ((degrees + 540) % 360) - 180
+  if (!Number.isFinite(degrees)) return Number.NaN
+  const normalized = ((degrees % 360) + 360) % 360
+  return normalized >= 180 ? normalized - 360 : normalized
 }
 
 export function shortestAngleDelta(from: number, to: number): number {

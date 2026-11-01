@@ -76,6 +76,8 @@ describe('circular angles', () => {
     expect(shortestAngleDelta(359, 1)).toBe(2)
     expect(shortestAngleDelta(1, 359)).toBe(-2)
     expect(wrapSigned(180)).toBe(-180)
+    expect(wrapSigned(-541)).toBe(179)
+    expect(wrapSigned(541)).toBe(-179)
   })
 
   it('rounds azimuth through 360 to zero and never renders small uncertainty as exact zero', () => {

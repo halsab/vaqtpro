@@ -43,6 +43,7 @@ describe('Qibla orientation browser adapters', () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
   })
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
@@ -133,6 +134,28 @@ describe('Qibla orientation browser adapters', () => {
       alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 43, webkitCompassAccuracy: 7,
     }))
     expect(reports.at(-1)).toMatchObject({ status: 'live-unverified', reading: { accuracyDegrees: 7, headingMagneticDegrees: 43 } })
+    session.stop()
+  })
+
+  it('times out while WebKit calibration stays invalid and retries without duplicating readings', async () => {
+    vi.useFakeTimers()
+    const requestPermission = vi.fn().mockResolvedValue('granted')
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    await session.enableFromGesture()
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 42, webkitCompassAccuracy: -1,
+    }))
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(reports.at(-1)).toBe('timeout')
+
+    await session.enableFromGesture()
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 43, webkitCompassAccuracy: 7,
+    }))
+    expect(reports.filter(status => status === 'live-unverified')).toHaveLength(1)
+    expect(requestPermission).toHaveBeenCalledOnce()
     session.stop()
   })
 

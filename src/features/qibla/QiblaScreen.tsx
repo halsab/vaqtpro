@@ -1,234 +1,378 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import type { Place } from '../../domain/place'
-import { calculateQiblaBearing, estimateBearingOriginUncertainty, formatAngularUncertainty, roundAzimuthForDisplay, wrap360 } from '../../domain/qibla'
+import { calculateQiblaBearing, estimateBearingOriginUncertainty, roundAzimuthForDisplay, shortestAngleDelta, wrap360, wrapSigned } from '../../domain/qibla'
+import type { BearingOriginUncertainty, QiblaBearing } from '../../domain/qibla'
 import { qiblaRelativeAngle, toTrueHeading } from '../../domain/magneticHeading'
 import { calculateWmm2025 } from '../../domain/wmm2025'
-import { circularExponentialStep, createOrientationSession, type OrientationStatus } from '../../platform/qiblaOrientation'
+import type { WmmResult } from '../../domain/wmm2025'
+import { QiblaHeadingEvidenceGate } from '../../domain/qiblaHeadingEvidence'
+import { createOrientationSession, type OrientationReading, type OrientationStatus } from '../../platform/qiblaOrientation'
+import { createQiblaDiagnosticTrace, qiblaDiagnosticsRequested, type QiblaDiagnosticTrace } from '../../platform/qiblaDiagnostics'
 import { useLocalization } from '../../localization'
 import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
 import { formatRelativeGuidance } from './relativeGuidance'
 
-type OrientationView = {
-  status: OrientationStatus
-  accuracy: number | null
-  reason: 'blackout' | 'caution' | 'model-unavailable' | null
+type CompassState = { status: OrientationStatus; reason: 'blackout' | 'caution' | 'model-unavailable' | null }
+
+const INITIAL_COMPASS_STATE: CompassState = { status: 'idle', reason: null }
+const ACCESSIBLE_ANNOUNCEMENT_INTERVAL_MS = 2500
+
+function decimalYearUtc(timestamp: number): number {
+  const now = new Date(timestamp)
+  const year = now.getUTCFullYear()
+  const start = Date.UTC(year, 0, 1)
+  return year + (timestamp - start) / (Date.UTC(year + 1, 0, 1) - start)
 }
 
-const INITIAL_ORIENTATION: OrientationView = { status: 'idle', accuracy: null, reason: null }
-const ANNOUNCEMENT_INTERVAL_MS = 2500
+function useModelTimestamp() {
+  const [timestamp, setTimestamp] = useState(() => Date.now())
 
-export function QiblaScreen({ place, onBack, onOpenLocation }: { place: Place | null; onBack: () => void; onOpenLocation: () => void }) {
-  const { t, locale } = useLocalization()
-  const [orientation, setOrientation] = useState<OrientationView>(INITIAL_ORIENTATION)
-  const [relativeAnnouncement, setRelativeAnnouncement] = useState('')
+  useEffect(() => {
+    let timer = 0
+    const scheduleMidnightRefresh = () => {
+      window.clearTimeout(timer)
+      const now = Date.now()
+      const date = new Date(now)
+      const nextMidnight = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1)
+      timer = window.setTimeout(refresh, Math.max(1, nextMidnight - now + 10))
+    }
+    const refresh = () => {
+      setTimestamp(Date.now())
+      scheduleMidnightRefresh()
+    }
+    window.addEventListener('pageshow', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    scheduleMidnightRefresh()
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pageshow', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [])
+
+  return timestamp
+}
+
+function deriveRelativePointer(
+  reading: OrientationReading,
+  model: WmmResult,
+  bearing: QiblaBearing,
+  originUncertainty: BearingOriginUncertainty,
+): { kind: 'direction'; relativeDegrees: number } | { kind: 'unavailable'; reason: 'model-unavailable' | 'blackout' | 'bearing' | 'uncertainty' | 'tilt' | 'heading' } {
+  if (model.kind !== 'calculated') return { kind: 'unavailable', reason: 'model-unavailable' }
+  if (model.horizontalIntensityNt < 2000) return { kind: 'unavailable', reason: 'blackout' }
+  if (bearing.kind !== 'bearing') return { kind: 'unavailable', reason: 'bearing' }
+  if (originUncertainty.kind === 'unbounded') return { kind: 'unavailable', reason: 'uncertainty' }
+  if (!Number.isFinite(reading.horizontalProjection) || reading.horizontalProjection < 0.35) return { kind: 'unavailable', reason: 'tilt' }
+  const trueHeading = toTrueHeading(reading.headingMagneticDegrees, reading.northReference, model.declinationEastDegrees)
+  if (trueHeading.kind !== 'true-heading') return { kind: 'unavailable', reason: 'heading' }
+  const relativeDegrees = qiblaRelativeAngle(bearing.azimuth, trueHeading.degrees)
+  return relativeDegrees === null ? { kind: 'unavailable', reason: 'heading' } : { kind: 'direction', relativeDegrees }
+}
+
+function orientationIssue(status: OrientationStatus, reason: CompassState['reason'], t: ReturnType<typeof useLocalization>['t']): string | null {
+  if (reason === 'blackout') return t('qiblaMagneticBlackout')
+  if (reason === 'model-unavailable') return t('qiblaMagneticModelUnavailable')
+  switch (status) {
+    case 'acquiring': return t('qiblaCompassConnecting')
+    case 'calibrating': return t('qiblaOrientationCalibrating')
+    case 'tilt': return t('qiblaOrientationTilt')
+    case 'tilt-unknown': return t('qiblaOrientationTiltUnknown')
+    case 'suspect': return t('qiblaOrientationSuspect')
+    case 'degraded': return t('qiblaOrientationDegraded')
+    case 'denied': return t('qiblaOrientationDenied')
+    case 'restricted': return t('qiblaOrientationRestricted')
+    case 'unsupported': return t('qiblaOrientationUnsupported')
+    case 'security': return t('qiblaOrientationSecurity')
+    case 'frame-unavailable': return t('qiblaOrientationFrameUnavailable')
+    case 'null-reading': return t('qiblaOrientationNullReading')
+    case 'timeout': return t('qiblaOrientationTimeout')
+    default: return null
+  }
+}
+
+function shouldOfferRetry(status: OrientationStatus): boolean {
+  return ['calibrating', 'tilt', 'tilt-unknown', 'suspect', 'degraded', 'denied', 'restricted',
+    'frame-unavailable', 'null-reading', 'timeout'].includes(status)
+}
+
+export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: () => void }) {
+  const { t } = useLocalization()
+  const tRef = useRef(t)
+  const modelTimestamp = useModelTimestamp()
+  const [compass, setCompass] = useState<CompassState>(INITIAL_COMPASS_STATE)
+  const [pointerVisible, setPointerVisible] = useState(false)
+  const [accessibleRelative, setAccessibleRelative] = useState('')
+  const compassStateRef = useRef(INITIAL_COMPASS_STATE)
+  const pointerVisibleRef = useRef(false)
+  const accessibleRelativeRef = useRef('')
   const session = useRef<ReturnType<typeof createOrientationSession> | null>(null)
-  const dialRef = useRef<HTMLDivElement>(null)
+  const traceRef = useRef<QiblaDiagnosticTrace | null>(null)
+  const pointerRef = useRef<HTMLSpanElement>(null)
   const frameRequest = useRef<number | null>(null)
-  const pendingRotation = useRef(0)
-  const filteredHeading = useRef<number | null>(null)
-  const lastFilterTime = useRef(0)
-  const lastSensorFrame = useRef<{ source: string; screenAngle: number } | null>(null)
+  const pendingPointerAngle = useRef(0)
+  const pointerAngle = useRef<number | null>(null)
+  const unwrappedPointerAngle = useRef(0)
+  const latestReading = useRef<OrientationReading | null>(null)
+  const lastSource = useRef<string | null>(null)
+  const continuity = useRef(new QiblaHeadingEvidenceGate())
+  const lastAnnouncedBucket = useRef<number | null>(null)
   const lastAnnouncementAt = useRef(Number.NEGATIVE_INFINITY)
   const pendingAnnouncement = useRef<string | null>(null)
+  const pendingAnnouncementBucket = useRef<number | null>(null)
   const announcementTimer = useRef<number | null>(null)
+  const processReadingRef = useRef<(reading: OrientationReading) => void>(() => {})
+  const previousPlace = useRef(place)
 
-  const wmm = useMemo(() => {
-    if (!place) return { kind: 'invalid-input' as const }
-    const now = new Date()
-    const year = now.getUTCFullYear()
-    const start = Date.UTC(year, 0, 1)
-    const end = Date.UTC(year + 1, 0, 1)
-    return calculateWmm2025({ year: year + (now.getTime() - start) / (end - start),
-      latitude: place.latitude, longitude: place.longitude, altitudeKm: 0 })
-  }, [place])
-  const wmmRef = useRef(wmm)
+  useLayoutEffect(() => { tRef.current = t }, [t])
 
-  const timestampValid = useMemo(() => place !== null && Number.isFinite(place.timestamp)
-    && Number.isFinite(new Date(place.timestamp).getTime()), [place])
+  const model = useMemo(() => place
+    ? calculateWmm2025({ year: decimalYearUtc(modelTimestamp), latitude: place.latitude, longitude: place.longitude, altitudeKm: 0 })
+    : { kind: 'invalid-input' as const }, [modelTimestamp, place])
+  const timestampValid = place !== null && Number.isFinite(place.timestamp) && Number.isFinite(new Date(place.timestamp).getTime())
   const bearing = useMemo(() => place && timestampValid
-    ? calculateQiblaBearing(place) : { kind: 'undefined' as const, reason: 'invalid-position' as const }, [place, timestampValid])
+    ? calculateQiblaBearing(place)
+    : { kind: 'undefined' as const, reason: 'invalid-position' as const }, [place, timestampValid])
   const originUncertainty = useMemo(() => place && timestampValid
-    ? estimateBearingOriginUncertainty(place) : { kind: 'unknown' as const }, [place, timestampValid])
-  const bearingRef = useRef(bearing)
-  const originUncertaintyRef = useRef(originUncertainty)
+    ? estimateBearingOriginUncertainty(place)
+    : { kind: 'unknown' as const }, [place, timestampValid])
 
-  useEffect(() => {
-    wmmRef.current = wmm
-    bearingRef.current = bearing
-    originUncertaintyRef.current = originUncertainty
-  }, [bearing, originUncertainty, wmm])
+  const modelRef = useRef(model)
+  const bearingRef = useRef<QiblaBearing>(bearing)
+  const uncertaintyRef = useRef<BearingOriginUncertainty>(originUncertainty)
 
-  useEffect(() => {
-    let active = true
-    const publishStatus = (next: OrientationView) => {
-      if (!active) return
-      setOrientation(previous => previous.status === next.status && previous.reason === next.reason
-        && (previous.status === 'live-unverified' || previous.accuracy === next.accuracy) ? previous : next)
+  const queuePointer = (relativeDegrees: number) => {
+    const next = wrapSigned(relativeDegrees)
+    const previous = pointerAngle.current
+    unwrappedPointerAngle.current = previous === null
+      ? next
+      : unwrappedPointerAngle.current + shortestAngleDelta(previous, next)
+    pointerAngle.current = next
+    pendingPointerAngle.current = unwrappedPointerAngle.current
+    if (frameRequest.current !== null) return
+    const handle = window.requestAnimationFrame(() => {
+      if (frameRequest.current === handle) frameRequest.current = null
+      if (pointerRef.current) pointerRef.current.style.setProperty('--qibla-angle', `${pendingPointerAngle.current}deg`)
+    })
+    frameRequest.current = handle
+  }
+
+  const publishPointerVisibility = useCallback((visible: boolean) => {
+    if (pointerVisibleRef.current === visible) return
+    pointerVisibleRef.current = visible
+    setPointerVisible(visible)
+  }, [])
+
+  const clearPointer = useCallback(() => {
+    if (frameRequest.current !== null) window.cancelAnimationFrame(frameRequest.current)
+    frameRequest.current = null
+    pointerAngle.current = null
+    unwrappedPointerAngle.current = 0
+    publishPointerVisibility(false)
+  }, [publishPointerVisibility])
+
+  const clearAccessibleDirection = useCallback(() => {
+    pendingAnnouncement.current = null
+    pendingAnnouncementBucket.current = null
+    lastAnnouncedBucket.current = null
+    if (announcementTimer.current !== null) window.clearTimeout(announcementTimer.current)
+    announcementTimer.current = null
+    if (accessibleRelativeRef.current) {
+      accessibleRelativeRef.current = ''
+      setAccessibleRelative('')
     }
-    const queueDialRotation = (heading: number) => {
-      pendingRotation.current = wrap360(-heading)
-      if (frameRequest.current !== null) return
-      const handle = window.requestAnimationFrame(() => {
-        if (frameRequest.current === handle) frameRequest.current = null
-        if (active && dialRef.current) dialRef.current.style.transform = `rotate(${pendingRotation.current}deg)`
-      })
-      frameRequest.current = handle
-    }
-    const flushAnnouncement = () => {
+  }, [])
+
+  const scheduleAccessibleDirection = (relativeDegrees: number) => {
+    const bucket = Math.round(wrapSigned(relativeDegrees) / 15) * 15
+    if (bucket === lastAnnouncedBucket.current && pendingAnnouncementBucket.current === null) return
+    pendingAnnouncement.current = formatRelativeGuidance(bucket, tRef.current)
+    pendingAnnouncementBucket.current = bucket
+    const remaining = ACCESSIBLE_ANNOUNCEMENT_INTERVAL_MS - (performance.now() - lastAnnouncementAt.current)
+    const publish = () => {
       announcementTimer.current = null
-      if (!active) return
       const next = pendingAnnouncement.current
+      const nextBucket = pendingAnnouncementBucket.current
       pendingAnnouncement.current = null
-      if (next) {
-        lastAnnouncementAt.current = performance.now()
-        setRelativeAnnouncement(next)
+      pendingAnnouncementBucket.current = null
+      if (!next || nextBucket === null) return
+      lastAnnouncementAt.current = performance.now()
+      lastAnnouncedBucket.current = nextBucket
+      if (accessibleRelativeRef.current !== next) {
+        accessibleRelativeRef.current = next
+        setAccessibleRelative(next)
       }
     }
-    const queueAnnouncement = (text: string) => {
-      if (!active || !text) return
-      pendingAnnouncement.current = text
-      const remaining = ANNOUNCEMENT_INTERVAL_MS - (performance.now() - lastAnnouncementAt.current)
-      if (remaining <= 0) {
-        if (announcementTimer.current !== null) window.clearTimeout(announcementTimer.current)
-        announcementTimer.current = null
-        pendingAnnouncement.current = null
-        lastAnnouncementAt.current = performance.now()
-        setRelativeAnnouncement(text)
-      } else if (announcementTimer.current === null) {
-        announcementTimer.current = window.setTimeout(flushAnnouncement, remaining)
-      }
-    }
-    const resetLivePresentation = (status: OrientationStatus, reason: OrientationView['reason'] = null) => {
-      filteredHeading.current = null
-      lastFilterTime.current = 0
-      lastSensorFrame.current = null
-      queueDialRotation(0)
-      pendingAnnouncement.current = null
-      if (announcementTimer.current !== null) {
-        window.clearTimeout(announcementTimer.current)
-        announcementTimer.current = null
-      }
-      setRelativeAnnouncement(previous => previous ? '' : previous)
-      publishStatus({ status, accuracy: null, reason })
-    }
+    if (remaining <= 0) publish()
+    else if (announcementTimer.current === null) announcementTimer.current = window.setTimeout(publish, remaining)
+  }
 
-    const currentSession = createOrientationSession(window, (status, reading) => {
+  const publishCompassState = useCallback((next: CompassState) => {
+    const previous = compassStateRef.current
+    if (previous.status === next.status && previous.reason === next.reason) return
+    compassStateRef.current = next
+    setCompass(next)
+  }, [])
+
+  const processReading = (reading: OrientationReading) => {
+    const derived = deriveRelativePointer(reading, modelRef.current, bearingRef.current, uncertaintyRef.current)
+    if (derived.kind !== 'direction') {
+      clearPointer()
+      clearAccessibleDirection()
+      const status: OrientationStatus = derived.reason === 'tilt' ? 'tilt' : 'degraded'
+      const reason: CompassState['reason'] = derived.reason === 'blackout' ? 'blackout'
+        : derived.reason === 'model-unavailable' ? 'model-unavailable'
+          : modelRef.current.kind === 'calculated' && modelRef.current.horizontalIntensityNt < 6000 ? 'caution' : null
+      traceRef.current?.record({ event: 'status', status, source: reading.source, modelValid: modelRef.current.kind === 'calculated' })
+      publishCompassState({ status, reason })
+      return
+    }
+    queuePointer(derived.relativeDegrees)
+    publishPointerVisibility(true)
+    scheduleAccessibleDirection(derived.relativeDegrees)
+    const reason = modelRef.current.kind === 'calculated' && modelRef.current.horizontalIntensityNt < 6000 ? 'caution' : null
+    publishCompassState({ status: 'live-unverified', reason })
+    traceRef.current?.record({
+      event: 'reading', source: reading.source, magneticHeadingDegrees: reading.headingMagneticDegrees,
+      acceptedHeadingDegrees: wrap360(reading.headingMagneticDegrees + (modelRef.current.kind === 'calculated' ? modelRef.current.declinationEastDegrees : 0)),
+      displayedRelativeDegrees: derived.relativeDegrees, screenAngleDegrees: reading.screenAngle,
+      reportedAccuracyDegrees: reading.accuracyDegrees, horizontalProjection: reading.horizontalProjection,
+      declinationEastDegrees: modelRef.current.kind === 'calculated' ? modelRef.current.declinationEastDegrees : null,
+      modelValid: modelRef.current.kind === 'calculated',
+    })
+  }
+
+  useLayoutEffect(() => {
+    const placeChanged = previousPlace.current !== place
+    modelRef.current = model
+    bearingRef.current = bearing
+    uncertaintyRef.current = originUncertainty
+    if (placeChanged) traceRef.current?.record({ event: 'place-change' })
+    traceRef.current?.record({ event: 'model-change', modelValid: model.kind === 'calculated',
+      declinationEastDegrees: model.kind === 'calculated' ? model.declinationEastDegrees : null })
+    previousPlace.current = place
+  }, [bearing, model, originUncertainty, place])
+
+  useLayoutEffect(() => { processReadingRef.current = processReading })
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (latestReading.current) processReadingRef.current(latestReading.current)
+      else if (bearingRef.current.kind !== 'bearing' || uncertaintyRef.current.kind === 'unbounded') {
+        clearPointer()
+        clearAccessibleDirection()
+      }
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [bearing, clearAccessibleDirection, clearPointer, model, originUncertainty, place])
+
+  useEffect(() => {
+    const trace = createQiblaDiagnosticTrace(window, qiblaDiagnosticsRequested(window))
+    traceRef.current = trace
+    let active = true
+    const setIssue = (status: OrientationStatus) => {
+      if (!active) return
+      if (status !== 'suspect') {
+        continuity.current.reset()
+        latestReading.current = null
+        lastSource.current = null
+      } else latestReading.current = null
+      clearPointer()
+      clearAccessibleDirection()
+      trace.record({ event: 'status', status })
+      publishCompassState({ status, reason: null })
+    }
+    const orientationSession = createOrientationSession(window, (status, reading) => {
       if (!active) return
       if (!reading) {
-        if (status !== 'live-unverified') resetLivePresentation(status)
+        setIssue(status)
         return
       }
-      const model = wmmRef.current
-      if (model.kind !== 'calculated') {
-        resetLivePresentation('degraded', 'model-unavailable')
+      if (reading.horizontalProjection < 0.35) {
+        setIssue('tilt')
         return
       }
-      if (model.horizontalIntensityNt < 2000) {
-        resetLivePresentation('degraded', 'blackout')
+      const decision = continuity.current.push({
+        headingDegrees: reading.headingMagneticDegrees, timeMs: reading.sampleTimeMs,
+        source: reading.source, screenAngle: reading.screenAngle,
+        motionRateDegreesPerSecond: reading.motionRateDegreesPerSecond,
+        reportedAccuracyDegrees: reading.accuracyDegrees,
+      })
+      if (decision.kind === 'invalid') {
+        setIssue('degraded')
         return
       }
-      const trueHeading = toTrueHeading(reading.headingMagneticDegrees, reading.northReference, model.declinationEastDegrees)
-      if (trueHeading.kind !== 'true-heading' || bearingRef.current.kind !== 'bearing'
-        || originUncertaintyRef.current.kind === 'unbounded') {
-        resetLivePresentation('degraded')
+      if (decision.kind === 'suspect') {
+        latestReading.current = null
+        clearPointer()
+        clearAccessibleDirection()
+        trace.record({ event: 'status', status: 'suspect', source: reading.source,
+          magneticHeadingDegrees: reading.headingMagneticDegrees, screenAngleDegrees: reading.screenAngle,
+          reportedAccuracyDegrees: reading.accuracyDegrees, horizontalProjection: reading.horizontalProjection,
+          modelValid: modelRef.current.kind === 'calculated' })
+        publishCompassState({ status: 'suspect', reason: null })
         return
       }
-      const now = performance.now()
-      const frameChanged = lastSensorFrame.current !== null
-        && (lastSensorFrame.current.source !== reading.source || lastSensorFrame.current.screenAngle !== reading.screenAngle)
-      const filtered = filteredHeading.current === null || frameChanged
-        ? wrap360(trueHeading.degrees)
-        : circularExponentialStep(filteredHeading.current, trueHeading.degrees, now - lastFilterTime.current)
-      filteredHeading.current = filtered
-      lastFilterTime.current = now
-      lastSensorFrame.current = { source: reading.source, screenAngle: reading.screenAngle }
-      queueDialRotation(filtered)
-      const relative = qiblaRelativeAngle(bearingRef.current.azimuth, filtered)
-      if (relative !== null) queueAnnouncement(formatRelativeGuidance(relative, t))
-      publishStatus({ status: 'live-unverified', accuracy: reading.accuracyDegrees,
-        reason: model.horizontalIntensityNt < 6000 ? 'caution' : null })
+      latestReading.current = reading
+      if (lastSource.current && lastSource.current !== reading.source) trace.record({ event: 'source-change', source: reading.source })
+      lastSource.current = reading.source
+      processReadingRef.current(reading)
     })
-    session.current = currentSession
+    session.current = orientationSession
+    trace.record({ event: 'status', status: 'idle' })
 
     return () => {
       active = false
-      currentSession.stop()
-      if (session.current === currentSession) session.current = null
-      if (frameRequest.current !== null) {
-        window.cancelAnimationFrame(frameRequest.current)
-        frameRequest.current = null
-      }
-      if (announcementTimer.current !== null) {
-        window.clearTimeout(announcementTimer.current)
-        announcementTimer.current = null
-      }
-      pendingAnnouncement.current = null
+      orientationSession.stop()
+      if (session.current === orientationSession) session.current = null
+      if (frameRequest.current !== null) window.cancelAnimationFrame(frameRequest.current)
+      frameRequest.current = null
+      if (announcementTimer.current !== null) window.clearTimeout(announcementTimer.current)
+      announcementTimer.current = null
+      trace.close()
+      if (traceRef.current === trace) traceRef.current = null
     }
-  }, [t])
+  }, [clearAccessibleDirection, clearPointer, publishCompassState])
 
-  const source = place?.selection === 'gps' ? t('qiblaLocationGps') : t('qiblaLocationCity')
-  const orientationMessage = (() => {
-    switch (orientation.status) {
-      case 'idle': return t('qiblaOrientationIdle')
-      case 'acquiring': return t('qiblaOrientationAcquiring')
-      case 'live-unverified': return t('qiblaOrientationLiveUnverified')
-      case 'calibrating': return t('qiblaOrientationCalibrating')
-      case 'tilt': return t('qiblaOrientationTilt')
-      case 'degraded': return t('qiblaOrientationDegraded')
-      case 'denied': return t('qiblaOrientationDenied')
-      case 'restricted': return t('qiblaOrientationRestricted')
-      case 'unsupported': return t('qiblaOrientationUnsupported')
-      case 'security': return t('qiblaOrientationSecurity')
-      case 'frame-unavailable': return t('qiblaOrientationFrameUnavailable')
-      case 'null-reading': return t('qiblaOrientationNullReading')
-      case 'timeout': return t('qiblaOrientationTimeout')
-    }
-  })()
-  const recordedAt = place?.selection === 'gps' && Number.isFinite(place.timestamp)
-    && Number.isFinite(new Date(place.timestamp).getTime())
-    ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(place.timestamp))
-    : null
-  const canRetry = orientation.status === 'idle' || orientation.status === 'denied' || orientation.status === 'restricted'
-    || orientation.status === 'degraded' || orientation.status === 'frame-unavailable'
-    || orientation.status === 'timeout' || orientation.status === 'null-reading'
+  const issue = orientationIssue(compass.status, compass.reason, t)
+  const placeIssue = bearing.kind === 'undefined'
+    ? bearing.reason === 'invalid-position' ? t('qiblaPlaceRequiredBrief') : t('qiblaDirectionUndefined')
+    : originUncertainty.kind === 'unbounded' ? t('qiblaPlaceUncertainBrief') : null
+  const visibleIssue = placeIssue ?? issue
+  const bearingLabel = bearing.kind === 'bearing' ? roundAzimuthForDisplay(bearing.azimuth) : null
+  const staticState = !pointerVisible
+  const showInitialAction = compass.status === 'idle' && bearing.kind === 'bearing' && originUncertainty.kind !== 'unbounded'
+  const showRetry = shouldOfferRetry(compass.status)
+  const actionLabel = showInitialAction ? t('qiblaEnableCompass')
+    : compass.status === 'calibrating' || compass.status === 'suspect' || compass.status === 'tilt' || compass.status === 'tilt-unknown'
+      ? t('qiblaCheckCompass') : t('retryAgain')
+  const dialLabel = bearing.kind === 'bearing'
+    ? t('qiblaDialDescription', { azimuth: bearingLabel ?? 0 })
+    : t('qiblaDirectionUndefined')
 
-  return <Screen label={t('qiblaTitle')} top={<BackButton onClick={onBack} />} contentClassName="qibla-screen-content">
+  return <Screen label={t('qiblaTitle')} top={<BackButton onClick={onBack} />}
+    bottom={visibleIssue || showInitialAction || showRetry ? <div className="qibla-recovery">
+      {visibleIssue ? <p role="status">{visibleIssue}</p> : null}
+      {showInitialAction || showRetry ? <ActionButton disabled={compass.status === 'acquiring'} onClick={() => {
+        traceRef.current?.record({ event: 'retry', status: compass.status })
+        void session.current?.enableFromGesture()
+      }}>{compass.status === 'acquiring' ? t('qiblaCompassConnecting') : actionLabel}</ActionButton> : null}
+    </div> : undefined}
+    contentClassName="qibla-screen-content">
     <div className="qibla-screen">
-      <h1>{t('qiblaTitle')}</h1>
-      {bearing.kind === 'bearing' ? <>
-        {originUncertainty.kind === 'unbounded'
-          ? <p className="screen-copy" role="status">{t('qiblaOriginBearingUncertaintyUnbounded')}</p>
-          : <div ref={dialRef} className="qibla-dial" role="img" aria-label={t('qiblaDialDescription', { azimuth: roundAzimuthForDisplay(bearing.azimuth) })}>
-            <span className="qibla-north" aria-hidden="true">{t('qiblaNorth')}</span>
-            <span className="qibla-south" aria-hidden="true">{t('qiblaSouth')}</span>
-            <span className="qibla-east" aria-hidden="true">{t('qiblaEast')}</span>
-            <span className="qibla-west" aria-hidden="true">{t('qiblaWest')}</span>
-            <span className="qibla-pointer" style={{ '--qibla-angle': `${bearing.azimuth}deg` } as CSSProperties} aria-hidden="true" />
-            <span className="qibla-center" aria-hidden="true" />
-          </div>}
-        <p className="qibla-bearing"><span>{roundAzimuthForDisplay(bearing.azimuth)}°</span><span>{t('qiblaTrueNorth')}</span></p>
-      </> : <p className="screen-copy" role="status">{t(bearing.reason === 'invalid-position' ? 'qiblaNoValidPlace' : 'qiblaDirectionUndefined')}</p>}
-      <div className="qibla-status">
-        <p>{t('qiblaPlaceSource', { source })}</p>
-        {place?.selection === 'gps' && place.accuracy !== null
-          ? <p>{t('qiblaLocationAccuracy', { meters: Math.round(place.accuracy) })}</p>
-          : place?.selection === 'city' ? <p>{t('qiblaCityAccuracyUnknown')}</p> : null}
-        {recordedAt ? <p>{t('qiblaLocationRecordedAt', { value: recordedAt })}</p> : null}
-        {originUncertainty.kind === 'bounded' && originUncertainty.radiusDegrees > 0 ? <p>{t('qiblaOriginBearingUncertainty', { degrees: formatAngularUncertainty(originUncertainty.radiusDegrees) })}</p>
-          : originUncertainty.kind === 'unbounded' ? <p>{t('qiblaOriginBearingUncertaintyUnbounded')}</p> : null}
-        <p>{t('qiblaStaticMode')}</p>
-        {orientation.status === 'idle' ? <p>{t('qiblaLiveUnavailable')}</p> : <p role="status">{orientationMessage}</p>}
-        <p aria-live="polite" aria-atomic="true" className="qibla-relative-guidance">{relativeAnnouncement}</p>
-        {orientation.reason === 'blackout' ? <p>{t('qiblaMagneticBlackout')}</p> : null}
-        {orientation.reason === 'caution' ? <p>{t('qiblaMagneticCaution')}</p> : null}
-        {orientation.reason === 'model-unavailable' ? <p>{t('qiblaMagneticModelUnavailable')}</p> : null}
-        <p>{t('qiblaWmmAltitudeAssumption')}</p>
-        {orientation.accuracy !== null ? <p>{t('qiblaSensorAccuracy', { degrees: formatAngularUncertainty(orientation.accuracy) })}</p> : null}
-        {canRetry ? <ActionButton onClick={() => { void session.current?.enableFromGesture() }}>{t('qiblaEnableCompass')}</ActionButton> : null}
-        <ActionButton onClick={onOpenLocation}>{t('qiblaRefinePlace')}</ActionButton>
+      <div className="qibla-dial" role="img" aria-label={dialLabel}>
+        <span className="qibla-cardinal qibla-cardinal-north" aria-hidden="true">{t('qiblaNorth')}</span>
+        <span className="qibla-cardinal qibla-cardinal-east" aria-hidden="true">{t('qiblaEast')}</span>
+        <span className="qibla-cardinal qibla-cardinal-south" aria-hidden="true">{t('qiblaSouth')}</span>
+        <span className="qibla-cardinal qibla-cardinal-west" aria-hidden="true">{t('qiblaWest')}</span>
+        <span ref={pointerRef} className="qibla-pointer" data-visible={pointerVisible || undefined} aria-hidden="true" />
+        <span className="qibla-center" aria-hidden="true" />
       </div>
+      {staticState && bearingLabel !== null ? <span className="qibla-static-bearing" aria-hidden="true">{bearingLabel}°</span> : null}
+      <span className="sr-only" aria-live="polite" aria-atomic="true">{accessibleRelative}</span>
+      {compass.status === 'live-unverified' ? <span className="sr-only">{t('qiblaOrientationLiveUnverified')}</span> : null}
     </div>
   </Screen>
 }

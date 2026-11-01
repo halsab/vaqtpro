@@ -2,6 +2,7 @@ import { StrictMode, Profiler, act } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent } from '@testing-library/react'
 
 import { createCityPlace } from '../../domain/place'
 import type { City } from '../../domain/cities'
@@ -13,9 +14,14 @@ const place = createCityPlace({
   id: 551487, name: 'Казань', countryCode: 'RU', admin1Code: '73', admin1Name: 'Татарстан',
   latitude: 55.7946, longitude: 49.1115, population: 1_308_660, timeZone: 'Europe/Moscow',
 } satisfies City, Date.UTC(2026, 0, 1))
+const london = createCityPlace({
+  id: 2643743, name: 'Лондон', countryCode: 'GB', admin1Code: 'ENG', admin1Name: 'England',
+  latitude: 51.5072, longitude: -0.1276, population: 8_982_000, timeZone: 'Europe/London',
+} satisfies City, Date.UTC(2026, 0, 1))
 
 describe('QiblaScreen orientation presentation', () => {
   let frameId: number
+  let sampleTime: number
   let frames: Map<number, FrameRequestCallback>
   let requestFrame: ReturnType<typeof vi.fn>
   let cancelFrame: ReturnType<typeof vi.fn>
@@ -23,11 +29,13 @@ describe('QiblaScreen orientation presentation', () => {
 
   beforeEach(() => {
     frameId = 0
+    sampleTime = 1000
     frames = new Map()
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true })
     Object.defineProperty(window, 'orientation', { configurable: true, writable: true, value: 0 })
     Object.defineProperty(window, 'screen', { configurable: true, value: {} })
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    vi.spyOn(window.performance, 'now').mockImplementation(() => sampleTime)
     requestFrame = vi.fn((callback: FrameRequestCallback) => {
       const id = ++frameId
       frames.set(id, callback)
@@ -42,84 +50,178 @@ describe('QiblaScreen orientation presentation', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  it('uses signed clockwise guidance for right, left, ahead and behind', () => {
+  function dispatchHeading(heading: number, time: number, options: { accuracy?: number; beta?: number | null; gamma?: number | null } = {}) {
+    sampleTime = time
+    act(() => { window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: options.beta === undefined ? 0 : options.beta,
+      gamma: options.gamma === undefined ? 0 : options.gamma, absolute: false,
+      webkitCompassHeading: heading, webkitCompassAccuracy: options.accuracy ?? 6,
+    })) })
+  }
+
+  function flushFrame() {
+    const frame = [...frames.entries()][0]
+    if (!frame) return
+    frames.delete(frame[0])
+    act(() => frame[1](sampleTime))
+  }
+
+  async function activateCompass(user = userEvent.setup()) {
+    await user.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await waitFor(() => expect(requestPermission).toHaveBeenCalledOnce())
+    return user
+  }
+
+  it('shows the offline bearing and Back control without visible title, location controls or direction copy', () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    expect(screen.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Назад' })).toBeVisible()
+    expect(screen.getByRole('img', { name: /Азимут 195 градусов от истинного севера/ })).toBeVisible()
+    expect(screen.getByText('195°')).toBeVisible()
+    expect(screen.queryAllByRole('heading')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Включить компас' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /место|локация|город/i })).toBeNull()
+    expect(screen.queryByText(/Живое направление доступно/)).toBeNull()
+  })
+
+  it('survives StrictMode reinitialization and coalesces fast sensor events into one dial frame without visible instructions', async () => {
+    const user = userEvent.setup()
+    let commits = 0
+    const view = render(<StrictMode><Profiler id="qibla" onRender={() => { commits += 1 }}>
+      <QiblaScreen place={place} onBack={() => {}} />
+    </Profiler></StrictMode>)
+    await activateCompass(user)
+    dispatchHeading(359, sampleTime)
+    flushFrame()
+
+    const pointer = document.querySelector('.qibla-pointer')
+    expect(pointer).toHaveAttribute('data-visible', 'true')
+    expect(pointer?.getAttribute('style')).toMatch(/--qibla-angle:/)
+    const liveRegion = document.querySelector('.qibla-screen .sr-only[aria-live="polite"]')
+    expect(liveRegion).toHaveTextContent(/Поверните телефон (налево|направо)|Кибла позади/)
+    expect(liveRegion).toHaveClass('sr-only')
+    expect(screen.queryByText(/Поверните телефон/)).toBeNull()
+
+    const commitsBeforeBurst = commits
+    const requestCountBeforeBurst = requestFrame.mock.calls.length
+    for (let index = 0; index < 100; index += 1) dispatchHeading(359, sampleTime + 16)
+    expect(requestFrame.mock.calls.length - requestCountBeforeBurst).toBe(1)
+    expect(commits - commitsBeforeBurst).toBeLessThanOrEqual(1)
+    const pendingFrame = [...frames.entries()][0]
+    expect(pendingFrame).toBeDefined()
+    view.unmount()
+    if (!pendingFrame) throw new Error('Expected a pending frame before unmount')
+    expect(cancelFrame).toHaveBeenCalledWith(pendingFrame[0])
+    act(() => pendingFrame[1](sampleTime))
+    expect(document.querySelector('.qibla-dial')).toBeNull()
+  })
+
+  it('hides the needle during an isolated discontinuity, recovers when the heading returns, and retries a sustained ambiguous jump explicitly', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    const user = await activateCompass()
+    dispatchHeading(0, 1000)
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(180, 1050)
+    expect(screen.getByRole('status')).toHaveTextContent(/Проверьте направление компаса/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    dispatchHeading(2, 1100)
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(180, 1150)
+    dispatchHeading(180, 1155)
+    expect(screen.getByRole('button', { name: 'Проверить компас' })).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    await user.click(screen.getByRole('button', { name: 'Проверить компас' }))
+    dispatchHeading(180, 1300)
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(requestPermission).toHaveBeenCalledOnce()
+  })
+
+  it('accepts a fast turn when contemporaneous motion evidence corroborates it', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    flushFrame()
+    sampleTime = 1050
+    act(() => { window.dispatchEvent(Object.assign(new Event('devicemotion'), {
+      rotationRate: { alpha: 0, beta: 0, gamma: 3600 },
+    })) })
+    dispatchHeading(180, 1050)
+    expect(screen.queryByText(/Проверьте направление компаса/)).toBeNull()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  })
+
+  it('withholds a WebKit reading with unknown tilt and allows a valid calibrated sample to recover automatically', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(359, 1000, { accuracy: -1 })
+    expect(screen.getByRole('status')).toHaveTextContent(/Проверьте компас/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(359, 1016, { beta: null })
+    expect(screen.getByRole('status')).toHaveTextContent(/Не удаётся определить наклон/)
+    dispatchHeading(359, 1032, { accuracy: 8 })
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(screen.queryByText(/Проверьте компас/)).toBeNull()
+  })
+
+  it('recomputes the pointer after a Place change without waiting for another sensor event', async () => {
+    const view = render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    flushFrame()
+    const kazaanAngle = document.querySelector('.qibla-pointer')?.getAttribute('style')
+    view.rerender(<QiblaScreen place={london} onBack={() => {}} />)
+    await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 0)) })
+    flushFrame()
+    const londonAngle = document.querySelector('.qibla-pointer')?.getAttribute('style')
+    expect(londonAngle).not.toBe(kazaanAngle)
+    expect(document.querySelectorAll('.qibla-pointer')).toHaveLength(1)
+  })
+
+  it('refreshes the local WMM validity date at UTC midnight without network access', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.UTC(2029, 11, 31, 23, 59, 59, 500))
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    dispatchHeading(0, 1000)
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    dispatchHeading(0, 2000)
+    expect(screen.getByRole('status')).toHaveTextContent(/Локальная магнитная модель недоступна/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  })
+
+  it('drops a live pointer while sensor lifecycle restarts after resume', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.UTC(2029, 11, 31, 23, 59, 59, 500))
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    dispatchHeading(0, 1000)
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    act(() => { window.dispatchEvent(new Event('pageshow')) })
+    expect(screen.getByRole('status')).toHaveTextContent(/Подключаем компас/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  })
+
+  it('keeps signed clockwise accessibility guidance without visible turn text', () => {
     const t = createTranslator('ru')
     expect(formatRelativeGuidance(27, t)).toContain('направо примерно на 25°')
     expect(formatRelativeGuidance(-27, t)).toContain('налево примерно на 25°')
     expect(formatRelativeGuidance(1, t)).toBe('Кибла прямо перед вами.')
     expect(formatRelativeGuidance(-180, t)).toBe('Кибла позади: повернитесь на 180° в любую сторону.')
-  })
-
-  it('survives StrictMode effect reinitialization, coalesces dial writes and exposes throttled left/right guidance', async () => {
-    const user = userEvent.setup()
-    let commits = 0
-    const onRender = () => { commits += 1 }
-    const view = render(<StrictMode><Profiler id="qibla" onRender={onRender}>
-      <QiblaScreen place={place} onBack={() => {}} onOpenLocation={() => {}} />
-    </Profiler></StrictMode>)
-    await user.click(screen.getByRole('button', { name: 'Включить компас' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/доступ к датчику компаса/))
-    expect(requestPermission).toHaveBeenCalledOnce()
-
-    const sensorEvent = (heading: number) => Object.assign(new Event('deviceorientation'), {
-      alpha: 0, beta: 0, gamma: 0, absolute: false,
-      webkitCompassHeading: heading, webkitCompassAccuracy: 6,
-    })
-    act(() => { window.dispatchEvent(sensorEvent(359)) })
-    expect(screen.getByText(/(Поверните телефон (налево|направо) примерно на \d+° к кибле\.|Кибла позади: повернитесь на 180° в любую сторону\.)/)).toHaveAttribute('aria-live', 'polite')
-    const firstFrame = [...frames.entries()][0]
-    expect(firstFrame).toBeDefined()
-    if (!firstFrame) throw new Error('Expected a scheduled dial frame')
-    frames.delete(firstFrame[0])
-    act(() => { firstFrame[1](performance.now()) })
-    expect(document.querySelector('.qibla-dial')?.getAttribute('style')).toMatch(/transform:\s*rotate\(-?\d+(\.\d+)?deg\)/)
-
-    const commitsBeforeBurst = commits
-    const requestCountBeforeBurst = requestFrame.mock.calls.length
-    const timeoutSpy = vi.spyOn(window, 'setTimeout')
-    act(() => {
-      for (let index = 0; index < 100; index += 1) window.dispatchEvent(sensorEvent(index % 2 ? 1 : 359))
-    })
-    expect(requestFrame.mock.calls.length - requestCountBeforeBurst).toBe(1)
-    expect(commits - commitsBeforeBurst).toBeLessThanOrEqual(1)
-    expect(timeoutSpy).toHaveBeenCalledOnce()
-
-    const staleFrame = [...frames.entries()][0]
-    expect(staleFrame).toBeDefined()
-    view.unmount()
-    if (!staleFrame) throw new Error('Expected a pending frame before unmount')
-    expect(cancelFrame).toHaveBeenCalledWith(staleFrame[0])
-    const oldDial = document.querySelector('.qibla-dial')
-    act(() => { staleFrame[1](performance.now()) })
-    expect(oldDial).toBeNull()
-  })
-
-  it('withholds live relative guidance for an uncalibrated compass and recovers on a valid sample', async () => {
-    const user = userEvent.setup()
-    render(<QiblaScreen place={place} onBack={() => {}} onOpenLocation={() => {}} />)
-    await user.click(screen.getByRole('button', { name: 'Включить компас' }))
-    await waitFor(() => expect(requestPermission).toHaveBeenCalledOnce())
-    act(() => {
-      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
-        alpha: 0, beta: 0, gamma: 0, absolute: false,
-        webkitCompassHeading: 359, webkitCompassAccuracy: -1,
-      }))
-    })
-    expect(screen.getByRole('status')).toHaveTextContent(/Компас не откалиброван/)
-    expect(document.querySelector('.qibla-relative-guidance')).toBeEmptyDOMElement()
-
-    act(() => {
-      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
-        alpha: 0, beta: 0, gamma: 0, absolute: false,
-        webkitCompassHeading: 359, webkitCompassAccuracy: 8,
-      }))
-    })
-    expect(await screen.findByRole('status')).toHaveTextContent(/Живое направление доступно/)
-    expect(document.querySelector('.qibla-relative-guidance')).not.toBeEmptyDOMElement()
-    expect(screen.getByText(/±8.0°/)).toBeVisible()
   })
 })

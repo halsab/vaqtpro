@@ -861,7 +861,7 @@ export function App({
         onOpenMonthlySchedule={() => openScreen('monthly-schedule')} hasPlace={Boolean(place)}
         onBack={backScreen} notice={persistenceNotice} /> : null}
 
-      {navigation.screen === 'qibla' && QiblaScreen ? <QiblaScreen place={place} onBack={backScreen} onOpenLocation={openLocationDialog} /> : null}
+      {navigation.screen === 'qibla' && QiblaScreen ? <QiblaScreen place={place} onBack={backScreen} /> : null}
 
       {navigation.screen === 'monthly-schedule' && PrayerMonthScreen
         ? <PrayerMonthScreen place={place} context={context} scheduleError={scheduleError} selectedDate={selectedDate}

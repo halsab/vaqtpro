@@ -39,6 +39,18 @@ openssl x509 -req -sha256 -in "$cert_dir/server.csr" -CA "$cert_dir/ca.pem" \
   -CAkey "$cert_dir/ca.key" -CAcreateserial -days 365 \
   -out "$cert_dir/server.crt" -extfile "$cert_dir/server.ext"
 openssl x509 -in "$cert_dir/ca.pem" -outform DER -out "$cert_dir/vaqtpro-local-ca.cer"
+chmod 600 "$cert_dir/ca.key" "$cert_dir/server.key"
+chmod 644 "$cert_dir/ca.pem" "$cert_dir/server.crt" "$cert_dir/vaqtpro-local-ca.cer"
+
+cleanup_notice() {
+  printf '\n%s\n' \
+    'Локальный HTTPS-сервер остановлен. Удалите доверие к тестовому сертификату:' \
+    'iPhone: Настройки > Основные > Об этом устройстве > Доверие сертификатам; отключите полное доверие.' \
+    'Затем удалите установленный профиль сертификата в Настройки > Основные > VPN и управление устройством.' \
+    "На Mac удалите тестовые ключи и сертификаты командой: rm -rf '$cert_dir'" \
+    'Эта команда не выполняется автоматически.'
+}
+trap cleanup_notice EXIT HUP INT TERM
 
 printf '\n%s\n' "LAN IP: $lan_ip" \
   "iPhone certificate: $cert_dir/vaqtpro-local-ca.cer" \
@@ -47,4 +59,4 @@ printf '\n%s\n' "LAN IP: $lan_ip" \
   'Keep this terminal open while testing.'
 
 cd "$repo_root"
-VITE_DEV_TLS_DIR="$cert_dir" exec npm run dev -- --host 0.0.0.0 --port "$dev_port" --strictPort
+VITE_DEV_TLS_DIR="$cert_dir" npm run dev -- --host 0.0.0.0 --port "$dev_port" --strictPort

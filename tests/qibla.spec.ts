@@ -21,7 +21,8 @@ test('Qibla action fits the compact home toolbar and returns focus in mobile Web
   await compass.click()
   await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
   await expect(page.getByText('195°')).toBeVisible()
-  await expect(page.getByText('от истинного севера', { exact: true })).toBeVisible()
+  await expect(page.getByRole('heading')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /место|локация|город/i })).toHaveCount(0)
   await page.goBack()
   await expect(page.getByRole('region', { name: 'Главная' })).toBeVisible()
   await expect(compass).toBeFocused()
@@ -48,6 +49,9 @@ test('orientation permission starts only on user action and WebKit magnetic read
   await choosePlace(page)
   await page.locator('#home-qibla').click()
   await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+  await expect(page.getByRole('heading')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /место|локация|город/i })).toHaveCount(0)
+  await expect(page.getByText('Кибла', { exact: true })).toHaveCount(0)
   expect(await page.evaluate(() => (window as Window & { __qiblaPermissionRequests: boolean[] }).__qiblaPermissionRequests)).toEqual([])
 
   await page.getByRole('button', { name: 'Включить компас' }).click()
@@ -59,7 +63,7 @@ test('orientation permission starts only on user action and WebKit magnetic read
     })
     window.dispatchEvent(reading)
   })
-  await expect(page.getByText(/Компас не откалиброван/)).toBeVisible()
+  await expect(page.getByText(/Проверьте компас и переместите телефон восьмёркой/)).toBeVisible()
   await page.evaluate(() => {
     const reading = Object.assign(new Event('deviceorientation'), {
       alpha: 0, beta: 0, gamma: 0, absolute: false,
@@ -67,18 +71,24 @@ test('orientation permission starts only on user action and WebKit magnetic read
     })
     window.dispatchEvent(reading)
   })
-  await expect(page.getByText(/Живое направление доступно, но физическая точность этого устройства не проверена/)).toBeVisible()
-  await expect(page.getByText(/Оценка датчика направления: ±6.0°/)).toBeVisible()
-  await expect(page.locator('.qibla-relative-guidance')).toHaveAttribute('aria-live', 'polite')
-  await expect(page.locator('.qibla-relative-guidance')).toContainText(/(Поверните телефон|Кибла прямо перед вами|Кибла позади)/)
-  await expect(page.locator('.qibla-dial')).toHaveAttribute('style', /rotate\(/)
+  await expect(page.locator('.qibla-screen .sr-only[aria-live="polite"]')).toContainText(/Поверните телефон|Кибла прямо перед вами|Кибла позади/)
+  await expect(page.getByText(/Живое направление доступно, но физическая точность этого устройства не проверена/)).toHaveClass('sr-only')
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+  await page.setViewportSize({ width: 390, height: 320 })
+  const shortDial = await page.locator('.qibla-dial').boundingBox()
+  expect(shortDial).not.toBeNull()
+  if (!shortDial) throw new Error('Compass dial is missing in short landscape')
+  expect(shortDial.width).toBeLessThanOrEqual(320)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect(await page.locator('.qibla-pointer').evaluate(element => getComputedStyle(element).transitionDuration)).toBe('0s')
 
   const performanceSample = await page.evaluate(async () => {
     const started = performance.now()
     for (let index = 0; index < 500; index += 1) {
       window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
         alpha: 0, beta: 0, gamma: 0, absolute: false,
-        webkitCompassHeading: index % 2 ? 1 : 359, webkitCompassAccuracy: 6,
+        webkitCompassHeading: 359, webkitCompassAccuracy: 6,
       }))
     }
     const dispatchDurationMs = performance.now() - started
@@ -87,6 +97,6 @@ test('orientation permission starts only on user action and WebKit magnetic read
     return { dispatchDurationMs, nextFrameLatencyMs: performance.now() - frameStarted }
   })
   console.info(`Qibla sensor mock: 500 events dispatched in ${performanceSample.dispatchDurationMs.toFixed(2)} ms; next frame in ${performanceSample.nextFrameLatencyMs.toFixed(2)} ms`)
-  expect(performanceSample.dispatchDurationMs).toBeGreaterThanOrEqual(0)
-  expect(performanceSample.nextFrameLatencyMs).toBeGreaterThanOrEqual(0)
+  expect(performanceSample.dispatchDurationMs).toBeLessThan(50)
+  expect(performanceSample.nextFrameLatencyMs).toBeLessThan(34)
 })
