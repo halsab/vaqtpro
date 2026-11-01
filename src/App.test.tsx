@@ -195,6 +195,7 @@ describe('VaqtPro', () => {
 
     expect(await screen.findByRole('region', { name: 'Направление на киблу' })).toBeVisible()
     expect(screen.getByText('195°')).toBeVisible()
+    expect(screen.getByRole('img', { name: /Азимут 195 градусов от истинного севера/ })).toBeVisible()
     expect(screen.getByText(/выбранный город/)).toBeVisible()
     expect(screen.getByText(/Живое направление телефона пока недоступно/)).toBeVisible()
     expect(services.getPosition).not.toHaveBeenCalled()
@@ -203,6 +204,21 @@ describe('VaqtPro', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
     expect(await screen.findByRole('region', { name: 'Главная' })).toBeVisible()
     expect(await screen.findByRole('button', { name: 'Настройки' })).toBeVisible()
+  })
+
+  it('does not render a directional needle when the accepted location uncertainty reaches the Kaaba', async () => {
+    const singularPlace = { ...defaultPlace, latitude: 21.4225241, longitude: 39.8261818, accuracy: 25 }
+    const services = createServices({
+      initialize: vi.fn().mockResolvedValue(initialized({
+        locationChoice: { mode: 'calculated', coordinates: singularPlace, place: singularPlace, source: 'default' },
+      })),
+    })
+    render(<App services={services} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Компас киблы' }))
+    expect(await screen.findByText(/недостаточно для устойчивого азимута/)).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).toBeNull()
+    expect(services.getPosition).not.toHaveBeenCalled()
+    expect(services.getPermission).not.toHaveBeenCalled()
   })
 
   it('continues using the calculated snapshot without requesting legacy schedule data', async () => {

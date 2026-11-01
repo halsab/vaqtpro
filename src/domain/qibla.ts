@@ -23,6 +23,16 @@ export function shortestAngleDelta(from: number, to: number): number {
   return wrapSigned(to - from)
 }
 
+export function roundAzimuthForDisplay(degrees: number): number {
+  return wrap360(Math.round(wrap360(degrees)))
+}
+
+export function formatAngularUncertainty(degrees: number, fractionDigits = 1): string {
+  if (!Number.isFinite(degrees) || degrees < 0) return '—'
+  const rounded = degrees.toFixed(fractionDigits)
+  return degrees > 0 && Number(rounded) === 0 ? `<${(1 / 10 ** fractionDigits).toFixed(fractionDigits)}` : rounded
+}
+
 export function calculateQiblaBearing(position: Position): QiblaBearing {
   if (!validPosition(position)) return { kind: 'undefined', reason: 'invalid-position' }
 
@@ -45,10 +55,11 @@ export function estimateBearingOriginUncertainty(position: Position): BearingOri
   const centralAngle = sphericalAngularDistance(position.latitude, normalizeLongitude(position.longitude), KAABA.latitude, KAABA.longitude)
   const distanceToSingularityMeters = Math.min(centralAngle, Math.PI - centralAngle) * 6_371_008.8
   if (distanceToSingularityMeters <= position.accuracy) return { kind: 'unbounded' }
-  return {
-    kind: 'bounded',
-    radiusDegrees: Math.asin(Math.min(1, position.accuracy / distanceToSingularityMeters)) / DEGREES_TO_RADIANS,
-  }
+  const angularRadius = position.accuracy / 6_371_008.8
+  const targetSine = Math.abs(Math.sin(centralAngle))
+  if (angularRadius >= Math.PI / 2 || targetSine < 1e-12) return { kind: 'unbounded' }
+  const sensitivity = Math.sin(angularRadius) / targetSine
+  return { kind: 'bounded', radiusDegrees: Math.asin(Math.min(1, Math.max(0, sensitivity))) / DEGREES_TO_RADIANS }
 }
 
 function normalizeLongitude(longitude: number): number {

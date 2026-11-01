@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { calculateQiblaBearing, estimateBearingOriginUncertainty, shortestAngleDelta, wrap360, wrapSigned } from './qibla'
+import { calculateQiblaBearing, estimateBearingOriginUncertainty, formatAngularUncertainty, roundAzimuthForDisplay, shortestAngleDelta, wrap360, wrapSigned } from './qibla'
 
 describe('qibla bearing', () => {
   it.each([
@@ -57,6 +57,14 @@ describe('qibla bearing', () => {
     expect(estimateBearingOriginUncertainty({ latitude: -21.4225241, longitude: -140.1728182, accuracy: 200 }))
       .toEqual({ kind: 'unbounded' })
   })
+
+  it('withholds the pointer when a GPS uncertainty disk reaches a Qibla singularity', () => {
+    const nearKaaba = { latitude: 21.4225241, longitude: 39.8261818, accuracy: 10 }
+    const nearAntipode = { latitude: -21.4225241, longitude: -140.1738182, accuracy: 10 }
+    expect(estimateBearingOriginUncertainty(nearKaaba)).toEqual({ kind: 'unbounded' })
+    expect(estimateBearingOriginUncertainty(nearAntipode)).toEqual({ kind: 'unbounded' })
+    expect(estimateBearingOriginUncertainty({ ...nearKaaba, accuracy: 0 })).toEqual({ kind: 'unbounded' })
+  })
 })
 
 describe('circular angles', () => {
@@ -68,5 +76,12 @@ describe('circular angles', () => {
     expect(shortestAngleDelta(359, 1)).toBe(2)
     expect(shortestAngleDelta(1, 359)).toBe(-2)
     expect(wrapSigned(180)).toBe(-180)
+  })
+
+  it('rounds azimuth through 360 to zero and never renders small uncertainty as exact zero', () => {
+    expect(roundAzimuthForDisplay(359.8)).toBe(0)
+    expect(roundAzimuthForDisplay(359.4)).toBe(359)
+    expect(formatAngularUncertainty(0.001)).toBe('<0.1')
+    expect(formatAngularUncertainty(0)).toBe('0.0')
   })
 })

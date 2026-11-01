@@ -30,3 +30,36 @@ test('Qibla action fits the compact home toolbar and returns focus in mobile Web
   await page.getByRole('button', { name: 'Назад' }).click()
   await expect(compass).toBeFocused()
 })
+
+test('orientation permission starts only on user action and WebKit magnetic readings stay explicitly unverified', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.assign(window, { __qiblaPermissionRequests: [] as boolean[] })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    const requestPermission = (absolute = false) => {
+      ;(window as Window & { __qiblaPermissionRequests: boolean[] }).__qiblaPermissionRequests.push(absolute)
+      return Promise.resolve('granted' as const)
+    }
+    Object.defineProperty(window, 'DeviceOrientationEvent', {
+      configurable: true,
+      value: Object.assign(class extends Event {}, { requestPermission }),
+    })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+  expect(await page.evaluate(() => (window as Window & { __qiblaPermissionRequests: boolean[] }).__qiblaPermissionRequests)).toEqual([])
+
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { __qiblaPermissionRequests: boolean[] }).__qiblaPermissionRequests)).toEqual([true])
+  await page.evaluate(() => {
+    const reading = Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false,
+      webkitCompassHeading: 359, webkitCompassAccuracy: 6,
+    })
+    window.dispatchEvent(reading)
+  })
+  await expect(page.getByText(/Живое направление доступно, но физическая точность этого устройства не проверена/)).toBeVisible()
+  await expect(page.getByText(/Оценка датчика направления: ±6.0°/)).toBeVisible()
+  await expect(page.locator('.qibla-dial')).toHaveAttribute('style', /rotate\(/)
+})
