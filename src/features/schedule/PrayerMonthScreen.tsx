@@ -10,6 +10,7 @@ import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
 import { PrayerMonthTable, PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { PrayerMonthView } from './PrayerMonthView'
+import { MonthlyExportAction } from './MonthlyExportAction'
 import { SCHEDULE_EVENT_LABEL_KEYS } from './scheduleEventLabels'
 import type { ScheduleError } from './usePrayerSchedules'
 
@@ -45,7 +46,23 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
   const failedDateCount = monthSchedules.reduce((count, entry) => count + (entry.schedule ? 0 : 1), 0)
   const allDatesFailed = context !== null && monthSchedules.length > 0 && failedDateCount === monthSchedules.length
   const currentMonthLabel = monthLabel(month, locale)
-  const labels = Object.fromEntries(PRAYER_MONTH_KEYS.map(key => [key, t(SCHEDULE_EVENT_LABEL_KEYS[key])])) as Record<(typeof PRAYER_MONTH_KEYS)[number], string>
+  const { eventLabels, exportLabels } = useMemo(() => {
+    const eventLabels = Object.fromEntries(PRAYER_MONTH_KEYS.map(key => [key, t(SCHEDULE_EVENT_LABEL_KEYS[key])])) as Record<(typeof PRAYER_MONTH_KEYS)[number], string>
+    return { eventLabels, exportLabels: {
+      ...eventLabels,
+      exportDay: t('exportDay'), exportBrandSubtitle: t('exportBrandSubtitle'),
+      exportSourcePrefix: t('exportSourcePrefix'), exportSourceUrl: t('exportSourceUrl'),
+      weekdaySundayShort: t('weekdaySundayShort'), weekdayMondayShort: t('weekdayMondayShort'),
+      weekdayTuesdayShort: t('weekdayTuesdayShort'), weekdayWednesdayShort: t('weekdayWednesdayShort'),
+      weekdayThursdayShort: t('weekdayThursdayShort'), weekdayFridayShort: t('weekdayFridayShort'),
+      weekdaySaturdayShort: t('weekdaySaturdayShort'),
+    } }
+  }, [t])
+  const exportSnapshot = useMemo(() => context ? {
+    month: month.slice(0, 7),
+    location: homePlaceLabel(place, t('locationUnknown')),
+    rows: monthSchedules,
+  } : null, [context, month, monthSchedules, place, t])
   const error = scheduleError?.code === 'unsupported-profile'
     ? t('unsupportedProfile', { profile: t(PROFILE_LABEL_KEYS[scheduleError.profile]) })
     : null
@@ -55,7 +72,10 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
     onRetrySchedule()
   }
 
-  return <Screen label={t('monthlySchedule')} top={<BackButton onClick={onBack} />}>
+  return <Screen label={t('monthlySchedule')} top={<div className="monthly-screen-navigation">
+    <BackButton onClick={onBack} />
+    <MonthlyExportAction snapshot={exportSnapshot} labels={exportLabels} />
+  </div>}>
     <PrayerMonthView monthLabel={currentMonthLabel}
       previousMonthLabel={t('previousMonth')} nextMonthLabel={t('nextMonth')}
       onPreviousMonth={() => setMonth(value => shiftCivilMonth(value, -1))}
@@ -77,7 +97,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
           <p className="screen-copy" role="alert">{t('scheduleLoadFailed')}</p>
           <ActionButton onClick={onRetrySchedule}>{t('retry')}</ActionButton>
         </div>
-        : context ? <PrayerMonthTable rows={monthSchedules} labels={labels} dateLabel={t('dateLabel')}
+        : context ? <PrayerMonthTable rows={monthSchedules} labels={eventLabels} dateLabel={t('dateLabel')}
           tableLabel={t('monthlyScheduleTableLabel')} />
           : <div className="screen-stack">
             <p className="screen-copy">{t('noSchedulePlace')}</p>
