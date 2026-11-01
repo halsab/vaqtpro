@@ -28,24 +28,33 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   const { t } = useLocalization()
   const [prepared, setPrepared] = useState<MonthlyExportPreparation | null>(null)
   const [failed, setFailed] = useState(false)
-  const [retry, setRetry] = useState(0)
+  const [preparationRequest, setPreparationRequest] = useState(0)
+  const [preparing, setPreparing] = useState(false)
   const busy = useRef(false)
   const preparation = useRef<Promise<MonthlyExportPreparation> | null>(null)
 
   useEffect(() => {
     let current = true
-    if (view) {
+    if (view && preparationRequest > 0) {
       preparation.current ??= import('./monthlyExportRenderer')
-        .then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view))
+        .then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view, undefined, (format, file) => {
+          if (!current) return
+          setPrepared(value => ({
+            pdf: format === 'pdf' ? file : value?.pdf ?? null,
+            png: format === 'png' ? file : value?.png ?? null,
+            failures: value?.failures ?? [],
+          }))
+        }))
       void preparation.current.then(result => {
           if (!current) return
           setPrepared(result)
           setFailed(false)
         })
         .catch(() => { if (current) setFailed(true) })
+        .finally(() => { if (current) setPreparing(false) })
     }
     return () => { current = false }
-  }, [view, retry])
+  }, [view, preparationRequest])
   const result = prepared
   const hasAvailableFormat = Boolean(result?.pdf || result?.png)
   const error = failed || Boolean(result?.failures.length)
@@ -67,23 +76,33 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   }
 
   return <>
-    <span className={`monthly-export-control${hasAvailableFormat ? '' : ' is-disabled'}`}>
-      <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')} aria-hidden="true" tabIndex={-1} disabled={!hasAvailableFormat}>
+    <span className={`monthly-export-control${!view || (preparing && !hasAvailableFormat) ? ' is-disabled' : ''}`}>
+      {hasAvailableFormat ? <>
+        <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')} aria-hidden="true" tabIndex={-1} disabled>
+          <ShareIcon />
+        </IconActionButton>
+        <select aria-label={t('shareMonthlyTimetable')} aria-busy={preparing || undefined}
+          value="" onChange={onChange}>
+          <option value="" hidden />
+          <option value="pdf" disabled={!result?.pdf}>{t('exportPdf')}</option>
+          <option value="png" disabled={!result?.png}>{t('exportPng')}</option>
+        </select>
+      </> : <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')}
+        aria-busy={preparing || undefined} disabled={!view || preparing}
+        onClick={() => {
+          setPreparing(true)
+          setPreparationRequest(value => value + 1)
+        }}>
         <ShareIcon />
-      </IconActionButton>
-      <select aria-label={t('shareMonthlyTimetable')} aria-busy={!result || undefined} disabled={!hasAvailableFormat}
-        value="" onChange={onChange}>
-        <option value="" hidden />
-        <option value="pdf" disabled={!result?.pdf}>{t('exportPdf')}</option>
-        <option value="png" disabled={!result?.png}>{t('exportPng')}</option>
-      </select>
+      </IconActionButton>}
     </span>
     {error ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}
       <button type="button" className="monthly-export-retry" onClick={() => {
         setPrepared(null)
         setFailed(false)
         preparation.current = null
-        setRetry(value => value + 1)
+        setPreparing(true)
+        setPreparationRequest(value => value + 1)
       }}>{t('retry')}</button>
     </span> : null}
   </>

@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "adhan": "4.4.6",
+    "fast-png": "^6.4.0",
     "idb": "^8.0.3",
     "jspdf": "^4.2.1",
     "react": "^19.2.8",

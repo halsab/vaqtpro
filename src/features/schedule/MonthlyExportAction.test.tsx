@@ -20,6 +20,7 @@ const labels = {
 const pdf = new File(['pdf'], 'month.pdf', { type: 'application/pdf' })
 const png = new File(['png'], 'month.png', { type: 'image/png' })
 const createObjectURL = vi.fn(() => 'blob:export')
+const shareLabel = 'Экспортировать расписание на месяц'
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -29,38 +30,62 @@ afterEach(() => {
   createObjectURL.mockClear()
 })
 
-it('uses the Home-sized circular share action and a native select with exactly PDF and PNG', async () => {
+it('starts preparation on tap, then exposes the Home-sized native PDF/PNG selector', async () => {
   prepareMonthlyExportFiles.mockResolvedValue({ pdf, png, failures: [] })
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
-  const select = screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
-  expect(select).toBeDisabled()
-  expect(Array.from(select.querySelectorAll('option:not([hidden])'), option => option.textContent)).toEqual(['PDF', 'PNG'])
-  const control = select.parentElement
+  const trigger = screen.getByRole('button', { name: shareLabel })
+  const control = trigger.parentElement
   expect(control).toHaveClass('monthly-export-control')
-  expect(control?.querySelector('button')).toHaveClass('icon-button')
-  await waitFor(() => expect(select).toBeEnabled())
+  expect(trigger).toHaveClass('icon-button')
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  await userEvent.setup().click(trigger)
+  await waitFor(() => expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce())
+  const select = await screen.findByRole('combobox', { name: shareLabel })
+  expect(Array.from(select.querySelectorAll('option:not([hidden])'), option => option.textContent)).toEqual(['PDF', 'PNG'])
   expect(control?.querySelector('svg path')).toHaveAttribute('d', expect.stringContaining('M12 15V3'))
   await userEvent.setup().tab()
   expect(select).toHaveFocus()
 })
 
-it('prepares export files only once when StrictMode replays effects', async () => {
+it('starts preparation only once when StrictMode replays effects', async () => {
   prepareMonthlyExportFiles.mockResolvedValue({ pdf, png, failures: [] })
+  const user = userEvent.setup()
   render(<StrictMode><MonthlyExportAction snapshot={snapshot} labels={labels} /></StrictMode>)
 
-  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })).toBeEnabled())
+  await user.click(screen.getByRole('button', { name: shareLabel }))
+  await waitFor(() => expect(screen.getByRole('combobox', { name: shareLabel })).toBeEnabled())
   expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
+})
+
+it('enables a completed format while the other renderer is still running', async () => {
+  let finishPreparation: ((files: { pdf: File; png: File; failures: [] }) => void) | undefined
+  prepareMonthlyExportFiles.mockImplementation((_view: unknown, _renderers: unknown,
+    onFormatReady: ((format: 'pdf' | 'png', file: File) => void) | undefined) => {
+    onFormatReady?.('pdf', pdf)
+    return new Promise(resolve => { finishPreparation = resolve })
+  })
+  render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: shareLabel }))
+  const select = await screen.findByRole('combobox', { name: shareLabel })
+  await waitFor(() => expect(select).toBeEnabled())
+  expect(select.querySelector('option[value="pdf"]')).toBeEnabled()
+  expect(select.querySelector('option[value="png"]')).toBeDisabled()
+  finishPreparation?.({ pdf, png, failures: [] })
+  await waitFor(() => expect(select.querySelector('option[value="png"]')).toBeEnabled())
 })
 
 it('permits repeated selection of the same format and falls back when file sharing is unavailable', async () => {
   prepareMonthlyExportFiles.mockResolvedValue({ pdf, png, failures: [] })
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
-  const select = screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
   const fallback = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+  await user.click(screen.getByRole('button', { name: shareLabel }))
+  const select = await screen.findByRole('combobox', { name: shareLabel })
   await waitFor(() => expect(select).toBeEnabled())
 
   await user.selectOptions(select, 'pdf')
@@ -76,7 +101,8 @@ it('calls the native share API for the selected file while leaving cancellation 
   Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true })
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
-  const select = screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
+  await user.click(screen.getByRole('button', { name: shareLabel }))
+  const select = await screen.findByRole('combobox', { name: shareLabel })
   await waitFor(() => expect(select).toBeEnabled())
   await user.selectOptions(select, 'png')
   await waitFor(() => expect(share).toHaveBeenCalledWith({ files: [png] }))
@@ -87,19 +113,23 @@ it('ignores preparation results for a month that is no longer displayed', async 
   const finish: Array<(files: { pdf: File; png: File; failures: [] }) => void> = []
   prepareMonthlyExportFiles.mockImplementation(() => new Promise(resolve => { finish.push(resolve) }))
   const { rerender } = render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: shareLabel }))
   await waitFor(() => expect(prepareMonthlyExportFiles).toHaveBeenCalledTimes(1))
   rerender(<MonthlyExportAction snapshot={{ ...snapshot, month: '2026-11' }} labels={labels} />)
+  await user.click(screen.getByRole('button', { name: shareLabel }))
   await waitFor(() => expect(prepareMonthlyExportFiles).toHaveBeenCalledTimes(2))
   finish[0]?.({ pdf, png, failures: [] })
-  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })).toBeDisabled())
+  expect(screen.queryByRole('combobox', { name: shareLabel })).not.toBeInTheDocument()
 })
 
 it('exposes a retry after generation failure and enables export when preparation recovers', async () => {
   prepareMonthlyExportFiles.mockRejectedValueOnce(new Error('render failed')).mockResolvedValueOnce({ pdf, png, failures: [] })
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+  await user.click(screen.getByRole('button', { name: shareLabel }))
   await user.click(await screen.findByRole('button', { name: 'Повторить' }))
-  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })).toBeEnabled())
+  await waitFor(() => expect(screen.getByRole('combobox', { name: shareLabel })).toBeEnabled())
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
@@ -107,7 +137,8 @@ it('keeps the successful format available when the other format preparation fail
   prepareMonthlyExportFiles.mockResolvedValue({ pdf: null, png, failures: ['pdf'] })
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
-  const select = screen.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
+  await userEvent.setup().click(screen.getByRole('button', { name: shareLabel }))
+  const select = await screen.findByRole('combobox', { name: shareLabel })
   await waitFor(() => expect(select).toBeEnabled())
   expect(select.querySelector('option[value="pdf"]')).toBeDisabled()
   expect(select.querySelector('option[value="png"]')).toBeEnabled()

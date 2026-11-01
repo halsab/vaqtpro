@@ -17,15 +17,16 @@ const HEADER_LOGO_Y = 15.2
 const HEADER_PRIMARY_TEXT_Y = 23.28
 const HEADER_SECONDARY_TEXT_Y = 29.104
 const PATTERN_SIZE = 166
-const PNG_WIDTH = 1136
-const PNG_HEIGHT = Math.round(PNG_WIDTH * PAGE.height / PAGE.width)
+const PNG_MIN_WIDTH = 1136
+const PNG_MAX_WIDTH = Math.round(PAGE.width * 300 / 25.4)
 // В референсе правый край заголовка смещён на 0,124 мм относительно подписи города.
 const MONTH_TITLE_RIGHT_OFFSET = 0.124
 // Ширина заголовка в референсе — 73,44 pt, в jsPDF без коррекции — 75,6 pt.
 const HEADER_TITLE_HORIZONTAL_SCALE = 73.44 / 75.6
-const PNG_MIN_BYTES = 1_000_000
-const PNG_TARGET_BYTES = 1_100_000
 const PNG_MAX_BYTES = 1_200_000
+const PNG_MAX_ATTEMPTS = 6
+const PNG_WIDTH_TOLERANCE = 16
+const PREPARATION_CACHE_LIMIT = 3
 const PATTERN_URLS = { spring: springPattern, summer: summerPattern, autumn: autumnPattern, winter: winterPattern }
 
 type Season = keyof typeof PATTERN_URLS
@@ -46,6 +47,14 @@ let fontFacePromise: Promise<void> | undefined
 let logoCanvasPromise: Promise<HTMLCanvasElement> | undefined
 let patternCache: { season: Season; promise: Promise<HTMLCanvasElement> } | undefined
 let activePreparations = 0
+const preparationCache = new Map<string, MonthlyExportPreparation>()
+const inFlightPreparations = new Map<string, {
+  promise: Promise<MonthlyExportPreparation>
+  files: Partial<Record<'pdf' | 'png', File>>
+  listeners: Set<MonthlyExportFormatReady>
+}>()
+const rendererCacheNamespaces = new WeakMap<MonthlyExportRenderers, number>()
+let nextRendererCacheNamespace = 1
 
 function seasonFor(month: string): Season {
   const monthNumber = Number(month.slice(5, 7))
@@ -199,10 +208,6 @@ async function loadAssets(month: string): Promise<ExportAssets> {
   return { fontBytes, patternCanvas, logoCanvas }
 }
 
-function canvasBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob> {
-  return new Promise((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not encode the export image')), type))
-}
-
 function positionText(context: CanvasRenderingContext2D, command: Extract<DrawCommand, { type: 'text' }>, scale: number): void {
   context.font = `${command.size * scale / MM_TO_PT}px MonthlyExportMono`
   context.textAlign = command.align ?? 'left'
@@ -242,30 +247,123 @@ function drawPng(context: CanvasRenderingContext2D, commands: DrawCommand[], ass
   }
 }
 
+interface PngWorkerResponse {
+  id: number
+  bytes?: ArrayBuffer
+  error?: string
+}
+
+function createPngEncoder(): { encode: (context: CanvasRenderingContext2D) => Promise<Blob>; dispose: () => void } {
+  const worker = new Worker(new URL('./monthlyExportPng.worker.ts', import.meta.url), { type: 'module' })
+  const pending = new Map<number, { resolve: (blob: Blob) => void; reject: (error: Error) => void }>()
+  let nextId = 0
+
+  worker.addEventListener('message', ({ data }: MessageEvent<PngWorkerResponse>) => {
+    const request = pending.get(data.id)
+    if (!request) return
+    pending.delete(data.id)
+    if (data.bytes) request.resolve(new Blob([data.bytes], { type: 'image/png' }))
+    else request.reject(new Error(data.error ?? 'Could not encode the export image'))
+  })
+  const failPending = () => {
+    for (const request of pending.values()) request.reject(new Error('Could not encode the export image'))
+    pending.clear()
+  }
+  worker.addEventListener('error', failPending)
+  worker.addEventListener('messageerror', failPending)
+
+  return {
+    encode(context) {
+      const { width, height } = context.canvas
+      const pixels = context.getImageData(0, 0, width, height).data
+      const pixelBuffer = pixels.buffer
+      const id = nextId++
+      return new Promise((resolve, reject) => {
+        pending.set(id, { resolve, reject })
+        try {
+          worker.postMessage({ id, width, height, pixels: pixelBuffer }, [pixelBuffer])
+        } catch {
+          pending.delete(id)
+          reject(new Error('Could not encode the export image'))
+        }
+      })
+    },
+    dispose() {
+      worker.terminate()
+      failPending()
+    },
+  }
+}
+
+export interface PngOptimizationOptions {
+  minWidth: number
+  maxWidth: number
+  maxBytes: number
+  maxAttempts?: number
+}
+
+export async function optimizePngResolution(render: (width: number) => Promise<Blob>, options: PngOptimizationOptions): Promise<{ width: number; blob: Blob }> {
+  const { minWidth, maxWidth, maxBytes, maxAttempts = PNG_MAX_ATTEMPTS } = options
+  let width = maxWidth
+  let lowerWidth = minWidth - 1
+  let upperWidth = maxWidth + 1
+  let best: { width: number; blob: Blob } | undefined
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const blob = await render(width)
+    if (blob.size <= maxBytes) {
+      if (!best || width > best.width) best = { width, blob }
+      lowerWidth = Math.max(lowerWidth, width)
+    } else {
+      upperWidth = Math.min(upperWidth, width)
+    }
+
+    if (upperWidth - lowerWidth <= PNG_WIDTH_TOLERANCE) break
+
+    const estimatedWidth = Math.floor(width * Math.sqrt(maxBytes / blob.size) * 0.99)
+    const isWithinBounds = estimatedWidth > lowerWidth && estimatedWidth < upperWidth
+    width = isWithinBounds
+      ? estimatedWidth
+      : Math.floor((lowerWidth + upperWidth) / 2)
+    width = Math.max(minWidth, Math.min(maxWidth, width))
+  }
+
+  if (!best && width !== minWidth) {
+    const blob = await render(minWidth)
+    if (blob.size <= maxBytes) best = { width: minWidth, blob }
+  }
+  if (!best || best.blob.size > maxBytes) {
+    throw new RangeError('The export image cannot fit the 1,200,000-byte size limit at readable resolution')
+  }
+  return best
+}
+
 export async function renderMonthlyPng(view: MonthlyExportView, month: string, filename: string): Promise<File> {
   const assets = await loadAssets(month)
   const canvas = document.createElement('canvas')
-  canvas.width = PNG_WIDTH
-  canvas.height = PNG_HEIGHT
+  const pngEncoder = createPngEncoder()
   try {
     const context = canvas.getContext('2d')
     if (!context) throw new Error('Could not render the export image')
-    const scale = PNG_WIDTH / PAGE.width
-    const commands = createLayout(view, (text, size) => {
-      context.font = `${size * scale / MM_TO_PT}px MonthlyExportMono`
-      return context.measureText(text).width / scale * MM_TO_PT
-    })
-    drawPng(context, commands, assets, PNG_WIDTH)
-    let blob = await canvasBlob(canvas, 'image/png')
-    if (blob.size < PNG_MIN_BYTES || blob.size > PNG_MAX_BYTES) {
-      const adjustedWidth = Math.round(PNG_WIDTH * Math.sqrt(PNG_TARGET_BYTES / blob.size))
-      canvas.width = adjustedWidth
-      canvas.height = Math.round(adjustedWidth * PAGE.height / PAGE.width)
-      drawPng(context, commands, assets, adjustedWidth)
-      blob = await canvasBlob(canvas, 'image/png')
+    const { blob } = await optimizePngResolution(imageWidth => {
+      const height = Math.round(imageWidth * PAGE.height / PAGE.width)
+      canvas.width = imageWidth
+      canvas.height = height
+      const scale = imageWidth / PAGE.width
+      const commands = createLayout(view, (text, size) => {
+        context.font = `${size * scale / MM_TO_PT}px MonthlyExportMono`
+        return context.measureText(text).width / scale * MM_TO_PT
+      })
+      drawPng(context, commands, assets, imageWidth)
+      return pngEncoder.encode(context)
+    }, { minWidth: PNG_MIN_WIDTH, maxWidth: PNG_MAX_WIDTH, maxBytes: PNG_MAX_BYTES })
+    const file = new File([blob], filename, { type: 'image/png' })
+    if (file.size > PNG_MAX_BYTES) {
+      throw new RangeError('The encoded export image exceeds the 1,200,000-byte size limit')
     }
-    return new File([blob], filename, { type: 'image/png' })
+    return file
   } finally {
+    pngEncoder.dispose()
     canvas.width = 0
     canvas.height = 0
   }
@@ -337,24 +435,62 @@ export interface MonthlyExportRenderers {
   png(view: MonthlyExportView, month: string, filename: string): Promise<File>
 }
 
-export async function prepareMonthlyExportFiles(view: MonthlyExportView,
-  renderers: MonthlyExportRenderers = { pdf: renderMonthlyPdf, png: renderMonthlyPng }): Promise<MonthlyExportPreparation> {
+export type MonthlyExportFormatReady = (format: 'pdf' | 'png', file: File) => void
+
+const DEFAULT_RENDERERS: MonthlyExportRenderers = { pdf: renderMonthlyPdf, png: renderMonthlyPng }
+
+function cacheKeyFor(view: MonthlyExportView, renderers: MonthlyExportRenderers | undefined): string {
+  let namespace = 'default'
+  if (renderers) {
+    let id = rendererCacheNamespaces.get(renderers)
+    if (id === undefined) {
+      id = nextRendererCacheNamespace
+      nextRendererCacheNamespace += 1
+      rendererCacheNamespaces.set(renderers, id)
+    }
+    namespace = `${id}`
+  }
+  return `${namespace}:${JSON.stringify(view)}`
+}
+
+function rememberPreparation(key: string, result: MonthlyExportPreparation): void {
+  preparationCache.delete(key)
+  preparationCache.set(key, result)
+  while (preparationCache.size > PREPARATION_CACHE_LIMIT) {
+    const oldestKey = preparationCache.keys().next().value
+    if (oldestKey === undefined) break
+    preparationCache.delete(oldestKey)
+  }
+}
+
+async function prepareUncachedMonthlyExportFiles(view: MonthlyExportView,
+  renderers: MonthlyExportRenderers, cached: MonthlyExportPreparation | undefined,
+  onFormatReady?: MonthlyExportFormatReady): Promise<MonthlyExportPreparation> {
   const slug = view.location.normalize('NFKD').replace(/[^\p{Letter}\p{Number}]+/gu, '_').replace(/^_|_$/g, '').toLocaleLowerCase('ru-RU') || 'location'
   const prefix = `VaqtPro_${slug}_${view.month}`
   activePreparations += 1
-  let pdf: File | null = null
-  let png: File | null = null
+  let pdf = cached?.pdf ?? null
+  let png = cached?.png ?? null
   const failures: ('pdf' | 'png')[] = []
   try {
-    try {
-      pdf = await renderers.pdf(view, view.month, `${prefix}.pdf`)
-    } catch {
-      failures.push('pdf')
+    if (pdf) onFormatReady?.('pdf', pdf)
+    else {
+      try {
+        pdf = await renderers.pdf(view, view.month, `${prefix}.pdf`)
+        onFormatReady?.('pdf', pdf)
+      } catch {
+        failures.push('pdf')
+      }
     }
-    try {
-      png = await renderers.png(view, view.month, `${prefix}.png`)
-    } catch {
-      failures.push('png')
+    await new Promise<void>(resolve => window.setTimeout(resolve, 0))
+    if (png) onFormatReady?.('png', png)
+    else {
+      try {
+        png = await renderers.png(view, view.month, `${prefix}.png`)
+        onFormatReady?.('png', png)
+      } catch {
+        failures.push('png')
+      }
     }
     if (!pdf && !png) throw new AggregateError(failures.map(format => new Error(`${format} preparation failed`)), 'Could not prepare monthly exports')
     return { pdf, png, failures }
@@ -362,4 +498,49 @@ export async function prepareMonthlyExportFiles(view: MonthlyExportView,
     activePreparations -= 1
     if (activePreparations === 0) releasePreparedArtwork()
   }
+}
+
+export function prepareMonthlyExportFiles(view: MonthlyExportView,
+  renderers?: MonthlyExportRenderers,
+  onFormatReady?: MonthlyExportFormatReady): Promise<MonthlyExportPreparation> {
+  const key = cacheKeyFor(view, renderers)
+  const cached = preparationCache.get(key)
+  const actualRenderers = renderers ?? DEFAULT_RENDERERS
+
+  if (cached?.pdf && cached.png) {
+    preparationCache.delete(key)
+    preparationCache.set(key, cached)
+    onFormatReady?.('pdf', cached.pdf)
+    onFormatReady?.('png', cached.png)
+    return Promise.resolve(cached)
+  }
+
+  const activePreparation = inFlightPreparations.get(key)
+  if (activePreparation) {
+    if (onFormatReady) {
+      activePreparation.listeners.add(onFormatReady)
+      if (activePreparation.files.pdf) onFormatReady('pdf', activePreparation.files.pdf)
+      if (activePreparation.files.png) onFormatReady('png', activePreparation.files.png)
+    }
+    return activePreparation.promise
+  }
+
+  const active = { promise: Promise.resolve({ pdf: null, png: null, failures: [] } as MonthlyExportPreparation),
+    files: {} as Partial<Record<'pdf' | 'png', File>>, listeners: new Set<MonthlyExportFormatReady>() }
+  if (onFormatReady) active.listeners.add(onFormatReady)
+  const publish = (format: 'pdf' | 'png', file: File) => {
+    active.files[format] = file
+    for (const listener of active.listeners) listener(format, file)
+  }
+  const promise = prepareUncachedMonthlyExportFiles(view, actualRenderers, cached, publish)
+    .then(result => {
+      rememberPreparation(key, result)
+      return result
+    })
+    .finally(() => {
+      if (inFlightPreparations.get(key) === active) inFlightPreparations.delete(key)
+    })
+  active.promise = promise
+  inFlightPreparations.set(key, active)
+  return promise
 }

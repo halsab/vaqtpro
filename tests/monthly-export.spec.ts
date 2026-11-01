@@ -44,6 +44,13 @@ test('exports the current monthly schedule as native-shareable one-page PDF and 
   const requestStart = assetRequests.length
   const preparationStarted = Date.now()
   await page.getByRole('button', { name: 'Расписание на месяц' }).click()
+  expect(assetRequests.slice(requestStart).filter(url => /OldTimeyMono|favicon\.svg|seasonal-patterns/u.test(url))).toEqual([])
+  await page.getByRole('button', { name: 'Экспортировать расписание на месяц' }).click()
+  await page.evaluate(() => {
+    const state = window as Window & { __monthlyUiTicks: number }
+    state.__monthlyUiTicks = 0
+    window.setInterval(() => { state.__monthlyUiTicks += 1 }, 50)
+  })
   const select = page.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
   await expect(select.locator('option:not([hidden])')).toHaveText(['PDF', 'PNG'])
   try {
@@ -61,6 +68,8 @@ test('exports the current monthly schedule as native-shareable one-page PDF and 
     throw error
   }
   const preparationMs = Date.now() - preparationStarted
+  const uiTicks = await page.evaluate(() => (window as Window & { __monthlyUiTicks: number }).__monthlyUiTicks)
+  expect(uiTicks).toBeGreaterThan(5)
   const control = await select.boundingBox()
   expect(control?.width).toBe(44)
   expect(control?.height).toBe(44)
@@ -115,7 +124,8 @@ test('exports the current monthly schedule as native-shareable one-page PDF and 
   const pngWidth = pngBytes.readUInt32BE(16)
   expect(pngWidth).toBeGreaterThanOrEqual(1136)
   expect(pngBytes.readUInt32BE(20)).toBe(Math.round(pngWidth * 297 / 210))
-  expect(files[2]?.size).toBeGreaterThanOrEqual(1_000_000)
+  expect(pngBytes[24]).toBe(8)
+  expect(pngBytes[25]).toBe(0)
   expect(files[2]?.size).toBeLessThanOrEqual(1_200_000)
   const visualComparison = await page.evaluate(async (reference) => {
     const files = (window as Window & { __sharedBlobs: File[] }).__sharedBlobs
@@ -166,6 +176,8 @@ test('exports the current monthly schedule as native-shareable one-page PDF and 
     body: JSON.stringify({ visualComparison, lifecycle, preparationMs, resourceCounts, sizes: files.map(file => ({ name: file.name, bytes: file.size })) }, null, 2),
     contentType: 'application/json',
   })
+  console.info(`[monthly-export] PNG ${pngWidth}×${pngBytes.readUInt32BE(20)} px; ${files[2]?.size} bytes; `
+    + `visual MAE ${visualComparison.meanAbsoluteChannelError.toFixed(3)}; preparation ${preparationMs} ms`)
 })
 
 test('falls back to a named local download when file sharing is not available', async ({ page }, testInfo) => {
@@ -174,6 +186,7 @@ test('falls back to a named local download when file sharing is not available', 
   await choosePlace(page)
   await page.locator('#home-date').click()
   await page.getByRole('button', { name: 'Расписание на месяц' }).click()
+  await page.getByRole('button', { name: 'Экспортировать расписание на месяц' }).click()
   const select = page.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
   await expect(select).toBeEnabled({ timeout: 20_000 })
   const downloadEvent = page.waitForEvent('download')
@@ -194,6 +207,7 @@ test('generates and shares the selected timetable offline from precached assets'
   await context.setOffline(true)
   await page.locator('#home-date').click()
   await page.getByRole('button', { name: 'Расписание на месяц' }).click()
+  await page.getByRole('button', { name: 'Экспортировать расписание на месяц' }).click()
   const select = page.getByRole('combobox', { name: 'Экспортировать расписание на месяц' })
   await expect(select).toBeEnabled({ timeout: 20_000 })
   await select.selectOption('png')
