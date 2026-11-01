@@ -22,6 +22,7 @@ type QiblaPlaceSourceParams = { source: string }
 type QiblaOriginBearingUncertaintyParams = { degrees: string }
 type QiblaLocationRecordedAtParams = { value: string }
 type QiblaSensorAccuracyParams = { degrees: string }
+type QiblaRelativeTurnParams = { direction: string; degrees: number }
 
 export const RU_MESSAGES = Object.freeze({
   screenLoadFailed: 'Не удалось открыть экран. Перезапустите приложение и попробуйте снова.',
@@ -68,12 +69,14 @@ export const RU_MESSAGES = Object.freeze({
   qiblaOrientationIdle: 'Показан статический азимут; живой компас не включён.',
   qiblaOrientationAcquiring: 'Запрашиваем доступ к датчику компаса…',
   qiblaOrientationLiveUnverified: 'Живое направление доступно, но физическая точность этого устройства не проверена.',
+  qiblaOrientationCalibrating: 'Компас не откалиброван или передал непригодное значение. Отойдите от металла и магнитов, затем плавно переместите телефон восьмёркой; живой указатель возобновится после корректного показания.',
   qiblaOrientationTilt: 'Держите телефон ближе к горизонтали: экран почти вертикален, и направление не определяется.',
   qiblaOrientationDegraded: 'Датчик не даёт устойчивого абсолютного направления. Показан расчётный азимут.',
   qiblaOrientationDenied: 'Доступ к датчику запрещён. Разрешите его в настройках браузера и попробуйте снова.',
   qiblaOrientationRestricted: 'Браузер или система ограничили доступ к датчику. Проверьте разрешения сайта.',
   qiblaOrientationUnsupported: 'В этом браузере нет подходящего датчика абсолютного направления.',
   qiblaOrientationSecurity: 'Для доступа к датчику нужен защищённый контекст HTTPS.',
+  qiblaOrientationFrameUnavailable: 'Не удалось определить поворот экрана. Живое направление отключено; проверьте ориентацию устройства и попробуйте снова.',
   qiblaOrientationNullReading: 'Браузер не передал полный набор данных ориентации.',
   qiblaOrientationTimeout: 'Датчик не передал направление за отведённое время.',
   qiblaMagneticBlackout: 'Горизонтальное магнитное поле слишком слабое для надёжной магнитной коррекции; живой указатель скрыт.',
@@ -81,6 +84,11 @@ export const RU_MESSAGES = Object.freeze({
   qiblaMagneticModelUnavailable: 'Локальная магнитная модель недоступна для этой даты или координат; магнитная поправка не применяется.',
   qiblaWmmAltitudeAssumption: 'Для магнитной модели принято 0 км над эллипсоидом WGS 84: высота места неизвестна.',
   qiblaSensorAccuracy: ({ degrees }: QiblaSensorAccuracyParams) => `Оценка датчика направления: ±${degrees}°; физически не подтверждена.`,
+  qiblaRelativeAhead: 'Кибла прямо перед вами.',
+  qiblaRelativeBehind: 'Кибла позади: повернитесь на 180° в любую сторону.',
+  qiblaTurnRight: 'направо',
+  qiblaTurnLeft: 'налево',
+  qiblaRelativeTurn: ({ direction, degrees }: QiblaRelativeTurnParams) => `Поверните телефон ${direction} примерно на ${degrees}° к кибле.`,
   appBrand: 'VaqtPro',
   selectPlace: 'Выберите место',
   locationPrayerTimesIntro: 'Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.',

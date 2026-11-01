@@ -1,6 +1,7 @@
 import { shortestAngleDelta, wrap360 } from '../domain/qibla'
 
-export type OrientationStatus = 'idle' | 'acquiring' | 'live-unverified' | 'tilt' | 'degraded' | 'denied' | 'restricted' | 'unsupported' | 'security' | 'null-reading' | 'timeout'
+export type OrientationStatus = 'idle' | 'acquiring' | 'live-unverified' | 'calibrating' | 'tilt' | 'degraded'
+  | 'denied' | 'restricted' | 'unsupported' | 'security' | 'frame-unavailable' | 'null-reading' | 'timeout'
 export interface OrientationReading {
   headingMagneticDegrees: number
   source: 'webkit-compass' | 'absolute-orientation-sensor'
@@ -14,10 +15,11 @@ export type OrientationHandler = (status: OrientationStatus, reading?: Orientati
 const TAU_MS = 120
 const MIN_HORIZONTAL_PROJECTION = 0.35
 const NO_READING_TIMEOUT_MS = 4000
-// Пробные пороги фильтра, наклона и ожидания требуют настройки и проверки на реальных устройствах.
+// Порог наклона и параметры фильтра/ожидания остаются предварительными до проверки на устройствах.
 
-export function screenAngleDegrees(value: number | null | undefined): number {
-  return typeof value === 'number' && Number.isFinite(value) ? wrap360(value) : 0
+export function screenAngleDegrees(value: number | null | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value % 90 !== 0) return null
+  return wrap360(value)
 }
 
 export function circularExponentialStep(previous: number, next: number, elapsedMs: number, tauMs = TAU_MS): number {
@@ -37,7 +39,6 @@ export function eulerScreenTopHeading(input: { alpha: number; beta: number; gamm
   if (![alpha, beta, gamma, screenAngle].every(Number.isFinite)) return { kind: 'invalid' }
   const a = alpha * Math.PI / 180, b = beta * Math.PI / 180, g = gamma * Math.PI / 180
   const sa = Math.sin(a), ca = Math.cos(a), sb = Math.sin(b), cb = Math.cos(b), sg = Math.sin(g), cg = Math.cos(g)
-  // Z-X-Y intrinsic rotation maps natural device coordinates into the absolute reference frame.
   const matrix = new Float64Array(9)
   matrix[0] = ca * cg - sa * sb * sg; matrix[1] = -sa * cb
   matrix[3] = sa * cg + ca * sb * sg; matrix[4] = ca * cb
@@ -97,21 +98,39 @@ export function createOrientationSession(target: Window, report: OrientationHand
   const doc = target.document
   let enabled = false
   let stopped = false
+  let permissionGranted = false
+  let permissionInFlight = false
+  let lastStatus: OrientationStatus = 'idle'
+  let activeSource: 'absolute' | 'webkit' | null = null
+  let fallbackAttempted = false
   let sensor: AbsoluteOrientationLike | null = null
   let eventHandler: ((event: Event) => void) | null = null
   let probeTimer = 0
-  let lastReadingAt = 0
-  let permissionGranted = false
-  let hasCurrentReading = false
-  let screenAngle = 0
+  let screenAngle: number | null = null
   let latestWebKit: { heading: number; accuracyDegrees: number | null } | null = null
+  let latestQuaternion: number[] | null = null
+  let hasCurrentReading = false
+  const screenOrientation = (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
+  const emit: OrientationHandler = (status, reading) => {
+    if (stopped) return
+    lastStatus = status
+    report(status, reading)
+  }
 
-  const getScreenOrientation = () => (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
-  const readScreenAngle = () => { screenAngle = screenAngleDegrees(getScreenOrientation()?.angle) }
-  const clearSource = () => {
+  const readScreenAngle = (): number | null => {
+    const apiAngle = screenOrientation?.angle
+    const legacyAngle: unknown = Reflect.get(target, 'orientation')
+    const angle = typeof apiAngle === 'number' ? apiAngle : typeof legacyAngle === 'number' ? legacyAngle : undefined
+    return screenAngleDegrees(angle)
+  }
+  const cancelProbe = () => {
     if (probeTimer) target.clearTimeout(probeTimer)
     probeTimer = 0
+  }
+  const clearActiveSource = () => {
+    cancelProbe()
     latestWebKit = null
+    latestQuaternion = null
     hasCurrentReading = false
     if (eventHandler) target.removeEventListener('deviceorientation', eventHandler)
     eventHandler = null
@@ -121,145 +140,215 @@ export function createOrientationSession(target: Window, report: OrientationHand
       try { sensor.stop() } catch { /* Sensor may already have stopped. */ }
       sensor = null
     }
+    activeSource = null
   }
-  const startSource = () => {
-    if (!enabled || stopped || doc.visibilityState === 'hidden' || !doc.hasFocus()) return
-    clearSource()
-    readScreenAngle()
-    report('acquiring')
-    const hasOrientationEvent = typeof (target as Window & { DeviceOrientationEvent?: unknown }).DeviceOrientationEvent === 'function'
-    if (!win.AbsoluteOrientationSensor && !hasOrientationEvent) { report('unsupported'); return }
-    lastReadingAt = Date.now()
+  const classifySensorError = (name?: string): OrientationStatus | null => {
+    if (name === 'NotAllowedError') return 'restricted'
+    if (name === 'SecurityError') return 'security'
+    return null
+  }
+  const startProbe = (source: 'absolute' | 'webkit') => {
+    cancelProbe()
     probeTimer = target.setTimeout(() => {
-      if (Date.now() - lastReadingAt >= NO_READING_TIMEOUT_MS) {
-        clearSource()
-        report('timeout')
-      }
+      probeTimer = 0
+      if (stopped || activeSource !== source) return
+      clearActiveSource()
+      if (source === 'absolute') tryWebKitFallback()
+      else emit('timeout')
     }, NO_READING_TIMEOUT_MS)
-
-    if (win.AbsoluteOrientationSensor) {
-      try {
-        sensor = new win.AbsoluteOrientationSensor({ referenceFrame: 'device' })
-        sensor.onreading = () => {
-          if (!sensor?.quaternion) { if (!hasCurrentReading) report('null-reading'); return }
-          lastReadingAt = Date.now()
-          if (probeTimer) target.clearTimeout(probeTimer)
-          probeTimer = 0
-          const geometry = quaternionScreenTopHeading(Array.from(sensor.quaternion), screenAngle)
-          if (geometry.kind === 'tilt') { hasCurrentReading = false; report('tilt'); return }
-          if (geometry.kind !== 'heading') { report('degraded'); return }
-          hasCurrentReading = true
-          report('live-unverified', {
-            headingMagneticDegrees: geometry.heading,
-            source: 'absolute-orientation-sensor',
-            accuracyDegrees: null,
-            horizontalProjection: geometry.horizontalProjection,
-            screenAngle,
-            northReference: 'magnetic',
-          })
-        }
-        sensor.onerror = event => {
-          const name = event.error?.name
-          report(name === 'NotAllowedError' ? 'restricted' : name === 'SecurityError' ? 'security' : 'degraded')
-        }
-        sensor.start()
-        return
-      } catch (error) {
-        clearSource()
-        report(error instanceof DOMException && error.name === 'SecurityError' ? 'security'
-          : error instanceof DOMException && error.name === 'NotAllowedError' ? 'restricted' : 'degraded')
-        return
-      }
-    }
-
+  }
+  const startWebKitSource = () => {
+    if (typeof win.DeviceOrientationEvent !== 'function') { emit('unsupported'); return }
+    activeSource = 'webkit'
+    latestWebKit = null
+    hasCurrentReading = false
     eventHandler = event => {
+      if (stopped || activeSource !== 'webkit') return
       const orientation = event as OrientationEventLike
       if (typeof orientation.webkitCompassHeading === 'number') {
         const rawHeading = orientation.webkitCompassHeading
-        if (!Number.isFinite(rawHeading) || rawHeading < 0) { report('degraded'); return }
-        lastReadingAt = Date.now()
-        if (probeTimer) target.clearTimeout(probeTimer)
-        probeTimer = 0
-          const angle = screenAngleDegrees(getScreenOrientation()?.angle)
         const accuracy = orientation.webkitCompassAccuracy
-        const accuracyDegrees = typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy >= 0 ? accuracy : null
+        const accuracyIsUnusable = typeof accuracy === 'number' && (!Number.isFinite(accuracy) || accuracy < 0 || accuracy >= 180)
+        if (!Number.isFinite(rawHeading) || rawHeading < 0 || accuracyIsUnusable) {
+          latestWebKit = null
+          hasCurrentReading = false
+          cancelProbe()
+          emit('calibrating')
+          return
+        }
+        const currentScreenAngle = readScreenAngle()
+        if (currentScreenAngle === null) {
+          clearActiveSource()
+          emit('frame-unavailable')
+          return
+        }
+        screenAngle = currentScreenAngle
+        const accuracyDegrees = typeof accuracy === 'number' && accuracy >= 0 ? accuracy : null
         latestWebKit = { heading: rawHeading, accuracyDegrees }
         hasCurrentReading = true
-        report('live-unverified', {
-          headingMagneticDegrees: wrap360(latestWebKit.heading + angle),
-          source: 'webkit-compass',
-          accuracyDegrees: latestWebKit.accuracyDegrees,
-          horizontalProjection: 1,
-          screenAngle: angle,
-          northReference: 'magnetic',
+        cancelProbe()
+        emit('live-unverified', {
+          headingMagneticDegrees: wrap360(rawHeading + currentScreenAngle),
+          source: 'webkit-compass', accuracyDegrees, horizontalProjection: 1,
+          screenAngle: currentScreenAngle, northReference: 'magnetic',
         })
-      } else if (orientation.alpha === null || orientation.beta === null || orientation.gamma === null) {
-        if (hasCurrentReading) return
-        report('null-reading')
-      } else if (orientation.absolute) {
-        // Generic absolute DeviceOrientationEvent does not identify a north or screen frame.
-        report('degraded')
-      } else report('degraded')
+      } else if ((orientation.alpha === null || orientation.beta === null || orientation.gamma === null)
+        && !hasCurrentReading && lastStatus !== 'calibrating') {
+        emit('null-reading')
+      } else if (orientation.absolute && !hasCurrentReading && lastStatus !== 'calibrating') {
+        // Generic absolute DeviceOrientationEvent has no guaranteed north reference.
+        emit('degraded')
+      }
     }
     target.addEventListener('deviceorientation', eventHandler)
+    startProbe('webkit')
+  }
+  const tryWebKitFallback = () => {
+    if (stopped || fallbackAttempted) { emit('degraded'); return }
+    fallbackAttempted = true
+    clearActiveSource()
+    const angle = readScreenAngle()
+    if (angle === null) { emit('frame-unavailable'); return }
+    screenAngle = angle
+    emit('acquiring')
+    startWebKitSource()
+  }
+  const startSource = () => {
+    if (!enabled || stopped || doc.visibilityState === 'hidden') return
+    if (!doc.hasFocus()) { emit('degraded'); return }
+    clearActiveSource()
+    fallbackAttempted = false
+    const angle = readScreenAngle()
+    if (angle === null) { emit('frame-unavailable'); return }
+    screenAngle = angle
+    emit('acquiring')
+    if (!win.AbsoluteOrientationSensor) { startWebKitSource(); return }
+    try {
+      sensor = new win.AbsoluteOrientationSensor({ referenceFrame: 'device' })
+      const currentSensor = sensor
+      activeSource = 'absolute'
+      currentSensor.onreading = () => {
+        if (stopped || activeSource !== 'absolute' || sensor !== currentSensor) return
+        if (!currentSensor.quaternion) {
+          if (!hasCurrentReading) emit('null-reading')
+          return
+        }
+        const quaternion = Array.from(currentSensor.quaternion)
+        latestQuaternion = quaternion
+        const currentScreenAngle = screenAngle
+        if (currentScreenAngle === null) {
+          clearActiveSource()
+          emit('frame-unavailable')
+          return
+        }
+        const geometry = quaternionScreenTopHeading(quaternion, currentScreenAngle)
+        if (geometry.kind === 'tilt') { hasCurrentReading = false; cancelProbe(); emit('tilt'); return }
+        if (geometry.kind !== 'heading') { if (!hasCurrentReading) emit('degraded'); return }
+        hasCurrentReading = true
+        cancelProbe()
+        emit('live-unverified', {
+          headingMagneticDegrees: geometry.heading,
+          source: 'absolute-orientation-sensor', accuracyDegrees: null,
+          horizontalProjection: geometry.horizontalProjection,
+          screenAngle: currentScreenAngle, northReference: 'magnetic',
+        })
+      }
+      currentSensor.onerror = event => {
+        if (stopped || sensor !== currentSensor) return
+        const status = classifySensorError(event.error?.name)
+        clearActiveSource()
+        if (status) emit(status)
+        else tryWebKitFallback()
+      }
+      currentSensor.start()
+      startProbe('absolute')
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : undefined
+      clearActiveSource()
+      const status = classifySensorError(name)
+      if (status) emit(status)
+      else tryWebKitFallback()
+    }
   }
   const onVisibility = () => {
-    if (doc.visibilityState === 'hidden') { clearSource(); if (enabled) report('degraded') }
+    if (doc.visibilityState === 'hidden') { clearActiveSource(); if (enabled) emit('degraded') }
     else if (enabled) startSource()
   }
-  const onBlur = () => { clearSource(); if (enabled) report('degraded') }
-  const onFocus = () => { if (enabled) startSource() }
+  const onBlur = () => { clearActiveSource(); if (enabled) emit('degraded') }
+  const onResume = () => { if (enabled) startSource() }
   const onScreenChange = () => {
-    readScreenAngle()
+    const angle = readScreenAngle()
+    if (angle === null) {
+      clearActiveSource()
+      if (enabled) emit('frame-unavailable')
+      return
+    }
+    screenAngle = angle
     if (!enabled) return
-    if (latestWebKit) {
-      report('live-unverified', {
-        headingMagneticDegrees: wrap360(latestWebKit.heading + screenAngle),
-        source: 'webkit-compass',
-        accuracyDegrees: latestWebKit.accuracyDegrees,
-        horizontalProjection: 1,
-        screenAngle,
-        northReference: 'magnetic',
+    if (activeSource === 'webkit' && latestWebKit) {
+      emit('live-unverified', {
+        headingMagneticDegrees: wrap360(latestWebKit.heading + angle),
+        source: 'webkit-compass', accuracyDegrees: latestWebKit.accuracyDegrees,
+        horizontalProjection: 1, screenAngle: angle, northReference: 'magnetic',
       })
-    } else startSource()
+    } else if (activeSource === 'absolute' && latestQuaternion) {
+      const geometry = quaternionScreenTopHeading(latestQuaternion, angle)
+      if (geometry.kind === 'heading') {
+        emit('live-unverified', {
+          headingMagneticDegrees: geometry.heading, source: 'absolute-orientation-sensor',
+          accuracyDegrees: null, horizontalProjection: geometry.horizontalProjection,
+          screenAngle: angle, northReference: 'magnetic',
+        })
+      } else if (geometry.kind === 'tilt') { hasCurrentReading = false; emit('tilt') }
+      else emit('degraded')
+    } else if (!activeSource) startSource()
   }
+  const onScreenOrientationChange = () => onScreenChange()
   doc.addEventListener('visibilitychange', onVisibility)
   target.addEventListener('pagehide', onBlur)
+  target.addEventListener('pageshow', onResume)
   target.addEventListener('blur', onBlur)
-  target.addEventListener('focus', onFocus)
-  getScreenOrientation()?.addEventListener('change', onScreenChange)
+  target.addEventListener('focus', onResume)
+  target.addEventListener('orientationchange', onScreenOrientationChange)
+  screenOrientation?.addEventListener('change', onScreenOrientationChange)
 
   return {
     async enableFromGesture() {
-      if (stopped) return
-      if (!target.isSecureContext) { report('security'); return }
-      if (doc.visibilityState === 'hidden') { report('degraded'); return }
-      report('acquiring')
+      if (stopped || permissionInFlight) return
+      if (!target.isSecureContext) { emit('security'); return }
+      if (doc.visibilityState === 'hidden') { emit('degraded'); return }
+      if (enabled && (activeSource !== null || probeTimer !== 0) && lastStatus !== 'degraded') return
+      permissionInFlight = true
+      emit('acquiring')
       const requestPermission = win.DeviceOrientationEvent?.requestPermission
       if (requestPermission && !permissionGranted) {
         try {
           const permission = await requestPermission.call(win.DeviceOrientationEvent, true)
-          if (permission !== 'granted') { report('denied'); return }
+          if (permission !== 'granted') { emit('denied'); return }
           permissionGranted = true
         } catch (error) {
-          report(error instanceof DOMException && error.name === 'SecurityError' ? 'security'
-            : error instanceof DOMException && error.name === 'NotAllowedError' ? 'restricted' : 'denied')
+          const name = error instanceof DOMException ? error.name : undefined
+          emit(name === 'SecurityError' ? 'security' : name === 'NotAllowedError' ? 'restricted' : 'denied')
           return
+        } finally {
+          permissionInFlight = false
         }
-      }
+      } else permissionInFlight = false
       enabled = true
       startSource()
     },
     stop() {
+      if (stopped) return
       stopped = true
       enabled = false
-      clearSource()
+      clearActiveSource()
       doc.removeEventListener('visibilitychange', onVisibility)
       target.removeEventListener('pagehide', onBlur)
+      target.removeEventListener('pageshow', onResume)
       target.removeEventListener('blur', onBlur)
-      target.removeEventListener('focus', onFocus)
-      getScreenOrientation()?.removeEventListener('change', onScreenChange)
-      report('idle')
+      target.removeEventListener('focus', onResume)
+      target.removeEventListener('orientationchange', onScreenOrientationChange)
+      screenOrientation?.removeEventListener('change', onScreenOrientationChange)
     },
   }
 }

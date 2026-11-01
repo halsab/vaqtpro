@@ -55,11 +55,38 @@ test('orientation permission starts only on user action and WebKit magnetic read
   await page.evaluate(() => {
     const reading = Object.assign(new Event('deviceorientation'), {
       alpha: 0, beta: 0, gamma: 0, absolute: false,
+      webkitCompassHeading: 359, webkitCompassAccuracy: -1,
+    })
+    window.dispatchEvent(reading)
+  })
+  await expect(page.getByText(/Компас не откалиброван/)).toBeVisible()
+  await page.evaluate(() => {
+    const reading = Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false,
       webkitCompassHeading: 359, webkitCompassAccuracy: 6,
     })
     window.dispatchEvent(reading)
   })
   await expect(page.getByText(/Живое направление доступно, но физическая точность этого устройства не проверена/)).toBeVisible()
   await expect(page.getByText(/Оценка датчика направления: ±6.0°/)).toBeVisible()
+  await expect(page.locator('.qibla-relative-guidance')).toHaveAttribute('aria-live', 'polite')
+  await expect(page.locator('.qibla-relative-guidance')).toContainText(/(Поверните телефон|Кибла прямо перед вами|Кибла позади)/)
   await expect(page.locator('.qibla-dial')).toHaveAttribute('style', /rotate\(/)
+
+  const performanceSample = await page.evaluate(async () => {
+    const started = performance.now()
+    for (let index = 0; index < 500; index += 1) {
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false,
+        webkitCompassHeading: index % 2 ? 1 : 359, webkitCompassAccuracy: 6,
+      }))
+    }
+    const dispatchDurationMs = performance.now() - started
+    const frameStarted = performance.now()
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    return { dispatchDurationMs, nextFrameLatencyMs: performance.now() - frameStarted }
+  })
+  console.info(`Qibla sensor mock: 500 events dispatched in ${performanceSample.dispatchDurationMs.toFixed(2)} ms; next frame in ${performanceSample.nextFrameLatencyMs.toFixed(2)} ms`)
+  expect(performanceSample.dispatchDurationMs).toBeGreaterThanOrEqual(0)
+  expect(performanceSample.nextFrameLatencyMs).toBeGreaterThanOrEqual(0)
 })

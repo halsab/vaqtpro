@@ -227,6 +227,7 @@ html[data-input='pointer'] .select-field { outline: none; }
 .qibla-bearing span:first-child { color: var(--text-primary); font: var(--font-title); }
 .qibla-status { display: grid; gap: 8px; max-width: 32rem; color: var(--text-secondary); font: var(--font-footnote); }
 .qibla-status p { overflow-wrap: anywhere; }
+.qibla-relative-guidance:empty { display: none; }
 .event-countdown .countdown-value { font: var(--font-title); line-height: 1.05; color: var(--accent-countdown); font-weight: 400; font-variant-numeric: tabular-nums; }
 .event-list { list-style: none; padding: 0; margin: 0; }
 .religious-event-banner {
