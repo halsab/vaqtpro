@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -45,7 +46,15 @@ const CONTENT_SECURITY_POLICY = [
 ].join('; ')
 
 export default defineConfig({
-  server: { host: '0.0.0.0' },
+  server: {
+    host: '0.0.0.0',
+    ...(process.env.VITE_DEV_TLS_DIR ? {
+      https: {
+        key: readFileSync(resolve(process.env.VITE_DEV_TLS_DIR, 'server.key')),
+        cert: readFileSync(resolve(process.env.VITE_DEV_TLS_DIR, 'server.crt')),
+      },
+    } : {}),
+  },
   base: '/',
   define: {
     'import.meta.env.VITE_APP_PACKAGE_VERSION': JSON.stringify(LOCAL_APP_VERSION),
