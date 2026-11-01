@@ -36,6 +36,7 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   const [failed, setFailed] = useState(false)
   const [preparationRequest, setPreparationRequest] = useState(0)
   const [preparing, setPreparing] = useState(false)
+  const preparationBusy = useRef(false)
   const busy = useRef(false)
   const preparation = useRef<Promise<MonthlyExportPreparation> | null>(null)
   const select = useRef<HTMLSelectElement>(null)
@@ -52,7 +53,11 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
           setFailed(false)
         })
         .catch(() => { if (current) setFailed(true) })
-        .finally(() => { if (current) setPreparing(false) })
+        .finally(() => {
+          if (!current) return
+          preparationBusy.current = false
+          setPreparing(false)
+        })
     }
     return () => { current = false }
   }, [view, preparationRequest])
@@ -88,9 +93,9 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
   }
 
   return <>
-    <span className={`monthly-export-control${!view || (preparing && !hasAvailableFormat) ? ' is-disabled' : ''}`}>
+    <span className={`monthly-export-control${!view ? ' is-disabled' : ''}`}>
       {hasAvailableFormat ? <>
-        <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')} aria-hidden="true" tabIndex={-1} disabled>
+        <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')} aria-hidden="true" tabIndex={-1}>
           {preparing ? <LoadingSpinner /> : <ShareIcon />}
         </IconActionButton>
         <select ref={select} aria-label={t('shareMonthlyTimetable')} aria-busy={preparing || undefined}
@@ -100,8 +105,10 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
           <option value="png" disabled={!result?.png}>{t('exportPng')}</option>
         </select>
       </> : <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')}
-        aria-busy={preparing || undefined} disabled={!view || preparing}
+        aria-busy={preparing || undefined} aria-disabled={!view || preparing || failed || undefined} disabled={!view}
         onClick={() => {
+          if (!view || preparationBusy.current || failed) return
+          preparationBusy.current = true
           autoOpenPicker.current = true
           setPreparing(true)
           setPreparationRequest(value => value + 1)
@@ -114,6 +121,7 @@ function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMo
         setPrepared(null)
         setFailed(false)
         preparation.current = null
+        preparationBusy.current = true
         autoOpenPicker.current = true
         setPreparing(true)
         setPreparationRequest(value => value + 1)

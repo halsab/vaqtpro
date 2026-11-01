@@ -39,22 +39,31 @@ it('shows preparation progress, attempts the native picker, and keeps the ready 
   await user.click(button)
   expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
   expect(button).toHaveAttribute('aria-busy', 'true')
+  expect(button).not.toBeDisabled()
+  expect(control).not.toHaveClass('is-disabled')
   expect(control?.querySelector('.monthly-export-spinner')).not.toBeNull()
 
   act(() => { finish?.({ pdf, png, failures: [] }) })
   const select = await screen.findByRole('combobox', { name: shareLabel })
   await waitFor(() => expect(showPicker).toHaveBeenCalledOnce())
   expect(control?.querySelector('.monthly-export-spinner')).toBeNull()
+  expect(control?.querySelector('button')).not.toBeDisabled()
+  expect(control?.querySelector('button')).toHaveAttribute('aria-hidden', 'true')
   await user.click(select)
   expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
 })
 
-it('offers retry after preparation fails and restores export when it recovers', async () => {
+it('keeps the action unavailable after a rejected preparation until Retry starts a fresh attempt', async () => {
   prepareMonthlyExportFiles.mockRejectedValueOnce(new Error('render failed')).mockResolvedValueOnce({ pdf, png, failures: [] })
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
-  await user.click(screen.getByRole('button', { name: shareLabel }))
+  const button = screen.getByRole('button', { name: shareLabel })
+  await user.click(button)
+  await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
+  await user.click(button)
+  expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
+
   await user.click(await screen.findByRole('button', { name: 'Повторить' }))
   await waitFor(() => expect(screen.getByRole('combobox', { name: shareLabel })).toBeEnabled())
   expect(prepareMonthlyExportFiles).toHaveBeenCalledTimes(2)
