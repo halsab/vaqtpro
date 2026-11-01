@@ -210,6 +210,8 @@ describe('VaqtPro', () => {
   })
 
   it('does not render a directional needle when the accepted location uncertainty reaches the Kaaba', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('iPhone')
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone)')
     const singularPlace = { ...defaultPlace, latitude: 21.4225241, longitude: 39.8261818, accuracy: 25 }
     const services = createServices({
       initialize: vi.fn().mockResolvedValue(initialized({
@@ -218,7 +220,7 @@ describe('VaqtPro', () => {
     })
     render(<App services={services} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Компас киблы' }))
-    expect(await screen.findByText(/Для этой точки направление на киблу однозначно не определяется/)).toBeVisible()
+    expect(await screen.findByText(/Для этого места направление не удаётся определить/)).toBeVisible()
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
     expect(services.getPosition).not.toHaveBeenCalled()
     expect(services.getPermission).not.toHaveBeenCalled()

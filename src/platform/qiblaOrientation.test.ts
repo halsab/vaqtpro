@@ -142,6 +142,8 @@ describe('Qibla orientation browser adapters', () => {
     const requestPermission = vi.fn().mockResolvedValue('granted')
     vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
     const reports: string[] = []
+    const added = vi.spyOn(window, 'addEventListener')
+    const removed = vi.spyOn(window, 'removeEventListener')
     const session = createOrientationSession(window, status => reports.push(status))
     await session.enableFromGesture()
     window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
@@ -157,6 +159,8 @@ describe('Qibla orientation browser adapters', () => {
     expect(reports.filter(status => status === 'live-unverified')).toHaveLength(1)
     expect(requestPermission).toHaveBeenCalledOnce()
     session.stop()
+    expect(added.mock.calls.filter(([type]) => type === 'devicemotion')).toHaveLength(2)
+    expect(removed.mock.calls.filter(([type]) => type === 'devicemotion')).toHaveLength(2)
   })
 
   it('uses validated legacy window.orientation as a landscape fallback and updates on rotationchange', async () => {
@@ -288,6 +292,20 @@ describe('Qibla orientation browser adapters', () => {
     expect(instances[0]?.stop).toHaveBeenCalledOnce()
     expect(instances[1]?.stop).toHaveBeenCalledOnce()
     expect(removed.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(2)
+    expect(added.mock.calls.filter(([type]) => type === 'devicemotion')).toHaveLength(4)
+    expect(removed.mock.calls.filter(([type]) => type === 'devicemotion')).toHaveLength(4)
+  })
+
+  it('does not retain motion evidence when no usable orientation source exists', async () => {
+    vi.stubGlobal('DeviceOrientationEvent', undefined)
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    const added = vi.spyOn(window, 'addEventListener')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    await session.enableFromGesture()
+    expect(reports.at(-1)).toBe('unsupported')
+    expect(added.mock.calls.filter(([type]) => type === 'devicemotion')).toHaveLength(0)
+    session.stop()
   })
 
   it('falls back to the validated WebKit scalar after Generic Sensor produces no readings', async () => {

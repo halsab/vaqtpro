@@ -137,6 +137,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
   }
   const clearActiveSource = () => {
     cancelProbe()
+    clearMotionEvidence()
     latestWebKit = null
     latestQuaternion = null
     hasCurrentReading = false
@@ -184,8 +185,13 @@ export function createOrientationSession(target: Window, report: OrientationHand
     }, NO_READING_TIMEOUT_MS)
   }
   const startWebKitSource = () => {
-    if (typeof win.DeviceOrientationEvent !== 'function') { emit('unsupported'); return }
+    if (typeof win.DeviceOrientationEvent !== 'function') {
+      clearMotionEvidence()
+      emit('unsupported')
+      return
+    }
     activeSource = 'webkit'
+    startMotionEvidence()
     latestWebKit = null
     hasCurrentReading = false
     eventHandler = event => {
@@ -273,7 +279,6 @@ export function createOrientationSession(target: Window, report: OrientationHand
     const angle = readScreenAngle()
     if (angle === null) { emit('frame-unavailable'); return }
     screenAngle = angle
-    startMotionEvidence()
     emit('acquiring')
     if (!win.AbsoluteOrientationSensor) { startWebKitSource(); return }
     try {
@@ -322,6 +327,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
         else tryWebKitFallback()
       }
       currentSensor.start()
+      startMotionEvidence()
       startProbe('absolute')
     } catch (error) {
       const name = error instanceof DOMException ? error.name : undefined

@@ -75,6 +75,7 @@ function deriveRelativePointer(
 
 function orientationIssue(status: OrientationStatus, reason: CompassState['reason'], t: ReturnType<typeof useLocalization>['t']): string | null {
   if (reason === 'blackout') return t('qiblaMagneticBlackout')
+  if (reason === 'caution') return t('qiblaMagneticCaution')
   if (reason === 'model-unavailable') return t('qiblaMagneticModelUnavailable')
   switch (status) {
     case 'acquiring': return t('qiblaCompassConnecting')
@@ -118,6 +119,8 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const pendingNorthRotation = useRef(0)
   const pointerAngle = useRef<number | null>(null)
   const unwrappedPointerAngle = useRef(0)
+  const evidenceTimer = useRef<number | null>(null)
+  const suspectReading = useRef<OrientationReading | null>(null)
   const latestReading = useRef<OrientationReading | null>(null)
   const lastSource = useRef<string | null>(null)
   const continuity = useRef(new QiblaHeadingEvidenceGate())
@@ -175,8 +178,6 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     frameRequest.current = null
     pointerAngle.current = null
     unwrappedPointerAngle.current = 0
-    pendingNorthRotation.current = 0
-    roseRef.current?.style.setProperty('--qibla-rose-angle', '0deg')
     publishPointerVisibility(false)
   }, [publishPointerVisibility])
 
@@ -279,8 +280,39 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     const trace = createQiblaDiagnosticTrace(window, qiblaDiagnosticsRequested(window))
     traceRef.current = trace
     let active = true
+    const cancelEvidenceTimer = () => {
+      if (evidenceTimer.current !== null) window.clearTimeout(evidenceTimer.current)
+      evidenceTimer.current = null
+    }
+    const settleSuspectReading = () => {
+      evidenceTimer.current = null
+      if (!active) return
+      const decision = continuity.current.settle(performance.now())
+      if (decision.kind === 'accepted' && suspectReading.current) {
+        const recoveredReading = suspectReading.current
+        suspectReading.current = null
+        latestReading.current = recoveredReading
+        trace.record({ event: 'status', status: 'live-unverified', source: recoveredReading.source,
+          reportedAccuracyDegrees: recoveredReading.accuracyDegrees, screenAngleDegrees: recoveredReading.screenAngle,
+          modelValid: modelRef.current.kind === 'calculated' })
+        processReadingRef.current(recoveredReading)
+      } else if (decision.kind === 'degraded') {
+        suspectReading.current = null
+        clearPointer()
+        clearAccessibleDirection()
+        trace.record({ event: 'status', status: 'degraded',
+          modelValid: modelRef.current.kind === 'calculated' })
+        publishCompassState({ status: 'degraded', reason: null })
+      } else if (decision.kind === 'suspect') scheduleEvidenceSettlement()
+    }
+    const scheduleEvidenceSettlement = () => {
+      cancelEvidenceTimer()
+      evidenceTimer.current = window.setTimeout(settleSuspectReading, 600)
+    }
     const setIssue = (status: OrientationStatus) => {
       if (!active) return
+      cancelEvidenceTimer()
+      suspectReading.current = null
       if (status !== 'suspect') {
         continuity.current.reset()
         latestReading.current = null
@@ -311,7 +343,20 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         setIssue('degraded')
         return
       }
+      if (decision.kind === 'ignored') return
+      if (decision.kind === 'degraded') {
+        cancelEvidenceTimer()
+        suspectReading.current = null
+        clearPointer()
+        clearAccessibleDirection()
+        trace.record({ event: 'status', status: 'degraded', source: reading.source,
+          reportedAccuracyDegrees: reading.accuracyDegrees, modelValid: modelRef.current.kind === 'calculated' })
+        publishCompassState({ status: 'degraded', reason: null })
+        return
+      }
       if (decision.kind === 'suspect') {
+        suspectReading.current = reading
+        scheduleEvidenceSettlement()
         latestReading.current = null
         clearPointer()
         clearAccessibleDirection()
@@ -322,6 +367,8 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         publishCompassState({ status: 'suspect', reason: null })
         return
       }
+      cancelEvidenceTimer()
+      suspectReading.current = null
       latestReading.current = reading
       if (lastSource.current && lastSource.current !== reading.source) trace.record({ event: 'source-change', source: reading.source })
       lastSource.current = reading.source
@@ -338,6 +385,8 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       frameRequest.current = null
       if (announcementTimer.current !== null) window.clearTimeout(announcementTimer.current)
       announcementTimer.current = null
+      cancelEvidenceTimer()
+      suspectReading.current = null
       trace.close()
       if (traceRef.current === trace) traceRef.current = null
     }
@@ -364,6 +413,10 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       {visibleIssue ? <p role="status">{visibleIssue}</p> : null}
       {showInitialAction || showRetry ? <ActionButton disabled={compass.status === 'acquiring'} onClick={() => {
         traceRef.current?.record({ event: 'retry', status: compass.status })
+        continuity.current.reset()
+        suspectReading.current = null
+        if (evidenceTimer.current !== null) window.clearTimeout(evidenceTimer.current)
+        evidenceTimer.current = null
         void session.current?.enableFromGesture()
       }}>{compass.status === 'acquiring' ? t('qiblaCompassConnecting') : actionLabel}</ActionButton> : null}
     </div> : undefined}
@@ -376,6 +429,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
           <span className="qibla-cardinal qibla-cardinal-south">{t('qiblaSouth')}</span>
           <span className="qibla-cardinal qibla-cardinal-west">{t('qiblaWest')}</span>
         </div>
+        <span className="qibla-forward-marker" aria-hidden="true" />
         <span ref={pointerRef} className="qibla-pointer" data-visible={pointerVisible || undefined} aria-hidden="true" />
         <span className="qibla-center" aria-hidden="true" />
       </div>

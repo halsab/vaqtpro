@@ -31,17 +31,22 @@ test('Qibla action fits the compact home toolbar and returns focus in mobile Web
   await page.goBack()
   await expect(page.getByRole('region', { name: 'Главная' })).toBeVisible()
   await expect(compass).toBeFocused()
+  await page.setViewportSize({ width: 735, height: 988 })
+  await expect(compass).toBeVisible()
   await page.goForward()
   await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
   await page.getByRole('button', { name: 'Назад' }).click()
   await expect(compass).toBeFocused()
 })
 
-test('Qibla action is hidden in the desktop home toolbar', async ({ page, browserName }) => {
-  test.skip(browserName !== 'chromium', 'Desktop system detection is validated in Chromium')
-  await page.setViewportSize({ width: 735, height: 988 })
+test('desktop home hides the Qibla action at narrow and wide viewport widths', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Desktop platform visibility is validated in Chromium')
+  await page.setViewportSize({ width: 320, height: 700 })
   await page.goto('./')
   await choosePlace(page)
+  await expect(page.locator('#home-qibla')).toHaveCount(0)
+  await expect(page.locator('#home-settings')).toBeVisible()
+  await page.setViewportSize({ width: 735, height: 988 })
   await expect(page.locator('#home-qibla')).toHaveCount(0)
   await expect(page.locator('#home-settings')).toBeVisible()
 })
@@ -80,7 +85,7 @@ test('orientation permission starts only on user action and WebKit magnetic read
     })
     window.dispatchEvent(reading)
   })
-  await expect(page.getByText(/Проверьте компас и переместите телефон восьмёркой/)).toBeVisible()
+  await expect(page.getByText(/Уберите телефон от металла и проверьте компас/)).toBeVisible()
   await page.evaluate(() => {
     const reading = Object.assign(new Event('deviceorientation'), {
       alpha: 0, beta: 0, gamma: 0, absolute: false,
@@ -91,7 +96,7 @@ test('orientation permission starts only on user action and WebKit magnetic read
   await expect(page.locator('.qibla-screen .sr-only[aria-live="polite"]')).toContainText(/Поверните телефон|Кибла прямо перед вами|Кибла позади/)
   await expect(page.getByText(/Живое направление доступно, но физическая точность этого устройства не проверена/)).toHaveClass('sr-only')
   await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
-  expect(await page.locator('.qibla-rose').getAttribute('style')).toMatch(/--qibla-rose-angle: -?\d+(\.\d+)?deg/)
+  await expect(page.locator('.qibla-forward-marker')).toBeVisible()
 
   await page.setViewportSize({ width: 390, height: 320 })
   const shortDial = await page.locator('.qibla-dial').boundingBox()

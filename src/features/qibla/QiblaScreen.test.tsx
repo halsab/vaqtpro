@@ -87,6 +87,8 @@ describe('QiblaScreen orientation presentation', () => {
     expect(screen.getByRole('button', { name: 'Включить компас' })).toBeVisible()
     expect(screen.queryByRole('button', { name: /место|локация|город/i })).toBeNull()
     expect(screen.queryByText(/Живое направление доступно/)).toBeNull()
+    expect(document.querySelector('.qibla-forward-marker')).toBeInTheDocument()
+    expect(document.querySelector('.qibla-cardinal')).toBeInTheDocument()
   })
 
   it('survives StrictMode reinitialization and coalesces fast sensor events into one dial frame without visible instructions', async () => {
@@ -102,7 +104,11 @@ describe('QiblaScreen orientation presentation', () => {
     const pointer = document.querySelector('.qibla-pointer')
     expect(pointer).toHaveAttribute('data-visible', 'true')
     expect(pointer?.getAttribute('style')).toMatch(/--qibla-angle:/)
-    expect(document.querySelector('.qibla-rose')?.getAttribute('style')).toMatch(/--qibla-rose-angle:/)
+    expect(document.querySelector('.qibla-forward-marker')).toBeInTheDocument()
+    const rose = document.querySelector('.qibla-rose')
+    expect(rose?.getAttribute('style')).toMatch(/--qibla-rose-angle: -?\d+(\.\d+)?deg/)
+    expect(rose?.getAttribute('style')).not.toMatch(/--qibla-rose-angle: 0deg/)
+    expect(rose).toHaveTextContent('СВЮЗ')
     const liveRegion = document.querySelector('.qibla-screen .sr-only[aria-live="polite"]')
     expect(liveRegion).toHaveTextContent(/Поверните телефон (налево|направо)|Кибла позади/)
     expect(liveRegion).toHaveClass('sr-only')
@@ -122,6 +128,42 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-dial')).toBeNull()
   })
 
+  it('recovers an accurate stationary heading after a bounded quarantine when motion evidence is unavailable', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    flushFrame()
+    dispatchHeading(180, 1050)
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас мог сбиться/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(180, 1200)
+    sampleTime = 1650
+    dispatchHeading(180, 1650)
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(screen.queryByText(/Компас мог сбиться/)).toBeNull()
+  })
+
+  it('does not recover from a single stale candidate when sensor readings stop', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    dispatchHeading(180, 1050)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас мог сбиться/)
+  })
+
+  it('shows a concise WMM caution while withholding any claim of physical accuracy', async () => {
+    const cautionPlace = { ...place, latitude: 70, longitude: -100 }
+    render(<QiblaScreen place={cautionPlace} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас может ошибаться\. Сверьте направление с ориентиром/)
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(screen.queryByText(/точность подтверждена|точно направлен/i)).toBeNull()
+  })
+
   it('hides the needle during an isolated discontinuity, recovers when the heading returns, and retries a sustained ambiguous jump explicitly', async () => {
     render(<QiblaScreen place={place} onBack={() => {}} />)
     const user = await activateCompass()
@@ -130,7 +172,7 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
 
     dispatchHeading(180, 1050)
-    expect(screen.getByRole('status')).toHaveTextContent(/Проверьте направление компаса/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас мог сбиться/)
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
     dispatchHeading(2, 1100)
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
@@ -155,7 +197,7 @@ describe('QiblaScreen orientation presentation', () => {
       rotationRate: { alpha: 0, beta: 0, gamma: 3600 },
     })) })
     dispatchHeading(180, 1050)
-    expect(screen.queryByText(/Проверьте направление компаса/)).toBeNull()
+    expect(screen.queryByText(/Компас мог сбиться/)).toBeNull()
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
   })
 
@@ -163,11 +205,11 @@ describe('QiblaScreen orientation presentation', () => {
     render(<QiblaScreen place={place} onBack={() => {}} />)
     await activateCompass()
     dispatchHeading(359, 1000, { accuracy: -1 })
-    expect(screen.getByRole('status')).toHaveTextContent(/Проверьте компас/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Уберите телефон от металла/)
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
 
     dispatchHeading(359, 1016, { beta: null })
-    expect(screen.getByRole('status')).toHaveTextContent(/Не удаётся определить наклон/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Держите телефон ровнее/)
     dispatchHeading(359, 1032, { accuracy: 8 })
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
     expect(screen.queryByText(/Проверьте компас/)).toBeNull()
@@ -200,7 +242,7 @@ describe('QiblaScreen orientation presentation', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
     await act(async () => { await vi.advanceTimersByTimeAsync(1) })
     dispatchHeading(0, 2000)
-    expect(screen.getByRole('status')).toHaveTextContent(/Локальная магнитная модель недоступна/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Живой компас недоступен\. Показано расчётное направление/)
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
   })
 

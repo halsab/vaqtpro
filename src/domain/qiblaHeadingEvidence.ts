@@ -12,93 +12,236 @@ export interface HeadingEvidenceSample {
 export type HeadingEvidenceDecision =
   | { kind: 'accepted'; headingDegrees: number; recoveredFromSuspect: boolean }
   | { kind: 'suspect'; candidateHeadingDegrees: number }
+  | { kind: 'degraded'; candidateHeadingDegrees: number }
+  | { kind: 'ignored' }
   | { kind: 'invalid' }
 
-// Предварительные пределы для карантина одиночных скачков; требуют калибровки на устройствах.
+// Предварительные пороги доверия к датчикам; их нужно проверить на устройствах.
 const MAX_UNCORROBORATED_TURN_RATE_DPS = 1080
 const MAX_SAMPLE_GAP_MS = 1000
 const MIN_CANDIDATE_PROGRESS_DEGREES = 2
 const MOTION_CORROBORATION_RATIO = 0.65
+const MAX_MOTION_CORROBORATION_INTERVAL_MS = 250
+const MIN_STATIONARY_RECOVERY_MS = 600
+const MAX_QUARANTINE_MS = 2000
+const MIN_COHERENT_TURN_MS = 80
+const MIN_COHERENT_TURN_DEGREES = 30
+const MAX_RECOVERY_ACCURACY_DEGREES = 15
+const MAX_LIVE_ACCURACY_DEGREES = 60
+const MAX_ACCURACY_WORSENING_DEGREES = 10
+const MAX_STATIONARY_STEP_DEGREES = 4
+const ACCURACY_MATCH_CAP_DEGREES = 20
+
+interface Candidate {
+  sample: HeadingEvidenceSample
+  deviceHeading: number
+  startedAtMs: number
+  stableSinceMs: number
+  direction: number
+  coherentTravelDegrees: number
+  baselineAccuracyDegrees: number | null
+  lastSeenAtMs: number
+}
 
 export class QiblaHeadingEvidenceGate {
   private accepted: HeadingEvidenceSample | null = null
-  private candidate: HeadingEvidenceSample | null = null
-  private candidateDirection = 0
-  private candidateProgressSamples = 0
+  private candidate: Candidate | null = null
+  private lastObservedTimeMs: number | null = null
 
   reset() {
     this.accepted = null
-    this.clearCandidate()
+    this.candidate = null
+    this.lastObservedTimeMs = null
+  }
+
+  settle(nowMs: number): HeadingEvidenceDecision {
+    const candidate = this.candidate
+    if (!candidate || !Number.isFinite(nowMs) || nowMs < candidate.startedAtMs) return { kind: 'ignored' }
+    if (nowMs - candidate.startedAtMs >= MAX_QUARANTINE_MS) {
+      return { kind: 'degraded', candidateHeadingDegrees: candidate.sample.headingDegrees }
+    }
+    return { kind: 'suspect', candidateHeadingDegrees: candidate.sample.headingDegrees }
   }
 
   push(sample: HeadingEvidenceSample): HeadingEvidenceDecision {
     if (!Number.isFinite(sample.headingDegrees) || !Number.isFinite(sample.timeMs)
       || !Number.isFinite(sample.screenAngle)
       || (sample.motionRateDegreesPerSecond !== null
-        && (!Number.isFinite(sample.motionRateDegreesPerSecond) || sample.motionRateDegreesPerSecond < 0))) {
-      return { kind: 'invalid' }
-    }
+        && (!Number.isFinite(sample.motionRateDegreesPerSecond) || sample.motionRateDegreesPerSecond < 0))
+      || (sample.reportedAccuracyDegrees !== null
+        && (!Number.isFinite(sample.reportedAccuracyDegrees) || sample.reportedAccuracyDegrees < 0
+          || sample.reportedAccuracyDegrees >= 180))) return { kind: 'invalid' }
 
     const normalized = { ...sample, headingDegrees: wrap360(sample.headingDegrees) }
+    if (this.lastObservedTimeMs !== null && normalized.timeMs < this.lastObservedTimeMs) return { kind: 'ignored' }
+    if (this.candidate?.lastSeenAtMs === normalized.timeMs) return { kind: 'ignored' }
+    this.lastObservedTimeMs = normalized.timeMs
+
     const previous = this.accepted
-    if (!previous || previous.source !== normalized.source || previous.screenAngle !== normalized.screenAngle
-      || normalized.timeMs <= previous.timeMs || normalized.timeMs - previous.timeMs > MAX_SAMPLE_GAP_MS) {
+    if (!previous) {
+      this.accepted = normalized
+      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false }
+    }
+
+    const transitioned = previous.source !== normalized.source || previous.screenAngle !== normalized.screenAngle
+    if (transitioned && this.isKnownFrameOrSourceContinuation(previous, normalized)) {
       this.accepted = normalized
       const recoveredFromSuspect = this.candidate !== null
-      this.clearCandidate()
+      this.candidate = null
       return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect }
     }
+    if (transitioned) return this.startCandidate(normalized, previous)
 
     const elapsedMs = normalized.timeMs - previous.timeMs
-    const delta = shortestAngleDelta(previous.headingDegrees, normalized.headingDegrees)
-    const maxPlausibleChange = MAX_UNCORROBORATED_TURN_RATE_DPS * elapsedMs / 1000
-    const motionExplainsChange = normalized.motionRateDegreesPerSecond !== null
+    if (elapsedMs <= 0) {
+      if (this.candidate) return this.updateCandidate(normalized, previous)
+      if (this.deviceHeadingDistance(previous, normalized) <= this.matchTolerance(previous, normalized)) return { kind: 'ignored' }
+      return this.startCandidate(normalized, previous)
+    }
+    if (this.candidate) return this.updateCandidate(normalized, previous)
+    if (normalized.reportedAccuracyDegrees !== null
+      && normalized.reportedAccuracyDegrees > MAX_LIVE_ACCURACY_DEGREES) return this.startCandidate(normalized, previous)
+
+    const delta = this.deviceHeadingDistance(previous, normalized)
+    const motionExplainsChange = elapsedMs <= MAX_MOTION_CORROBORATION_INTERVAL_MS
+      && normalized.motionRateDegreesPerSecond !== null
       && normalized.motionRateDegreesPerSecond * elapsedMs / 1000 >= Math.abs(delta) * MOTION_CORROBORATION_RATIO
-    if (Math.abs(delta) <= maxPlausibleChange || motionExplainsChange) {
-      this.accepted = normalized
-      const recoveredFromSuspect = this.candidate !== null
-      this.clearCandidate()
-      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect }
-    }
-
-    const priorCandidate = this.candidate
-    if (!priorCandidate) {
-      this.candidate = normalized
-      this.candidateDirection = Math.sign(delta)
-      this.candidateProgressSamples = 0
-      return { kind: 'suspect', candidateHeadingDegrees: normalized.headingDegrees }
-    }
-
-    const candidateStep = shortestAngleDelta(priorCandidate.headingDegrees, normalized.headingDegrees)
-    const candidateElapsed = normalized.timeMs - priorCandidate.timeMs
-    const progressesInSameDirection = Math.sign(candidateStep) === this.candidateDirection
-      && Math.abs(candidateStep) >= MIN_CANDIDATE_PROGRESS_DEGREES
-      && candidateElapsed > 0
-      && Math.abs(candidateStep) <= MAX_UNCORROBORATED_TURN_RATE_DPS * candidateElapsed / 1000
-    if (progressesInSameDirection) {
-      this.candidate = normalized
-      this.candidateProgressSamples += 1
-      if (this.candidateProgressSamples >= 2) {
+    if (elapsedMs > MAX_SAMPLE_GAP_MS) {
+      if (delta <= this.matchTolerance(previous, normalized)) {
         this.accepted = normalized
-        this.clearCandidate()
-        return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: true }
+        return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false }
       }
-    } else if (Math.abs(shortestAngleDelta(previous.headingDegrees, normalized.headingDegrees)) <= MIN_CANDIDATE_PROGRESS_DEGREES) {
-      this.accepted = normalized
-      this.clearCandidate()
-      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: true }
-    } else {
-      this.candidate = normalized
-      this.candidateDirection = Math.sign(shortestAngleDelta(previous.headingDegrees, normalized.headingDegrees))
-      this.candidateProgressSamples = 0
+      return this.startCandidate(normalized, previous)
     }
 
-    return { kind: 'suspect', candidateHeadingDegrees: normalized.headingDegrees }
+    const maxPlausibleChange = MAX_UNCORROBORATED_TURN_RATE_DPS * elapsedMs / 1000
+    if (delta <= maxPlausibleChange || motionExplainsChange) {
+      this.accepted = normalized
+      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false }
+    }
+    return this.startCandidate(normalized, previous)
   }
 
-  private clearCandidate() {
-    this.candidate = null
-    this.candidateDirection = 0
-    this.candidateProgressSamples = 0
+  private startCandidate(sample: HeadingEvidenceSample, baseline: HeadingEvidenceSample): HeadingEvidenceDecision {
+    const baselineDeviceHeading = this.deviceHeading(baseline)
+    const candidateDeviceHeading = this.deviceHeading(sample)
+    this.candidate = {
+      sample,
+      deviceHeading: candidateDeviceHeading,
+      startedAtMs: sample.timeMs,
+      stableSinceMs: sample.timeMs,
+      direction: Math.sign(shortestAngleDelta(baselineDeviceHeading, candidateDeviceHeading)),
+      coherentTravelDegrees: 0,
+      baselineAccuracyDegrees: baseline.reportedAccuracyDegrees,
+      lastSeenAtMs: sample.timeMs,
+    }
+    return this.quarantineDecision(sample)
+  }
+
+  private updateCandidate(sample: HeadingEvidenceSample, baseline: HeadingEvidenceSample): HeadingEvidenceDecision {
+    const candidate = this.candidate
+    if (!candidate || sample.timeMs <= candidate.lastSeenAtMs) return { kind: 'ignored' }
+
+    const nextDeviceHeading = this.deviceHeading(sample)
+    const candidateStep = shortestAngleDelta(candidate.deviceHeading, nextDeviceHeading)
+    const elapsedMs = sample.timeMs - candidate.lastSeenAtMs
+    const sampleAccuracy = sample.reportedAccuracyDegrees
+    const accuracyWorsened = sampleAccuracy !== null && candidate.baselineAccuracyDegrees !== null
+      && sampleAccuracy > candidate.baselineAccuracyDegrees + MAX_ACCURACY_WORSENING_DEGREES
+    const motionCorroboratesCandidate = elapsedMs <= MAX_MOTION_CORROBORATION_INTERVAL_MS
+      && sample.motionRateDegreesPerSecond !== null
+      && sample.motionRateDegreesPerSecond * elapsedMs / 1000
+        >= Math.abs(candidateStep) * MOTION_CORROBORATION_RATIO
+    const qualitySupportsRecovery = (this.hasReliableAccuracy(sample) && !accuracyWorsened)
+      || motionCorroboratesCandidate
+    const matchToAccepted = shortestAngleDelta(this.deviceHeading(baseline), nextDeviceHeading)
+
+    if (Math.abs(matchToAccepted) <= this.matchTolerance(baseline, sample)
+      && (sampleAccuracy === null || sampleAccuracy <= MAX_RECOVERY_ACCURACY_DEGREES)) {
+      this.accepted = sample
+      this.candidate = null
+      return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true }
+    }
+
+    if (sampleAccuracy !== null && sampleAccuracy > MAX_LIVE_ACCURACY_DEGREES) {
+      candidate.sample = sample
+      candidate.deviceHeading = nextDeviceHeading
+      candidate.stableSinceMs = sample.timeMs
+      candidate.lastSeenAtMs = sample.timeMs
+      return this.quarantineDecision(sample)
+    }
+
+    if (Math.abs(candidateStep) <= this.stationaryTolerance(candidate.sample, sample)) {
+      if (!qualitySupportsRecovery || !this.hasReliableAccuracy(candidate.sample)) candidate.stableSinceMs = sample.timeMs
+      if (elapsedMs > MAX_SAMPLE_GAP_MS) candidate.stableSinceMs = sample.timeMs
+    } else {
+      const progressesInSameDirection = Math.sign(candidateStep) === candidate.direction
+        && Math.abs(candidateStep) >= MIN_CANDIDATE_PROGRESS_DEGREES
+        && Math.abs(candidateStep) <= MAX_UNCORROBORATED_TURN_RATE_DPS * elapsedMs / 1000
+      if (progressesInSameDirection && qualitySupportsRecovery) {
+        candidate.coherentTravelDegrees += Math.abs(candidateStep)
+        if (sample.timeMs - candidate.startedAtMs >= MIN_COHERENT_TURN_MS
+          && candidate.coherentTravelDegrees >= MIN_COHERENT_TURN_DEGREES) {
+          this.accepted = sample
+          this.candidate = null
+          return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true }
+        }
+      } else {
+        candidate.direction = Math.sign(candidateStep)
+        candidate.coherentTravelDegrees = 0
+      }
+      candidate.stableSinceMs = sample.timeMs
+    }
+
+    candidate.sample = sample
+    candidate.deviceHeading = nextDeviceHeading
+    candidate.lastSeenAtMs = sample.timeMs
+    if (qualitySupportsRecovery && elapsedMs <= MAX_SAMPLE_GAP_MS
+      && sample.timeMs - candidate.stableSinceMs >= MIN_STATIONARY_RECOVERY_MS) {
+      this.accepted = sample
+      this.candidate = null
+      return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true }
+    }
+    return this.quarantineDecision(sample)
+  }
+
+  private quarantineDecision(sample: HeadingEvidenceSample): HeadingEvidenceDecision {
+    if (this.candidate && sample.timeMs - this.candidate.startedAtMs >= MAX_QUARANTINE_MS) {
+      return { kind: 'degraded', candidateHeadingDegrees: sample.headingDegrees }
+    }
+    return { kind: 'suspect', candidateHeadingDegrees: sample.headingDegrees }
+  }
+
+  private isKnownFrameOrSourceContinuation(previous: HeadingEvidenceSample, current: HeadingEvidenceSample): boolean {
+    return this.deviceHeadingDistance(previous, current) <= this.matchTolerance(previous, current)
+      && (current.reportedAccuracyDegrees === null || current.reportedAccuracyDegrees <= MAX_RECOVERY_ACCURACY_DEGREES)
+  }
+
+  private deviceHeading(sample: HeadingEvidenceSample): number {
+    return wrap360(sample.headingDegrees - sample.screenAngle)
+  }
+
+  private deviceHeadingDistance(first: HeadingEvidenceSample, second: HeadingEvidenceSample): number {
+    return Math.abs(shortestAngleDelta(this.deviceHeading(first), this.deviceHeading(second)))
+  }
+
+  private matchTolerance(first: HeadingEvidenceSample, second: HeadingEvidenceSample): number {
+    const firstAccuracy = first.reportedAccuracyDegrees
+    const secondAccuracy = second.reportedAccuracyDegrees
+    if (firstAccuracy === null || secondAccuracy === null) return MAX_STATIONARY_STEP_DEGREES
+    return Math.min(ACCURACY_MATCH_CAP_DEGREES,
+      Math.max(MAX_STATIONARY_STEP_DEGREES, firstAccuracy + secondAccuracy))
+  }
+
+  private stationaryTolerance(first: HeadingEvidenceSample, second: HeadingEvidenceSample): number {
+    return this.matchTolerance(first, second)
+  }
+
+  private hasReliableAccuracy(sample: HeadingEvidenceSample): boolean {
+    const accuracy = sample.reportedAccuracyDegrees
+    if (accuracy === null || accuracy > MAX_RECOVERY_ACCURACY_DEGREES) return false
+    const baselineAccuracy = this.candidate?.baselineAccuracyDegrees
+    return baselineAccuracy === null || baselineAccuracy === undefined
+      || accuracy <= baselineAccuracy + MAX_ACCURACY_WORSENING_DEGREES
   }
 }
