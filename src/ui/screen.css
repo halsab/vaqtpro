@@ -117,6 +117,7 @@ html[data-input='pointer'] .monthly-export-control:has(select:focus-visible) { o
   padding-left: var(--screen-inset-left);
   padding-right: var(--screen-inset-right);
 }
+.screen-content.prayer-month-content { overflow-x: auto; overflow-y: auto; overscroll-behavior: contain; }
 .screen-content::-webkit-scrollbar { display: none; }
 .app-screen p, .app-screen h1, .app-screen h2, .app-screen dl, .app-screen dd { margin: 0; font-weight: 400; }
 .pill, .text-field, .select-field {
@@ -185,24 +186,27 @@ html[data-input='pointer'] .select-field { outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .screen-status { font: var(--font-footnote); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .screen-load-progress { position: fixed; z-index: 30; inset-block-start: calc(env(safe-area-inset-top, 0px) + 12px); inset-inline: 16px; justify-content: center; min-height: 44px; padding: 8px 16px; border-radius: 22px; color: var(--text-primary); background: var(--background-secondary); pointer-events: none; }
-.prayer-month-screen { min-width: 0; }
-.prayer-month-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.prayer-month-screen { display: flex; min-width: 0; min-height: 100%; flex-direction: column; }
+.prayer-month-controls { position: sticky; left: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; background: var(--background-secondary); }
 .prayer-month-control-placeholder { width: var(--button-height); height: var(--button-height); flex: 0 0 var(--button-height); }
 .prayer-month-heading { min-width: 0; flex: 1 1 auto; text-align: center; text-transform: capitalize; }
-.prayer-month-method { min-width: 0; }
+.prayer-month-method { position: sticky; left: 0; z-index: 2; min-width: 0; background: var(--background-secondary); }
 .prayer-month-method summary { min-height: var(--button-height); display: flex; align-items: center; padding: 10px 16px; border-radius: var(--button-radius); background: var(--background-tertiary); color: var(--text-primary); font: var(--font-footnote); overflow-wrap: anywhere; cursor: pointer; }
 .prayer-month-method summary:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 .prayer-month-method-body { display: grid; gap: 8px; padding: 12px 4px; color: var(--text-secondary); font: var(--font-footnote); }
-.prayer-month-table-scroll { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scrollbar-color: var(--background-tertiary) transparent; }
+.prayer-month-table-scroll { width: max(100%, 56em); min-width: 0; flex: 1 0 auto; }
 .prayer-month-table-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; }
-.prayer-month-table { width: max-content; min-width: 100%; border-collapse: collapse; table-layout: auto; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.prayer-month-table { width: 100%; min-width: 56em; border-collapse: separate; border-spacing: 0; table-layout: fixed; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .prayer-month-table caption { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.prayer-month-table th, .prayer-month-table td { padding: 7px 6px; text-align: left; white-space: nowrap; }
-.prayer-month-table thead th { color: var(--text-secondary); font: var(--font-footnote); }
+.prayer-month-table th, .prayer-month-table td { position: relative; padding: 7px 6px; text-align: center; white-space: nowrap; }
+.prayer-month-table thead th { position: sticky; top: 0; z-index: 2; background: var(--background-secondary); color: var(--text-secondary); font: var(--font-footnote); }
+.prayer-month-table thead th::before { content: ''; position: absolute; z-index: 1; inset-inline: 0; bottom: 0; height: 1px; background: var(--text-secondary); opacity: .45; pointer-events: none; }
+.prayer-month-table .prayer-month-date-heading { left: 0; z-index: 3; }
 .prayer-month-table tbody tr { height: 44px; }
-.prayer-month-table tbody tr + tr { border-top: 1px solid var(--background-tertiary); }
-.prayer-month-table tbody th, .prayer-month-table tbody td { font: var(--font-body); font-variant-numeric: tabular-nums; }
-.prayer-month-table tbody th { font-weight: 400; }
+.prayer-month-table tbody th, .prayer-month-table tbody td { background: var(--background-secondary); font: var(--font-body); font-variant-numeric: tabular-nums; }
+.prayer-month-table tbody tr:nth-child(even) > * { background: color-mix(in srgb, var(--background-secondary) 76%, var(--background-tertiary)); }
+.prayer-month-table tbody .prayer-month-date { position: sticky; left: 0; z-index: 2; font-weight: 400; }
+.prayer-month-table .prayer-month-date::after, .prayer-month-table .prayer-month-date-heading::after { content: ''; position: absolute; z-index: 1; inset-block: 0; inset-inline-end: 0; width: 1px; background: var(--text-secondary); opacity: .45; pointer-events: none; }
 .prayer-month-time { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
 .prayer-month-estimated { color: var(--text-secondary); font: var(--font-footnote); }
 @media (max-width: 390px) {

@@ -58,6 +58,8 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
       weekdaySaturdayShort: t('weekdaySaturdayShort'),
     } }
   }, [t])
+  const weekdayLabels = [t('weekdaySundayShort'), t('weekdayMondayShort'), t('weekdayTuesdayShort'),
+    t('weekdayWednesdayShort'), t('weekdayThursdayShort'), t('weekdayFridayShort'), t('weekdaySaturdayShort')]
   const exportSnapshot = useMemo(() => context ? {
     month: month.slice(0, 7),
     location: homePlaceLabel(place, t('locationUnknown')),
@@ -72,7 +74,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
     onRetrySchedule()
   }
 
-  return <Screen label={t('monthlySchedule')} top={<div className="monthly-screen-navigation">
+  return <Screen label={t('monthlySchedule')} contentClassName="prayer-month-content" top={<div className="monthly-screen-navigation">
     <BackButton onClick={onBack} />
     <MonthlyExportAction snapshot={exportSnapshot} labels={exportLabels} />
   </div>}>
@@ -97,7 +99,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
           <p className="screen-copy" role="alert">{t('scheduleLoadFailed')}</p>
           <ActionButton onClick={onRetrySchedule}>{t('retry')}</ActionButton>
         </div>
-        : context ? <PrayerMonthTable rows={monthSchedules} labels={eventLabels} dateLabel={t('dateLabel')}
+        : context ? <PrayerMonthTable rows={monthSchedules} labels={eventLabels} weekdayLabels={weekdayLabels} dateLabel={t('dateLabel')}
           tableLabel={t('monthlyScheduleTableLabel')} />
           : <div className="screen-stack">
             <p className="screen-copy">{t('noSchedulePlace')}</p>

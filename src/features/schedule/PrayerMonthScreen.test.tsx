@@ -54,7 +54,7 @@ it('shows one table row per date with all seven Home events in the same row', ()
   const firstRow = rows[1]
   if (!firstRow) throw new Error('Monthly schedule must render the first date row')
   const firstDay = within(firstRow).getByRole('rowheader', { name: '01.10.2026' })
-  expect(firstDay).toHaveTextContent(/^01$/)
+  expect(firstDay).toHaveTextContent(/^01 чт$/)
   expect(firstDay.querySelector('time')).toHaveAttribute('dateTime', '2026-10-01')
   expect(firstDay.querySelector('time')).toHaveAttribute('aria-label', '01.10.2026')
   expect(within(firstRow).getAllByRole('cell')).toHaveLength(7)
@@ -121,9 +121,11 @@ it('preserves the Home estimated marker for Zenith without an alternate calculat
 it('renders all day numbers with full calendar dates for assistive technology', () => {
   renderMonth()
   const headers = screen.getAllByRole('rowheader')
-  expect(headers.map(header => header.textContent)).toEqual(
-    Array.from({ length: 31 }, (_, index) => String(index + 1).padStart(2, '0')),
-  )
+  expect(headers.map(header => header.textContent)).toEqual([
+    '01 чт', '02 пт', '03 сб', '04 вс', '05 пн', '06 вт', '07 ср', '08 чт', '09 пт', '10 сб',
+    '11 вс', '12 пн', '13 вт', '14 ср', '15 чт', '16 пт', '17 сб', '18 вс', '19 пн', '20 вт',
+    '21 ср', '22 чт', '23 пт', '24 сб', '25 вс', '26 пн', '27 вт', '28 ср', '29 чт', '30 пт', '31 сб',
+  ])
   for (const [index, header] of headers.entries()) {
     const day = String(index + 1).padStart(2, '0')
     const time = header.querySelector('time')
@@ -139,7 +141,7 @@ it('switches between complete months without selecting dates in the table', asyn
   await userEvent.click(screen.getByRole('button', { name: 'Предыдущий месяц' }))
   expect(screen.getByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
   expect(screen.getAllByRole('row')).toHaveLength(31)
-  expect(screen.getByRole('rowheader', { name: '01.09.2026' })).toHaveTextContent(/^01$/)
+  expect(screen.getByRole('rowheader', { name: '01.09.2026' })).toHaveTextContent(/^01 вт$/)
   expect(screen.queryByRole('rowheader', { name: '31.10.2026' })).not.toBeInTheDocument()
 
   await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))

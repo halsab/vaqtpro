@@ -2,26 +2,33 @@ import { createElement, type KeyboardEvent } from 'react'
 
 import { SCHEDULE_EVENT_KEYS, type PrayerSchedule } from '../../domain/scheduleEvents'
 import { useLocalization } from '../../localization'
+import { civilWeekday } from '../../domain/civilMonth'
 
 export const PRAYER_MONTH_KEYS = SCHEDULE_EVENT_KEYS
 
 function handleTableScrollKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
-  const element = event.currentTarget
-  if (element.scrollWidth <= element.clientWidth) return
+  const element = event.currentTarget.closest('.screen-content')
+  if (!(element instanceof HTMLElement)) return
+  const horizontal = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+  const vertical = event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'PageUp' || event.key === 'PageDown'
+  if (!horizontal && !vertical) return
+  if (horizontal && element.scrollWidth <= element.clientWidth) return
+  if (vertical && element.scrollHeight <= element.clientHeight) return
   event.preventDefault()
-  element.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * Math.max(80, element.clientWidth * 0.8)
+  if (horizontal) element.scrollLeft += (event.key === 'ArrowRight' ? 1 : -1) * Math.max(80, element.clientWidth * 0.8)
+  else element.scrollTop += (event.key === 'ArrowDown' || event.key === 'PageDown' ? 1 : -1) * Math.max(44, element.clientHeight * (event.key.startsWith('Page') ? 0.8 : 0.15))
 }
 
-function formatDate(date: string): string {
+function formatAccessibleDate(date: string): string {
   const [year, month, day] = date.split('-')
   if (!year || !month || !day) throw new RangeError(`Invalid civil date: ${date}`)
   return `${day}.${month}.${year}`
 }
 
-export function PrayerMonthTable({ rows, labels, dateLabel, tableLabel }: {
+export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, tableLabel }: {
   rows: readonly { date: string; schedule: PrayerSchedule | null }[]
   labels: Record<(typeof PRAYER_MONTH_KEYS)[number], string>
+  weekdayLabels: readonly string[]
   dateLabel: string
   tableLabel: string
 }) {
@@ -30,10 +37,13 @@ export function PrayerMonthTable({ rows, labels, dateLabel, tableLabel }: {
     createElement('table', { className: 'prayer-month-table' },
       createElement('caption', null, tableLabel),
       createElement('thead', null, createElement('tr', null,
-        createElement('th', { scope: 'col' }, dateLabel),
+        createElement('th', { scope: 'col', className: 'prayer-month-date-heading' }, dateLabel),
         ...PRAYER_MONTH_KEYS.map(key => createElement('th', { key, scope: 'col' }, labels[key])))),
       createElement('tbody', null, ...rows.map(({ date, schedule }) => createElement('tr', { key: date },
-        createElement('th', { scope: 'row' }, createElement('time', { dateTime: date, 'aria-label': formatDate(date) }, date.slice(-2))),
+        createElement('th', { scope: 'row', className: 'prayer-month-date' }, createElement('time', {
+          dateTime: date,
+          'aria-label': formatAccessibleDate(date),
+        }, `${date.slice(-2)} ${weekdayLabels[civilWeekday(date)] ?? ''}`)),
         ...PRAYER_MONTH_KEYS.map(key => {
           const entry = schedule?.entries[key]
           if (!entry) return createElement('td', { key, 'aria-label': t('monthlyTimeUnavailable') }, '—')
