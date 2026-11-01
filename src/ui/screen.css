@@ -212,6 +212,7 @@ html[data-input='pointer'] .select-field { outline: none; }
 .prayer-month-estimated { color: var(--text-secondary); font: var(--font-footnote); }
 @media (max-width: 390px) {
   .prayer-month-table th, .prayer-month-table td { padding-inline: 4px; }
+  .prayer-month-table tr > :nth-child(-n + 2) { padding-inline: 7px; }
 }
 @media (max-height: 480px) {
   .screen-content.prayer-month-content { display: block; overflow: auto; overscroll-behavior: contain; }
