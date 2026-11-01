@@ -48,6 +48,8 @@ export default defineConfig({
     // Критические сценарии мобильного WebKit (portrait).
     {
       name: 'mobile-safari-portrait',
+      // Экспортные E2E сняты по запросу владельца: Playwright не проверяет системный picker/share sheet и качество файлов на устройствах.
+      // Спиннер, автозапуск picker, повторный тап, отправку файлов и внешний вид владелец проверяет вручную.
       testMatch: ['**/mobile.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },

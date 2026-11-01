@@ -12,6 +12,13 @@ import { PrayerMonthScreen } from './PrayerMonthScreen'
 import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { buildScheduleEvents, SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
 
+const { prepareMonthlyExportFiles } = vi.hoisted(() => ({
+  prepareMonthlyExportFiles: vi.fn().mockResolvedValue({
+    pdf: { name: 'month.pdf', type: 'application/pdf' }, png: { name: 'month.png', type: 'image/png' }, failures: [],
+  }),
+}))
+vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyExportFiles }))
+
 const place = createCityPlace({ id: 524901, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва',
   latitude: 55.7522, longitude: 37.6156, population: 10_381_222, timeZone: 'Europe/Moscow' }, 0)
 const originalCalculatePrayerSchedule = calculatePrayerSchedule
@@ -34,6 +41,9 @@ function renderMonth() {
 
 it('shows one table row per date with all seven Home events in the same row', () => {
   renderMonth()
+  const exportButton = screen.getByRole('button', { name: 'Экспортировать расписание на месяц' })
+  expect(exportButton).toHaveClass('icon-button')
+  expect(exportButton).toBeEnabled()
   expect(screen.queryByRole('heading', { name: 'Расписание на месяц' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
   expect(screen.getByText('Москва · Профиль расчёта · Россия')).toBeVisible()
