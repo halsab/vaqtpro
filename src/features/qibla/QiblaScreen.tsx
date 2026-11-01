@@ -7,7 +7,7 @@ import { qiblaRelativeAngle, toTrueHeading } from '../../domain/magneticHeading'
 import { calculateWmm2025 } from '../../domain/wmm2025'
 import type { WmmResult } from '../../domain/wmm2025'
 import { QiblaHeadingEvidenceGate } from '../../domain/qiblaHeadingEvidence'
-import { createOrientationSession, type OrientationReading, type OrientationStatus } from '../../platform/qiblaOrientation'
+import { createOrientationSession, hasRememberedOrientationGrant, type OrientationReading, type OrientationStatus } from '../../platform/qiblaOrientation'
 import { createQiblaDiagnosticTrace, qiblaDiagnosticsRequested, type QiblaDiagnosticTrace } from '../../platform/qiblaDiagnostics'
 import { useLocalization } from '../../localization'
 import { ActionButton } from '../../ui/controls'
@@ -104,10 +104,11 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const { t } = useLocalization()
   const tRef = useRef(t)
   const modelTimestamp = useModelTimestamp()
-  const [compass, setCompass] = useState<CompassState>(INITIAL_COMPASS_STATE)
+  const [compass, setCompass] = useState<CompassState>(() => hasRememberedOrientationGrant(window)
+    ? { status: 'acquiring', reason: null } : INITIAL_COMPASS_STATE)
   const [pointerVisible, setPointerVisible] = useState(false)
   const [accessibleRelative, setAccessibleRelative] = useState('')
-  const compassStateRef = useRef(INITIAL_COMPASS_STATE)
+  const compassStateRef = useRef(compass)
   const pointerVisibleRef = useRef(false)
   const accessibleRelativeRef = useRef('')
   const session = useRef<ReturnType<typeof createOrientationSession> | null>(null)
@@ -376,6 +377,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     })
     session.current = orientationSession
     trace.record({ event: 'status', status: 'idle' })
+    orientationSession.resumeFromRememberedGrant()
 
     return () => {
       active = false

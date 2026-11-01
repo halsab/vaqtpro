@@ -73,7 +73,25 @@ export function quaternionScreenTopHeading(quaternion: readonly number[], screen
 
 export interface OrientationSession {
   enableFromGesture(): Promise<void>
+  resumeFromRememberedGrant(): void
   stop(): void
+}
+
+const ORIENTATION_GRANT_KEY = 'vaqtpro.qibla.orientation-granted.v1'
+
+export function hasRememberedOrientationGrant(target: Window): boolean {
+  try { return target.sessionStorage.getItem(ORIENTATION_GRANT_KEY) === '1' }
+  catch { return false }
+}
+
+function rememberOrientationGrant(target: Window): void {
+  try { target.sessionStorage.setItem(ORIENTATION_GRANT_KEY, '1') }
+  catch { /* Storage may be unavailable; the compass still works for this visit. */ }
+}
+
+function forgetOrientationGrant(target: Window): void {
+  try { target.sessionStorage.removeItem(ORIENTATION_GRANT_KEY) }
+  catch { /* Storage may be unavailable. */ }
 }
 
 interface OrientationEventLike extends Event {
@@ -242,6 +260,8 @@ export function createOrientationSession(target: Window, report: OrientationHand
         const accuracyDegrees = typeof accuracy === 'number' && accuracy >= 0 ? accuracy : null
         latestWebKit = { heading: rawHeading, accuracyDegrees, beta: orientation.beta, gamma: orientation.gamma }
         hasCurrentReading = true
+        permissionGranted = true
+        rememberOrientationGrant(target)
         const sampleTimeMs = target.performance.now()
         cancelProbe()
         emit('live-unverified', {
@@ -309,6 +329,8 @@ export function createOrientationSession(target: Window, report: OrientationHand
           return
         }
         hasCurrentReading = true
+        permissionGranted = true
+        rememberOrientationGrant(target)
         const sampleTimeMs = target.performance.now()
         cancelProbe()
         emit('live-unverified', {
@@ -323,7 +345,10 @@ export function createOrientationSession(target: Window, report: OrientationHand
         if (stopped || sensor !== currentSensor) return
         const status = classifySensorError(event.error?.name)
         clearActiveSource()
-        if (status) emit(status)
+        if (status) {
+          if (status === 'restricted') permissionGranted = false
+          emit(status)
+        }
         else tryWebKitFallback()
       }
       currentSensor.start()
@@ -393,6 +418,13 @@ export function createOrientationSession(target: Window, report: OrientationHand
   screenOrientation?.addEventListener('change', onScreenOrientationChange)
 
   return {
+    resumeFromRememberedGrant() {
+      if (stopped || enabled || !hasRememberedOrientationGrant(target)) return
+      if (!target.isSecureContext) { emit('security'); return }
+      if (doc.visibilityState === 'hidden') { emit('degraded'); return }
+      enabled = true
+      startSource()
+    },
     async enableFromGesture() {
       if (stopped || permissionInFlight) return
       if (!target.isSecureContext) { emit('security'); return }
@@ -405,10 +437,11 @@ export function createOrientationSession(target: Window, report: OrientationHand
       if (requestPermission && !permissionGranted) {
         try {
           const permission = await requestPermission.call(win.DeviceOrientationEvent, true)
-          if (permission !== 'granted') { emit('denied'); return }
+          if (permission !== 'granted') { forgetOrientationGrant(target); emit('denied'); return }
           permissionGranted = true
         } catch (error) {
           const name = error instanceof DOMException ? error.name : undefined
+          forgetOrientationGrant(target)
           emit(name === 'SecurityError' ? 'security' : name === 'NotAllowedError' ? 'restricted' : 'denied')
           return
         } finally {

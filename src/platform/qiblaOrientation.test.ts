@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { circularExponentialStep, createOrientationSession, eulerScreenTopHeading, quaternionScreenTopHeading, screenAngleDegrees } from './qiblaOrientation'
+import { circularExponentialStep, createOrientationSession, eulerScreenTopHeading, hasRememberedOrientationGrant, quaternionScreenTopHeading, screenAngleDegrees } from './qiblaOrientation'
 
 describe('Qibla orientation geometry', () => {
   it.each([[0, 0], [90, 90], [180, 180], [270, 270]])('maps screen rotation %i once', (angle, expected) => {
@@ -37,12 +37,14 @@ describe('Qibla orientation geometry', () => {
 
 describe('Qibla orientation browser adapters', () => {
   beforeEach(() => {
+    window.sessionStorage.clear()
     Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true })
     Object.defineProperty(window, 'orientation', { configurable: true, writable: true, value: 0 })
     Object.defineProperty(window, 'screen', { configurable: true, value: { orientation: { angle: 0, addEventListener() {}, removeEventListener() {} } } })
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
   })
   afterEach(() => {
+    window.sessionStorage.clear()
     vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
@@ -56,6 +58,22 @@ describe('Qibla orientation browser adapters', () => {
     await session.enableFromGesture()
     expect(requestPermission).toHaveBeenCalledWith(true)
     expect(reports.at(-1)).toBe('denied')
+    session.stop()
+  })
+
+  it('resumes a previously granted orientation session without requesting permission again', () => {
+    const requestPermission = vi.fn().mockResolvedValue('granted')
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
+    expect(hasRememberedOrientationGrant(window)).toBe(true)
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    session.resumeFromRememberedGrant()
+    expect(requestPermission).not.toHaveBeenCalled()
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 25, webkitCompassAccuracy: 5,
+    }))
+    expect(reports).toContain('live-unverified')
     session.stop()
   })
 

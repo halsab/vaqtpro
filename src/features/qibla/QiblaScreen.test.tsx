@@ -28,6 +28,7 @@ describe('QiblaScreen orientation presentation', () => {
   let requestPermission: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
+    window.sessionStorage.clear()
     frameId = 0
     sampleTime = 1000
     frames = new Map()
@@ -126,6 +127,23 @@ describe('QiblaScreen orientation presentation', () => {
     expect(cancelFrame).toHaveBeenCalledWith(pendingFrame[0])
     act(() => pendingFrame[1](sampleTime))
     expect(document.querySelector('.qibla-dial')).toBeNull()
+  })
+
+  it('automatically resumes after a successful sensor reading without showing the enable button again', async () => {
+    const firstVisit = render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(25, 1000)
+    flushFrame()
+    expect(window.sessionStorage.getItem('vaqtpro.qibla.orientation-granted.v1')).toBe('1')
+    firstVisit.unmount()
+
+    requestPermission.mockClear()
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    expect(screen.queryByRole('button', { name: 'Включить компас' })).toBeNull()
+    dispatchHeading(25, 2000)
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(requestPermission).not.toHaveBeenCalled()
   })
 
   it('recovers an accurate stationary heading after a bounded quarantine when motion evidence is unavailable', async () => {
