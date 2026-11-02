@@ -1,5 +1,6 @@
 import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import type { PrayerSchedule } from '../../domain/scheduleEvents'
+import { civilWeekday } from '../../domain/civilMonth'
 
 export interface MonthlyExportSnapshot {
   month: string
@@ -49,7 +50,7 @@ export function createMonthlyExportView(snapshot: MonthlyExportSnapshot, labels:
     rows: snapshot.rows.map(({ date, schedule }) => ({
       date,
       day: date.slice(-2),
-      weekday: labels[WEEKDAY_LABEL_KEYS[new Date(`${date}T12:00:00.000Z`).getUTCDay()] ?? 'weekdaySundayShort'] ?? '',
+      weekday: labels[WEEKDAY_LABEL_KEYS[civilWeekday(date)] ?? 'weekdaySundayShort'] ?? '',
       times: PRAYER_MONTH_KEYS.map(key => ({
         value: schedule ? schedule.entries[key].time : '—',
         estimated: schedule ? schedule.estimatedPrayers.includes(key) : false,

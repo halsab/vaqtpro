@@ -11,11 +11,12 @@ import type { ScheduleContext } from '../../domain/scheduleContext'
 import { PrayerMonthScreen } from './PrayerMonthScreen'
 import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { buildScheduleEvents, SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
+import type { MonthlyExportView } from './monthlyExportModel'
+import type { MonthlyExportPreparation } from './monthlyExportRenderer'
 
 const { prepareMonthlyExportFiles } = vi.hoisted(() => ({
-  prepareMonthlyExportFiles: vi.fn().mockResolvedValue({
-    pdf: { name: 'month.pdf', type: 'application/pdf' }, png: { name: 'month.png', type: 'image/png' }, failures: [],
-  }),
+  prepareMonthlyExportFiles: vi.fn<(view: MonthlyExportView) => Promise<MonthlyExportPreparation>>()
+    .mockResolvedValue({ pdf: null, png: null, failures: [] }),
 }))
 vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyExportFiles }))
 
@@ -31,6 +32,7 @@ const onRetrySchedule = vi.fn()
 
 afterEach(() => {
   vi.restoreAllMocks()
+  prepareMonthlyExportFiles.mockClear()
   onRetrySchedule.mockReset()
 })
 
@@ -44,9 +46,12 @@ it('shows one table row per date with all seven Home events in the same row', ()
   const exportButton = screen.getByRole('button', { name: 'Экспортировать расписание на месяц' })
   expect(exportButton).toHaveClass('icon-button')
   expect(exportButton).toBeEnabled()
+  expect(prepareMonthlyExportFiles).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Назад' })).toBeVisible()
   expect(screen.queryByRole('heading', { name: 'Расписание на месяц' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
-  expect(screen.getByText('Москва · Профиль расчёта · Россия')).toBeVisible()
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
+  expect(screen.queryByText(/Москва|Профиль расчёта|Метод расчёта Асра|Правило высоких широт/)).not.toBeInTheDocument()
   expect(screen.queryByText(/Часовой пояс|Europe\/Moscow/)).not.toBeInTheDocument()
   expect(screen.queryByText(/Слово «примерно»|Источник координат|сформировано|без интернета|официальное расписание мечети/i)).not.toBeInTheDocument()
   const rows = screen.getAllByRole('row')
@@ -54,12 +59,11 @@ it('shows one table row per date with all seven Home events in the same row', ()
   const firstRow = rows[1]
   if (!firstRow) throw new Error('Monthly schedule must render the first date row')
   const firstDay = within(firstRow).getByRole('rowheader', { name: '01.10.2026' })
-  expect(firstDay).toHaveTextContent(/^01$/)
+  expect(firstDay).toHaveTextContent(/^01 чт$/)
   expect(firstDay.querySelector('time')).toHaveAttribute('dateTime', '2026-10-01')
   expect(firstDay.querySelector('time')).toHaveAttribute('aria-label', '01.10.2026')
   expect(within(firstRow).getAllByRole('cell')).toHaveLength(7)
   expect(firstRow.querySelector('button, a')).toBeNull()
-  expect(screen.getByText(/Профиль расчёта/).closest('details')).not.toHaveAttribute('open')
   expect(screen.getByRole('button', { name: 'Предыдущий месяц' })).toHaveClass('jelly-action')
   expect(screen.getByRole('button', { name: 'Следующий месяц' })).toHaveClass('jelly-action')
 })
@@ -121,9 +125,11 @@ it('preserves the Home estimated marker for Zenith without an alternate calculat
 it('renders all day numbers with full calendar dates for assistive technology', () => {
   renderMonth()
   const headers = screen.getAllByRole('rowheader')
-  expect(headers.map(header => header.textContent)).toEqual(
-    Array.from({ length: 31 }, (_, index) => String(index + 1).padStart(2, '0')),
-  )
+  expect(headers.map(header => header.textContent)).toEqual([
+    '01 чт', '02 пт', '03 сб', '04 вс', '05 пн', '06 вт', '07 ср', '08 чт', '09 пт', '10 сб',
+    '11 вс', '12 пн', '13 вт', '14 ср', '15 чт', '16 пт', '17 сб', '18 вс', '19 пн', '20 вт',
+    '21 ср', '22 чт', '23 пт', '24 сб', '25 вс', '26 пн', '27 вт', '28 ср', '29 чт', '30 пт', '31 сб',
+  ])
   for (const [index, header] of headers.entries()) {
     const day = String(index + 1).padStart(2, '0')
     const time = header.querySelector('time')
@@ -134,17 +140,48 @@ it('renders all day numbers with full calendar dates for assistive technology', 
   }
 })
 
+it.each([
+  ['2023-02-01', 28, '01 ср'],
+  ['2024-02-01', 29, '01 чт'],
+  ['2026-09-01', 30, '01 вт'],
+  ['2026-10-01', 31, '01 чт'],
+] as const)('renders the complete Gregorian month for %s', (selectedDate, dayCount, firstDay) => {
+  render(<PrayerMonthScreen place={place} context={context} scheduleError={null} selectedDate={selectedDate}
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
+
+  expect(screen.getAllByRole('row')).toHaveLength(dayCount + 1)
+  expect(screen.getAllByRole('columnheader')).toHaveLength(8)
+  expect(screen.getAllByRole('rowheader')[0]).toHaveTextContent(firstDay)
+})
+
 it('switches between complete months without selecting dates in the table', async () => {
   renderMonth()
   await userEvent.click(screen.getByRole('button', { name: 'Предыдущий месяц' }))
   expect(screen.getByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
   expect(screen.getAllByRole('row')).toHaveLength(31)
-  expect(screen.getByRole('rowheader', { name: '01.09.2026' })).toHaveTextContent(/^01$/)
+  expect(screen.getByRole('rowheader', { name: '01.09.2026' })).toHaveTextContent(/^01 вт$/)
   expect(screen.queryByRole('rowheader', { name: '31.10.2026' })).not.toBeInTheDocument()
 
   await userEvent.click(screen.getByRole('button', { name: 'Следующий месяц' }))
   expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
   expect(screen.getAllByRole('row')).toHaveLength(32)
+})
+
+it('keeps the current calculation context for export without showing it on the monthly screen', async () => {
+  renderMonth()
+  expect(prepareMonthlyExportFiles).not.toHaveBeenCalled()
+  await userEvent.click(screen.getByRole('button', { name: 'Экспортировать расписание на месяц' }))
+  await waitFor(() => expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce())
+
+  expect(prepareMonthlyExportFiles).toHaveBeenCalledWith(expect.objectContaining({
+    month: '2026-10',
+    location: 'Москва',
+  }))
+  const exportView = prepareMonthlyExportFiles.mock.calls[0]?.[0]
+  const expectedFajr = calculatePrayerSchedule(context.location, '2026-10-01', context.timeZone, context.settings).entries.fajr
+  expect(exportView?.rows[0]?.times[0]?.value).toBe(expectedFajr.time)
+  expect(screen.queryByText('Москва')).not.toBeInTheDocument()
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
 })
 
 it('keeps the monthly screen usable when a location has a skipped civil date', () => {
@@ -180,7 +217,7 @@ it('recalculates every month row from the current place, profile, and timezone',
   rerender(<PrayerMonthScreen place={kazan} context={kazanContext} scheduleError={null} selectedDate="2026-10-28"
     onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
   expect(screen.getByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
-  expect(screen.getByText(/Казань · Профиль расчёта/)).toBeVisible()
+  expect(screen.queryByText(/Казань|Профиль расчёта/)).not.toBeInTheDocument()
 
   const firstFajr = () => screen.getAllByRole('row')[1]?.querySelector('td time')
   const expectedKazanFajr = calculatePrayerSchedule(kazanContext.location, '2026-09-01', kazanContext.timeZone, kazanContext.settings).entries.fajr
@@ -190,7 +227,7 @@ it('recalculates every month row from the current place, profile, and timezone',
     settings: { ...kazanContext.settings, profile: 'turkey', asrMethod: 'hanafi' } }
   rerender(<PrayerMonthScreen place={kazan} context={profileContext} scheduleError={null} selectedDate="2026-10-28"
     onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
-  expect(screen.getByText(/Казань · Профиль расчёта · Турция/)).toBeVisible()
+  expect(screen.queryByText(/Казань|Профиль расчёта|Турция/)).not.toBeInTheDocument()
   const expectedTurkeyFajr = calculatePrayerSchedule(profileContext.location, '2026-09-01', profileContext.timeZone, profileContext.settings).entries.fajr
   expect(firstFajr()?.getAttribute('dateTime')).toBe(new Date(expectedTurkeyFajr.instant).toISOString())
 
@@ -202,7 +239,7 @@ it('recalculates every month row from the current place, profile, and timezone',
     timeZone: aucklandResolution.timeZone, settings: aucklandResolution.settings }
   rerender(<PrayerMonthScreen place={auckland} context={aucklandContext} scheduleError={null} selectedDate="2026-10-28"
     onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
-  expect(screen.getByText(/Окленд · Профиль расчёта/)).toBeVisible()
+  expect(screen.queryByText(/Окленд|Профиль расчёта/)).not.toBeInTheDocument()
   const expectedAucklandFajr = calculatePrayerSchedule(aucklandContext.location, '2026-09-01', aucklandContext.timeZone, aucklandContext.settings).entries.fajr
   expect(firstFajr()?.getAttribute('dateTime')).toBe(new Date(expectedAucklandFajr.instant).toISOString())
   expect(firstFajr()).toHaveTextContent(expectedAucklandFajr.time)
@@ -221,6 +258,7 @@ it('keeps isolated calculation failures as unavailable placeholders without a br
   const failedRow = screen.getByRole('row', { name: /15\.10\.2026/ })
   expect(within(failedRow).getAllByLabelText('Время недоступно')).toHaveLength(7)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
   expect(within(screen.getByRole('row', { name: /14\.10\.2026/ })).queryAllByLabelText('Время недоступно')).toHaveLength(0)
   expect(within(screen.getByRole('row', { name: /16\.10\.2026/ })).queryAllByLabelText('Время недоступно')).toHaveLength(0)
 })
@@ -235,6 +273,7 @@ it('shows an accessible retry when every date in the month fails', () => {
   expect(screen.queryByRole('table', { name: 'Расписание намаза за месяц' })).not.toBeInTheDocument()
   expect(screen.getByRole('alert')).toHaveTextContent('Не удалось рассчитать расписание на месяц')
   expect(screen.getByRole('button', { name: 'Повторить' })).toBeVisible()
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
 })
 
 it('recovers a fully failed month after retry without showing invented times', async () => {
@@ -251,7 +290,18 @@ it('recovers a fully failed month after retry without showing invented times', a
 
   await waitFor(() => expect(screen.getByRole('table', { name: 'Расписание намаза за месяц' })).toBeVisible())
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
   expect(onRetrySchedule).toHaveBeenCalledOnce()
+})
+
+it('preserves unsupported-profile errors without rendering the removed summary', () => {
+  render(<PrayerMonthScreen place={place} context={context} scheduleError={{ code: 'unsupported-profile', profile: 'turkey' }}
+    selectedDate="2026-10-28" onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
+
+  expect(screen.getByRole('alert')).toHaveTextContent('Турция')
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeVisible()
 })
 
 it('shows and retries an existing load-failed state when there is no calculation context', async () => {
@@ -259,7 +309,20 @@ it('shows and retries an existing load-failed state when there is no calculation
     onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
 
   expect(screen.getByRole('alert')).toHaveTextContent('Не удалось загрузить расписание')
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
   expect(screen.queryByText('Сначала выберите место')).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
   expect(onRetrySchedule).toHaveBeenCalledOnce()
+})
+
+it('keeps location recovery reachable without rendering the removed summary', () => {
+  const onOpenLocation = vi.fn()
+  render(<PrayerMonthScreen place={null} context={null} scheduleError={null} selectedDate="2026-10-28"
+    onBack={() => {}} onOpenLocation={onOpenLocation} onRetrySchedule={onRetrySchedule} />)
+
+  expect(screen.getByText('Сначала выберите место')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Локация' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeVisible()
+  expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
 })

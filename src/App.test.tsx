@@ -681,11 +681,16 @@ describe('VaqtPro', () => {
     await userEvent.click(screen.getByRole('button', { name: /Расписание на месяц/ }))
 
     expect(await screen.findByRole('heading', { name: 'сентябрь 2026' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Назад' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Экспортировать расписание на месяц' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Предыдущий месяц' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Следующий месяц' })).toBeVisible()
+    expect(document.querySelector('details, summary, .prayer-month-method')).toBeNull()
     expect(screen.getAllByRole('row')).toHaveLength(31)
     const firstRow = screen.getAllByRole('row')[1]
     if (!firstRow) throw new Error('Monthly schedule must render the first date row')
     const firstDate = within(firstRow).getByRole('rowheader', { name: '01.09.2026' })
-    expect(firstDate).toHaveTextContent(/^01$/)
+    expect(firstDate).toHaveTextContent(/^01 вт$/)
     expect(firstDate.querySelector('time')).toHaveAttribute('dateTime', '2026-09-01')
     expect(within(firstRow).getAllByRole('cell')).toHaveLength(7)
     expect(firstRow.querySelector('button, a')).toBeNull()

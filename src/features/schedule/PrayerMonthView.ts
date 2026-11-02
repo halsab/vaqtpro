@@ -15,16 +15,12 @@ function MonthIcon({ direction }: { direction: 'previous' | 'next' }) {
 }
 
 export function PrayerMonthView({ monthLabel, previousMonthLabel, nextMonthLabel, onPreviousMonth, onNextMonth,
-  locationLabel, calculationProfileLabel, profileLabel, methodology, children }: {
+  children }: {
   monthLabel: string
   previousMonthLabel?: string | undefined
   nextMonthLabel?: string | undefined
   onPreviousMonth?: (() => void) | undefined
   onNextMonth?: (() => void) | undefined
-  locationLabel?: string | undefined
-  calculationProfileLabel?: string | undefined
-  profileLabel?: string | undefined
-  methodology?: ReactNode | undefined
   children?: ReactNode
 }) {
   const previous = onPreviousMonth && previousMonthLabel
@@ -35,12 +31,6 @@ export function PrayerMonthView({ monthLabel, previousMonthLabel, nextMonthLabel
     ? createElement(IconActionButton, { label: nextMonthLabel, title: nextMonthLabel, onClick: onNextMonth },
       createElement(MonthIcon, { direction: 'next' }))
     : createElement('span', { className: 'prayer-month-control-placeholder', 'aria-hidden': true })
-  const disclosure = methodology !== undefined && locationLabel && calculationProfileLabel && profileLabel
-    ? createElement('details', { className: 'prayer-month-method' },
-      createElement('summary', null, `${locationLabel} · ${calculationProfileLabel} · ${profileLabel}`),
-      createElement('div', { className: 'prayer-month-method-body' }, methodology))
-    : null
-
   return createElement('div', { className: 'screen-stack prayer-month-screen' },
     createElement('div', { className: 'prayer-month-controls' },
       previous,
@@ -49,6 +39,5 @@ export function PrayerMonthView({ monthLabel, previousMonthLabel, nextMonthLabel
         className: 'screen-title prayer-month-heading',
       }, monthLabel),
       next),
-    disclosure,
     children)
 }

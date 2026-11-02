@@ -17,6 +17,14 @@ function utcDate(year: number, month: number, day: number): Date {
   return date
 }
 
+export function civilWeekday(date: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  if (!match) throw new RangeError(`Invalid civil date: ${date}`)
+  const value = utcDate(Number(match[1]), Number(match[2]), Number(match[3]))
+  if (value.toISOString().slice(0, 10) !== date) throw new RangeError(`Invalid civil date: ${date}`)
+  return value.getUTCDay()
+}
+
 export function civilMonthDates(date: string): CivilDate[] {
   const { year, month } = monthParts(date)
   const firstDate = utcDate(year, month, 1).toISOString().slice(0, 10) as CivilDate

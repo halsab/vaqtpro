@@ -4,7 +4,7 @@ import { civilMonthDates, shiftCivilMonth } from '../../domain/civilMonth'
 import { homePlaceLabel, type Place } from '../../domain/place'
 import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import type { ScheduleContext } from '../../domain/scheduleContext'
-import { ASR_METHOD_KEYS, HIGH_LATITUDE_KEYS, PROFILE_LABEL_KEYS } from '../../ui/calculationLabels'
+import { PROFILE_LABEL_KEYS } from '../../ui/calculationLabels'
 import { useLocalization } from '../../localization'
 import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
@@ -58,6 +58,8 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
       weekdaySaturdayShort: t('weekdaySaturdayShort'),
     } }
   }, [t])
+  const weekdayLabels = [t('weekdaySundayShort'), t('weekdayMondayShort'), t('weekdayTuesdayShort'),
+    t('weekdayWednesdayShort'), t('weekdayThursdayShort'), t('weekdayFridayShort'), t('weekdaySaturdayShort')]
   const exportSnapshot = useMemo(() => context ? {
     month: month.slice(0, 7),
     location: homePlaceLabel(place, t('locationUnknown')),
@@ -72,22 +74,14 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
     onRetrySchedule()
   }
 
-  return <Screen label={t('monthlySchedule')} top={<div className="monthly-screen-navigation">
+  return <Screen label={t('monthlySchedule')} contentClassName="prayer-month-content" top={<div className="monthly-screen-navigation">
     <BackButton onClick={onBack} />
     <MonthlyExportAction snapshot={exportSnapshot} labels={exportLabels} />
   </div>}>
     <PrayerMonthView monthLabel={currentMonthLabel}
       previousMonthLabel={t('previousMonth')} nextMonthLabel={t('nextMonth')}
       onPreviousMonth={() => setMonth(value => shiftCivilMonth(value, -1))}
-      onNextMonth={() => setMonth(value => shiftCivilMonth(value, 1))}
-      locationLabel={homePlaceLabel(place, t('locationUnknown'))}
-      calculationProfileLabel={context ? t('calculationProfile') : undefined}
-      profileLabel={context ? t(PROFILE_LABEL_KEYS[context.settings.profile]) : undefined}
-      methodology={context ? <>
-        <p>{t('monthlyCalculationSummary')}</p>
-        <p>{t('asrMethod')}: {t(ASR_METHOD_KEYS[context.settings.asrMethod])}.</p>
-        <p>{t('highLatitudeRule')}: {t(HIGH_LATITUDE_KEYS[context.settings.highLatitudeRule])}.</p>
-      </> : undefined}>
+      onNextMonth={() => setMonth(value => shiftCivilMonth(value, 1))}>
       {error ? <p className="screen-copy" role="alert">{error}</p>
         : allDatesFailed ? <div className="screen-stack">
           <p className="screen-copy" role="alert">{t('monthlyCalculationFailed')}</p>
@@ -97,7 +91,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
           <p className="screen-copy" role="alert">{t('scheduleLoadFailed')}</p>
           <ActionButton onClick={onRetrySchedule}>{t('retry')}</ActionButton>
         </div>
-        : context ? <PrayerMonthTable rows={monthSchedules} labels={eventLabels} dateLabel={t('dateLabel')}
+        : context ? <PrayerMonthTable rows={monthSchedules} labels={eventLabels} weekdayLabels={weekdayLabels} dateLabel={t('dateLabel')}
           tableLabel={t('monthlyScheduleTableLabel')} />
           : <div className="screen-stack">
             <p className="screen-copy">{t('noSchedulePlace')}</p>
