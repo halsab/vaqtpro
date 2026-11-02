@@ -56,12 +56,12 @@ describe('QiblaScreen orientation presentation', () => {
     vi.unstubAllGlobals()
   })
 
-  function dispatchHeading(heading: number, time: number, options: { accuracy?: number; beta?: number | null; gamma?: number | null } = {}) {
+  function dispatchHeading(heading: number, time: number, options: { accuracy?: number | null; beta?: number | null; gamma?: number | null } = {}) {
     sampleTime = time
     act(() => { window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
       alpha: 0, beta: options.beta === undefined ? 0 : options.beta,
       gamma: options.gamma === undefined ? 0 : options.gamma, absolute: false,
-      webkitCompassHeading: heading, webkitCompassAccuracy: options.accuracy ?? 6,
+      webkitCompassHeading: heading, webkitCompassAccuracy: options.accuracy === undefined ? 6 : options.accuracy,
     })) })
   }
 
@@ -163,6 +163,19 @@ describe('QiblaScreen orientation presentation', () => {
     expect(screen.queryByText(/Компас мог сбиться/)).toBeNull()
   })
 
+  it('automatically reacquires a stationary 180-degree turn with unavailable accuracy and keeps a caution visible', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000, { accuracy: null })
+    dispatchHeading(180, 1050, { accuracy: null })
+    dispatchHeading(180, 1550, { accuracy: null })
+    dispatchHeading(180, 2050, { accuracy: null })
+    dispatchHeading(180, 2550, { accuracy: null })
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent(/Направление восстановлено\. Сверьте компас/)
+  })
+
   it('does not recover from a single stale candidate when sensor readings stop', async () => {
     render(<QiblaScreen place={place} onBack={() => {}} />)
     await activateCompass()
@@ -212,11 +225,42 @@ describe('QiblaScreen orientation presentation', () => {
     flushFrame()
     sampleTime = 1050
     act(() => { window.dispatchEvent(Object.assign(new Event('devicemotion'), {
-      rotationRate: { alpha: 0, beta: 0, gamma: 3600 },
+      rotationRate: { alpha: 0, beta: 0, gamma: -3600 }, interval: 50,
     })) })
     dispatchHeading(180, 1050)
     expect(screen.queryByText(/Компас мог сбиться/)).toBeNull()
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  })
+
+  it('does not treat sparse gyro intervals as continuous evidence for a magnetic jump', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    flushFrame()
+
+    for (const timeMs of [1020, 1050]) {
+      sampleTime = timeMs
+      act(() => { window.dispatchEvent(Object.assign(new Event('devicemotion'), {
+        rotationRate: { alpha: 0, beta: 0, gamma: -9000 }, interval: 10,
+      })) })
+    }
+    dispatchHeading(180, 1050)
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас мог сбиться/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  })
+
+  it('does not treat pitch-only gyro magnitude as evidence for a horizontal magnetic heading jump', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000)
+    flushFrame()
+    sampleTime = 1050
+    act(() => { window.dispatchEvent(Object.assign(new Event('devicemotion'), {
+      rotationRate: { alpha: 7200, beta: 0, gamma: 0 }, interval: 50,
+    })) })
+    dispatchHeading(180, 1050)
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас мог сбиться/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
   })
 
   it('withholds a WebKit reading with unknown tilt and allows a valid calibrated sample to recover automatically', async () => {
@@ -231,6 +275,14 @@ describe('QiblaScreen orientation presentation', () => {
     dispatchHeading(359, 1032, { accuracy: 8 })
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
     expect(screen.queryByText(/Проверьте компас/)).toBeNull()
+  })
+
+  it('never shows a live pointer from a first sample with extremely poor reported accuracy', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(42, 1000, { accuracy: 90 })
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent(/Показано расчётное направление/)
   })
 
   it('recomputes the pointer after a Place change without waiting for another sensor event', async () => {

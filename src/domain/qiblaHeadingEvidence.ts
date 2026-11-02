@@ -5,12 +5,13 @@ export interface HeadingEvidenceSample {
   timeMs: number
   source: string
   screenAngle: number
-  motionRateDegreesPerSecond: number | null
+  motionHeadingDeltaDegrees: number | null
+  motionEvidenceCoverage: number
   reportedAccuracyDegrees: number | null
 }
 
 export type HeadingEvidenceDecision =
-  | { kind: 'accepted'; headingDegrees: number; recoveredFromSuspect: boolean }
+  | { kind: 'accepted'; headingDegrees: number; recoveredFromSuspect: boolean; confidence: 'supported' | 'limited' }
   | { kind: 'suspect'; candidateHeadingDegrees: number }
   | { kind: 'degraded'; candidateHeadingDegrees: number }
   | { kind: 'ignored' }
@@ -23,6 +24,7 @@ const MIN_CANDIDATE_PROGRESS_DEGREES = 2
 const MOTION_CORROBORATION_RATIO = 0.65
 const MAX_MOTION_CORROBORATION_INTERVAL_MS = 250
 const MIN_STATIONARY_RECOVERY_MS = 600
+const MIN_UNVERIFIED_STATIONARY_RECOVERY_MS = 1500
 const MAX_QUARANTINE_MS = 2000
 const MIN_COHERENT_TURN_MS = 80
 const MIN_COHERENT_TURN_DEGREES = 30
@@ -40,6 +42,7 @@ interface Candidate {
   direction: number
   coherentTravelDegrees: number
   baselineAccuracyDegrees: number | null
+  initialCandidateAccuracyDegrees: number | null
   lastSeenAtMs: number
 }
 
@@ -66,13 +69,16 @@ export class QiblaHeadingEvidenceGate {
   push(sample: HeadingEvidenceSample): HeadingEvidenceDecision {
     if (!Number.isFinite(sample.headingDegrees) || !Number.isFinite(sample.timeMs)
       || !Number.isFinite(sample.screenAngle)
-      || (sample.motionRateDegreesPerSecond !== null
-        && (!Number.isFinite(sample.motionRateDegreesPerSecond) || sample.motionRateDegreesPerSecond < 0))
+      || (sample.motionHeadingDeltaDegrees !== null && !Number.isFinite(sample.motionHeadingDeltaDegrees))
+      || !Number.isFinite(sample.motionEvidenceCoverage) || sample.motionEvidenceCoverage < 0 || sample.motionEvidenceCoverage > 1
       || (sample.reportedAccuracyDegrees !== null
         && (!Number.isFinite(sample.reportedAccuracyDegrees) || sample.reportedAccuracyDegrees < 0
           || sample.reportedAccuracyDegrees >= 180))) return { kind: 'invalid' }
 
     const normalized = { ...sample, headingDegrees: wrap360(sample.headingDegrees) }
+    if (normalized.reportedAccuracyDegrees !== null && normalized.reportedAccuracyDegrees > MAX_LIVE_ACCURACY_DEGREES) {
+      return { kind: 'degraded', candidateHeadingDegrees: normalized.headingDegrees }
+    }
     if (this.lastObservedTimeMs !== null && normalized.timeMs < this.lastObservedTimeMs) return { kind: 'ignored' }
     if (this.candidate?.lastSeenAtMs === normalized.timeMs) return { kind: 'ignored' }
     this.lastObservedTimeMs = normalized.timeMs
@@ -80,7 +86,7 @@ export class QiblaHeadingEvidenceGate {
     const previous = this.accepted
     if (!previous) {
       this.accepted = normalized
-      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false }
+      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false, confidence: 'supported' }
     }
 
     const transitioned = previous.source !== normalized.source || previous.screenAngle !== normalized.screenAngle
@@ -88,7 +94,7 @@ export class QiblaHeadingEvidenceGate {
       this.accepted = normalized
       const recoveredFromSuspect = this.candidate !== null
       this.candidate = null
-      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect }
+      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect, confidence: 'supported' }
     }
     if (transitioned) return this.startCandidate(normalized, previous)
 
@@ -99,17 +105,13 @@ export class QiblaHeadingEvidenceGate {
       return this.startCandidate(normalized, previous)
     }
     if (this.candidate) return this.updateCandidate(normalized, previous)
-    if (normalized.reportedAccuracyDegrees !== null
-      && normalized.reportedAccuracyDegrees > MAX_LIVE_ACCURACY_DEGREES) return this.startCandidate(normalized, previous)
-
     const delta = this.deviceHeadingDistance(previous, normalized)
     const motionExplainsChange = elapsedMs <= MAX_MOTION_CORROBORATION_INTERVAL_MS
-      && normalized.motionRateDegreesPerSecond !== null
-      && normalized.motionRateDegreesPerSecond * elapsedMs / 1000 >= Math.abs(delta) * MOTION_CORROBORATION_RATIO
+      && this.motionExplains(normalized, delta)
     if (elapsedMs > MAX_SAMPLE_GAP_MS) {
       if (delta <= this.matchTolerance(previous, normalized)) {
         this.accepted = normalized
-        return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false }
+        return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false, confidence: 'supported' }
       }
       return this.startCandidate(normalized, previous)
     }
@@ -117,7 +119,7 @@ export class QiblaHeadingEvidenceGate {
     const maxPlausibleChange = MAX_UNCORROBORATED_TURN_RATE_DPS * elapsedMs / 1000
     if (delta <= maxPlausibleChange || motionExplainsChange) {
       this.accepted = normalized
-      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false }
+      return { kind: 'accepted', headingDegrees: normalized.headingDegrees, recoveredFromSuspect: false, confidence: 'supported' }
     }
     return this.startCandidate(normalized, previous)
   }
@@ -133,6 +135,7 @@ export class QiblaHeadingEvidenceGate {
       direction: Math.sign(shortestAngleDelta(baselineDeviceHeading, candidateDeviceHeading)),
       coherentTravelDegrees: 0,
       baselineAccuracyDegrees: baseline.reportedAccuracyDegrees,
+      initialCandidateAccuracyDegrees: sample.reportedAccuracyDegrees,
       lastSeenAtMs: sample.timeMs,
     }
     return this.quarantineDecision(sample)
@@ -149,9 +152,7 @@ export class QiblaHeadingEvidenceGate {
     const accuracyWorsened = sampleAccuracy !== null && candidate.baselineAccuracyDegrees !== null
       && sampleAccuracy > candidate.baselineAccuracyDegrees + MAX_ACCURACY_WORSENING_DEGREES
     const motionCorroboratesCandidate = elapsedMs <= MAX_MOTION_CORROBORATION_INTERVAL_MS
-      && sample.motionRateDegreesPerSecond !== null
-      && sample.motionRateDegreesPerSecond * elapsedMs / 1000
-        >= Math.abs(candidateStep) * MOTION_CORROBORATION_RATIO
+      && this.motionExplains(sample, candidateStep)
     const qualitySupportsRecovery = (this.hasReliableAccuracy(sample) && !accuracyWorsened)
       || motionCorroboratesCandidate
     const matchToAccepted = shortestAngleDelta(this.deviceHeading(baseline), nextDeviceHeading)
@@ -160,7 +161,7 @@ export class QiblaHeadingEvidenceGate {
       && (sampleAccuracy === null || sampleAccuracy <= MAX_RECOVERY_ACCURACY_DEGREES)) {
       this.accepted = sample
       this.candidate = null
-      return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true }
+      return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true, confidence: 'supported' }
     }
 
     if (sampleAccuracy !== null && sampleAccuracy > MAX_LIVE_ACCURACY_DEGREES) {
@@ -171,8 +172,13 @@ export class QiblaHeadingEvidenceGate {
       return this.quarantineDecision(sample)
     }
 
-    if (Math.abs(candidateStep) <= this.stationaryTolerance(candidate.sample, sample)) {
-      if (!qualitySupportsRecovery || !this.hasReliableAccuracy(candidate.sample)) candidate.stableSinceMs = sample.timeMs
+    const stationary = Math.abs(candidateStep) <= this.stationaryTolerance(candidate.sample, sample)
+    const motionContradictsStationary = stationary && sample.motionHeadingDeltaDegrees !== null
+      && sample.motionEvidenceCoverage >= 0.75
+      && Math.abs(sample.motionHeadingDeltaDegrees) > this.stationaryTolerance(candidate.sample, sample) * 1.5 + 4
+    if (stationary) {
+      if (motionContradictsStationary) candidate.stableSinceMs = sample.timeMs
+      if (this.hasReliableAccuracy(sample) && !this.hasReliableAccuracy(candidate.sample)) candidate.stableSinceMs = sample.timeMs
       if (elapsedMs > MAX_SAMPLE_GAP_MS) candidate.stableSinceMs = sample.timeMs
     } else {
       const progressesInSameDirection = Math.sign(candidateStep) === candidate.direction
@@ -184,7 +190,7 @@ export class QiblaHeadingEvidenceGate {
           && candidate.coherentTravelDegrees >= MIN_COHERENT_TURN_DEGREES) {
           this.accepted = sample
           this.candidate = null
-          return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true }
+          return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true, confidence: 'supported' }
         }
       } else {
         candidate.direction = Math.sign(candidateStep)
@@ -196,11 +202,18 @@ export class QiblaHeadingEvidenceGate {
     candidate.sample = sample
     candidate.deviceHeading = nextDeviceHeading
     candidate.lastSeenAtMs = sample.timeMs
-    if (qualitySupportsRecovery && elapsedMs <= MAX_SAMPLE_GAP_MS
-      && sample.timeMs - candidate.stableSinceMs >= MIN_STATIONARY_RECOVERY_MS) {
+    const stableForMs = sample.timeMs - candidate.stableSinceMs
+    const supportedStationaryRecovery = qualitySupportsRecovery && stableForMs >= MIN_STATIONARY_RECOVERY_MS
+    const limitedStationaryRecovery = sample.reportedAccuracyDegrees === null
+      && candidate.initialCandidateAccuracyDegrees === null
+      && stableForMs >= MIN_UNVERIFIED_STATIONARY_RECOVERY_MS
+      && !motionContradictsStationary
+    if (!motionContradictsStationary && elapsedMs <= MAX_SAMPLE_GAP_MS
+      && (supportedStationaryRecovery || limitedStationaryRecovery)) {
       this.accepted = sample
       this.candidate = null
-      return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true }
+      return { kind: 'accepted', headingDegrees: sample.headingDegrees, recoveredFromSuspect: true,
+        confidence: limitedStationaryRecovery ? 'limited' : 'supported' }
     }
     return this.quarantineDecision(sample)
   }
@@ -243,5 +256,15 @@ export class QiblaHeadingEvidenceGate {
     const baselineAccuracy = this.candidate?.baselineAccuracyDegrees
     return baselineAccuracy === null || baselineAccuracy === undefined
       || accuracy <= baselineAccuracy + MAX_ACCURACY_WORSENING_DEGREES
+  }
+
+  private motionExplains(sample: HeadingEvidenceSample, headingDeltaDegrees: number): boolean {
+    const observed = sample.motionHeadingDeltaDegrees
+    if (observed === null || sample.motionEvidenceCoverage < 0.75) return false
+    const observedMagnitude = Math.abs(observed)
+    const headingMagnitude = Math.abs(headingDeltaDegrees)
+    return Math.sign(observed) === Math.sign(headingDeltaDegrees)
+      && observedMagnitude >= headingMagnitude * MOTION_CORROBORATION_RATIO
+      && observedMagnitude <= headingMagnitude * 1.6 + 6
   }
 }

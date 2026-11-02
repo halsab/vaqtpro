@@ -74,6 +74,7 @@ export const RU_MESSAGES = Object.freeze({
   qiblaOrientationCalibrating: 'Уберите телефон от металла и проверьте компас.',
   qiblaOrientationTiltUnknown: 'Держите телефон ровнее.',
   qiblaOrientationSuspect: 'Компас мог сбиться. Проверьте направление.',
+  qiblaOrientationReacquired: 'Направление восстановлено. Сверьте компас с ориентиром.',
   qiblaCheckCompass: 'Проверить компас',
   qiblaCompassConnecting: 'Подключаем компас…',
   qiblaOrientationTilt: 'Поверните телефон ближе к горизонтали.',

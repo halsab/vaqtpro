@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { circularExponentialStep, createOrientationSession, eulerScreenTopHeading, hasRememberedOrientationGrant, quaternionScreenTopHeading, screenAngleDegrees } from './qiblaOrientation'
+import { circularExponentialStep, createOrientationSession, eulerScreenTopHeading, hasRememberedOrientationGrant, projectedHorizontalHeadingRate, quaternionScreenTopHeading, screenAngleDegrees } from './qiblaOrientation'
 
 describe('Qibla orientation geometry', () => {
   it.each([[0, 0], [90, 90], [180, 180], [270, 270]])('maps screen rotation %i once', (angle, expected) => {
@@ -22,6 +22,20 @@ describe('Qibla orientation geometry', () => {
     expect(eulerScreenTopHeading({ alpha: 45, beta: 90, gamma: 0, screenAngle: 0 }).kind).toBe('tilt')
     expect(quaternionScreenTopHeading([0, 0, 0, 1], 0)).toMatchObject({ kind: 'heading', heading: 0 })
     expect(quaternionScreenTopHeading([0, 0, 0, 0], 0).kind).toBe('invalid')
+  })
+
+  it('projects three-axis motion onto the screen-top azimuth and excludes flat pitch/roll-only rates', () => {
+    const flat = { kind: 'euler' as const, alpha: 0, beta: 0, gamma: 0 }
+    expect(projectedHorizontalHeadingRate(flat, 0, { x: 0, y: 0, z: -90 })).toBeCloseTo(90)
+    expect(projectedHorizontalHeadingRate(flat, 0, { x: 90, y: 0, z: 0 })).toBeCloseTo(0)
+    expect(projectedHorizontalHeadingRate(flat, 0, { x: 0, y: 90, z: 0 })).toBeCloseTo(0)
+    expect(projectedHorizontalHeadingRate(flat, 90, { x: 0, y: 0, z: -90 })).toBeCloseTo(90)
+    expect(projectedHorizontalHeadingRate({ ...flat, beta: 90 }, 0, { x: 0, y: 0, z: 90 })).toBeNull()
+  })
+
+  it('uses the quaternion screen frame for horizontal motion projection', () => {
+    expect(projectedHorizontalHeadingRate({ kind: 'quaternion', quaternion: [0, 0, 0, 1] }, 0,
+      { x: 0, y: 0, z: -90 })).toBeCloseTo(90)
   })
 
   it.each([[0, 0], [90, 90], [180, 180], [270, 270]])('maps the device-frame screen top at %i degrees', (screenAngle, expected) => {
@@ -53,11 +67,13 @@ describe('Qibla orientation browser adapters', () => {
   it('requests absolute sensor permission only from the explicit call and rejects denial', async () => {
     const requestPermission = vi.fn().mockResolvedValue('denied')
     vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
     const reports: string[] = []
     const session = createOrientationSession(window, status => reports.push(status))
     await session.enableFromGesture()
     expect(requestPermission).toHaveBeenCalledWith(true)
     expect(reports.at(-1)).toBe('denied')
+    expect(hasRememberedOrientationGrant(window)).toBe(false)
     session.stop()
   })
 
@@ -74,6 +90,45 @@ describe('Qibla orientation browser adapters', () => {
       alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 25, webkitCompassAccuracy: 5,
     }))
     expect(reports).toContain('live-unverified')
+    session.stop()
+  })
+
+  it('forgets remembered access when the Generic Sensor API reports a reliable permission denial', () => {
+    const instances: { onerror: ((event: Event & { error?: { name?: string } }) => void) | null; start: () => void; stop: () => void }[] = []
+    class MockAbsoluteOrientationSensor {
+      quaternion = [0, 0, 0, 1]
+      onreading: (() => void) | null = null
+      onerror: ((event: Event & { error?: { name?: string } }) => void) | null = null
+      start() {}
+      stop() {}
+      constructor() { instances.push(this) }
+    }
+    window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
+    vi.stubGlobal('AbsoluteOrientationSensor', MockAbsoluteOrientationSensor)
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    session.resumeFromRememberedGrant()
+    instances[0]?.onerror?.(Object.assign(new Event('error'), { error: { name: 'NotAllowedError' } }))
+    expect(reports.at(-1)).toBe('restricted')
+    expect(hasRememberedOrientationGrant(window)).toBe(false)
+    session.stop()
+  })
+
+  it('forgets remembered access when Generic Sensor startup throws NotAllowedError', () => {
+    class DeniedAbsoluteOrientationSensor {
+      quaternion = null
+      onreading: (() => void) | null = null
+      onerror: ((event: Event & { error?: { name?: string } }) => void) | null = null
+      start() { throw new DOMException('Permission was revoked', 'NotAllowedError') }
+      stop() {}
+    }
+    window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
+    vi.stubGlobal('AbsoluteOrientationSensor', DeniedAbsoluteOrientationSensor)
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    session.resumeFromRememberedGrant()
+    expect(reports.at(-1)).toBe('restricted')
+    expect(hasRememberedOrientationGrant(window)).toBe(false)
     session.stop()
   })
 

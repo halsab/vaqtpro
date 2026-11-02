@@ -14,7 +14,7 @@ import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
 import { formatRelativeGuidance } from './relativeGuidance'
 
-type CompassState = { status: OrientationStatus; reason: 'blackout' | 'caution' | 'model-unavailable' | null }
+type CompassState = { status: OrientationStatus; reason: 'blackout' | 'caution' | 'model-unavailable' | 'reacquired' | null }
 
 const INITIAL_COMPASS_STATE: CompassState = { status: 'idle', reason: null }
 const ACCESSIBLE_ANNOUNCEMENT_INTERVAL_MS = 2500
@@ -76,6 +76,7 @@ function deriveRelativePointer(
 function orientationIssue(status: OrientationStatus, reason: CompassState['reason'], t: ReturnType<typeof useLocalization>['t']): string | null {
   if (reason === 'blackout') return t('qiblaMagneticBlackout')
   if (reason === 'caution') return t('qiblaMagneticCaution')
+  if (reason === 'reacquired') return t('qiblaOrientationReacquired')
   if (reason === 'model-unavailable') return t('qiblaMagneticModelUnavailable')
   switch (status) {
     case 'acquiring': return t('qiblaCompassConnecting')
@@ -124,6 +125,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const suspectReading = useRef<OrientationReading | null>(null)
   const latestReading = useRef<OrientationReading | null>(null)
   const lastSource = useRef<string | null>(null)
+  const limitedReacquisition = useRef(false)
   const continuity = useRef(new QiblaHeadingEvidenceGate())
   const lastAnnouncedBucket = useRef<number | null>(null)
   const lastAnnouncementAt = useRef(Number.NEGATIVE_INFINITY)
@@ -241,7 +243,8 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     queuePointer(derived.relativeDegrees, derived.northRotationDegrees)
     publishPointerVisibility(true)
     scheduleAccessibleDirection(derived.relativeDegrees)
-    const reason = modelRef.current.kind === 'calculated' && modelRef.current.horizontalIntensityNt < 6000 ? 'caution' : null
+    const reason = modelRef.current.kind === 'calculated' && modelRef.current.horizontalIntensityNt < 6000 ? 'caution'
+      : limitedReacquisition.current ? 'reacquired' : null
     publishCompassState({ status: 'live-unverified', reason })
     traceRef.current?.record({
       event: 'reading', source: reading.source, magneticHeadingDegrees: reading.headingMagneticDegrees,
@@ -318,6 +321,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         continuity.current.reset()
         latestReading.current = null
         lastSource.current = null
+        limitedReacquisition.current = false
       } else latestReading.current = null
       clearPointer()
       clearAccessibleDirection()
@@ -337,7 +341,8 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       const decision = continuity.current.push({
         headingDegrees: reading.headingMagneticDegrees, timeMs: reading.sampleTimeMs,
         source: reading.source, screenAngle: reading.screenAngle,
-        motionRateDegreesPerSecond: reading.motionRateDegreesPerSecond,
+        motionHeadingDeltaDegrees: reading.motionHeadingDeltaDegrees,
+        motionEvidenceCoverage: reading.motionEvidenceCoverage,
         reportedAccuracyDegrees: reading.accuracyDegrees,
       })
       if (decision.kind === 'invalid') {
@@ -356,6 +361,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         return
       }
       if (decision.kind === 'suspect') {
+        limitedReacquisition.current = false
         suspectReading.current = reading
         scheduleEvidenceSettlement()
         latestReading.current = null
@@ -373,6 +379,11 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       latestReading.current = reading
       if (lastSource.current && lastSource.current !== reading.source) trace.record({ event: 'source-change', source: reading.source })
       lastSource.current = reading.source
+      if (decision.confidence === 'limited') limitedReacquisition.current = true
+      else if ((reading.accuracyDegrees !== null && reading.accuracyDegrees <= 15)
+        || (reading.motionEvidenceCoverage >= 0.75 && reading.motionHeadingDeltaDegrees !== null)) {
+        limitedReacquisition.current = false
+      }
       processReadingRef.current(reading)
     })
     session.current = orientationSession
@@ -416,6 +427,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       {showInitialAction || showRetry ? <ActionButton disabled={compass.status === 'acquiring'} onClick={() => {
         traceRef.current?.record({ event: 'retry', status: compass.status })
         continuity.current.reset()
+        limitedReacquisition.current = false
         suspectReading.current = null
         if (evidenceTimer.current !== null) window.clearTimeout(evidenceTimer.current)
         evidenceTimer.current = null

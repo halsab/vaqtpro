@@ -11,7 +11,8 @@ export interface OrientationReading {
   screenAngle: number
   northReference: 'magnetic'
   sampleTimeMs: number
-  motionRateDegreesPerSecond: number | null
+  motionHeadingDeltaDegrees: number | null
+  motionEvidenceCoverage: number
 }
 export type OrientationHandler = (status: OrientationStatus, reading?: OrientationReading) => void
 
@@ -23,6 +24,55 @@ const NO_READING_TIMEOUT_MS = 4000
 export function screenAngleDegrees(value: number | null | undefined): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value % 90 !== 0) return null
   return wrap360(value)
+}
+
+export type OrientationFrame =
+  | { kind: 'euler'; alpha: number; beta: number; gamma: number }
+  | { kind: 'quaternion'; quaternion: readonly number[] }
+
+export interface DeviceRotationRate { x: number; y: number; z: number }
+
+function rotateEulerVector(vector: DeviceRotationRate, frame: Extract<OrientationFrame, { kind: 'euler' }>): DeviceRotationRate {
+  const a = frame.alpha * Math.PI / 180, b = frame.beta * Math.PI / 180, g = frame.gamma * Math.PI / 180
+  const x1 = Math.cos(g) * vector.x + Math.sin(g) * vector.z
+  const z1 = -Math.sin(g) * vector.x + Math.cos(g) * vector.z
+  const y2 = Math.cos(b) * vector.y - Math.sin(b) * z1
+  const z2 = Math.sin(b) * vector.y + Math.cos(b) * z1
+  return { x: Math.cos(a) * x1 - Math.sin(a) * y2, y: Math.sin(a) * x1 + Math.cos(a) * y2, z: z2 }
+}
+
+function rotateQuaternionVector(vector: DeviceRotationRate, input: readonly number[]): DeviceRotationRate | null {
+  if (input.length !== 4 || !input.every(Number.isFinite)) return null
+  const magnitude = Math.hypot(...input)
+  if (magnitude < 1e-8) return null
+  const x = Number(input[0]) / magnitude, y = Number(input[1]) / magnitude
+  const z = Number(input[2]) / magnitude, w = Number(input[3]) / magnitude
+  return {
+    x: (1 - 2 * (y * y + z * z)) * vector.x + 2 * (x * y - z * w) * vector.y + 2 * (x * z + y * w) * vector.z,
+    y: 2 * (x * y + z * w) * vector.x + (1 - 2 * (x * x + z * z)) * vector.y + 2 * (y * z - x * w) * vector.z,
+    z: 2 * (x * z - y * w) * vector.x + 2 * (y * z + x * w) * vector.y + (1 - 2 * (x * x + y * y)) * vector.z,
+  }
+}
+
+// Проецируем телесную скорость вращения на изменение азимута верхней стороны экрана.
+export function projectedHorizontalHeadingRate(
+  frame: OrientationFrame,
+  screenAngle: number,
+  deviceRate: DeviceRotationRate,
+): number | null {
+  if (![screenAngle, deviceRate.x, deviceRate.y, deviceRate.z].every(Number.isFinite)) return null
+  const radians = screenAngle * Math.PI / 180
+  const top = { x: Math.sin(radians), y: Math.cos(radians), z: 0 }
+  const rotate = (vector: DeviceRotationRate) => frame.kind === 'euler'
+    ? rotateEulerVector(vector, frame) : rotateQuaternionVector(vector, frame.quaternion)
+  const screenTop = rotate(top)
+  const worldRate = rotate(deviceRate)
+  if (!screenTop || !worldRate) return null
+  const projectionSquared = screenTop.x ** 2 + screenTop.y ** 2
+  if (projectionSquared < MIN_HORIZONTAL_PROJECTION ** 2) return null
+  const eastRate = worldRate.y * screenTop.z - worldRate.z * screenTop.y
+  const northRate = worldRate.z * screenTop.x - worldRate.x * screenTop.z
+  return (screenTop.y * eastRate - screenTop.x * northRate) / projectionSquared
 }
 
 export function circularExponentialStep(previous: number, next: number, elapsedMs: number, tauMs = TAU_MS): number {
@@ -104,7 +154,9 @@ interface OrientationEventLike extends Event {
 }
 interface MotionEventLike extends Event {
   rotationRate?: { alpha: number | null; beta: number | null; gamma: number | null } | null
+  interval?: number
 }
+interface MotionSegment { startMs: number; endMs: number; rateDegreesPerSecond: number; screenAngle: number }
 interface AbsoluteOrientationLike extends EventTarget {
   quaternion: ArrayLike<number> | null
   start(): void
@@ -132,9 +184,11 @@ export function createOrientationSession(target: Window, report: OrientationHand
   let motionHandler: ((event: Event) => void) | null = null
   let probeTimer = 0
   let screenAngle: number | null = null
-  let latestWebKit: { heading: number; accuracyDegrees: number | null; beta: number | null; gamma: number | null } | null = null
+  let latestWebKit: { heading: number; accuracyDegrees: number | null; alpha: number | null; beta: number | null; gamma: number | null } | null = null
   let latestQuaternion: number[] | null = null
-  let latestMotion: { rate: number; timeMs: number } | null = null
+  let latestAttitude: OrientationFrame | null = null
+  let latestHeadingSampleTimeMs: number | null = null
+  let motionSegments: MotionSegment[] = []
   let hasCurrentReading = false
   const screenOrientation = (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
   const emit: OrientationHandler = (status, reading) => {
@@ -172,21 +226,54 @@ export function createOrientationSession(target: Window, report: OrientationHand
   const clearMotionEvidence = () => {
     if (motionHandler) target.removeEventListener('devicemotion', motionHandler)
     motionHandler = null
-    latestMotion = null
+    latestAttitude = null
+    latestHeadingSampleTimeMs = null
+    motionSegments = []
   }
   const startMotionEvidence = () => {
     if (motionHandler) return
     motionHandler = event => {
       if (stopped || !enabled) return
-      const rate = (event as MotionEventLike).rotationRate
-      const components = [rate?.alpha, rate?.beta, rate?.gamma]
-      if (!components.every(value => typeof value === 'number' && Number.isFinite(value))) return
-      latestMotion = { rate: Math.hypot(components[0] as number, components[1] as number, components[2] as number), timeMs: target.performance.now() }
+      const motion = event as MotionEventLike
+      const rate = motion.rotationRate
+      const intervalMs = motion.interval
+      if (!latestAttitude || screenAngle === null || !rate
+        || ![rate.alpha, rate.beta, rate.gamma, intervalMs].every(value => typeof value === 'number' && Number.isFinite(value))
+        || intervalMs === undefined || intervalMs <= 0 || intervalMs > 250) return
+      const sampleTimeMs = target.performance.now()
+      const projectedRate = projectedHorizontalHeadingRate(latestAttitude, screenAngle,
+        { x: rate.alpha as number, y: rate.beta as number, z: rate.gamma as number })
+      if (projectedRate === null || !Number.isFinite(projectedRate)) return
+      motionSegments.push({ startMs: sampleTimeMs - intervalMs, endMs: sampleTimeMs,
+        rateDegreesPerSecond: projectedRate, screenAngle })
+      motionSegments = motionSegments.filter(segment => sampleTimeMs - segment.endMs <= 1000).slice(-80)
     }
     target.addEventListener('devicemotion', motionHandler)
   }
-  const currentMotionRate = (now: number): number | null => latestMotion && now - latestMotion.timeMs <= 250
-    ? latestMotion.rate : null
+  const motionEvidenceSince = (startMs: number | null, endMs: number, currentScreenAngle: number) => {
+    if (startMs === null || endMs <= startMs) return { deltaDegrees: null, coverage: 0 }
+    const spanMs = endMs - startMs
+    let coveredUntil = startMs
+    let coveredDurationMs = 0
+    let deltaDegrees = 0
+    for (const segment of motionSegments) {
+      if (segment.screenAngle !== currentScreenAngle || segment.endMs <= coveredUntil || segment.startMs >= endMs) continue
+      const overlapStart = Math.max(startMs, coveredUntil, segment.startMs)
+      const overlapEnd = Math.min(endMs, segment.endMs)
+      if (overlapEnd <= overlapStart) continue
+      const overlapMs = overlapEnd - overlapStart
+      deltaDegrees += segment.rateDegreesPerSecond * overlapMs / 1000
+      coveredDurationMs += overlapMs
+      coveredUntil = overlapEnd
+    }
+    motionSegments = motionSegments.filter(segment => segment.endMs > endMs)
+    const coverage = Math.min(1, coveredDurationMs / spanMs)
+    return { deltaDegrees: coverage > 0 ? deltaDegrees : null, coverage }
+  }
+  const resetMotionWindow = (sampleTimeMs: number) => {
+    motionSegments = []
+    latestHeadingSampleTimeMs = sampleTimeMs
+  }
   const classifySensorError = (name?: string): OrientationStatus | null => {
     if (name === 'NotAllowedError') return 'restricted'
     if (name === 'SecurityError') return 'security'
@@ -232,6 +319,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
           emit('frame-unavailable')
           return
         }
+        if (screenAngle !== currentScreenAngle) resetMotionWindow(target.performance.now())
         screenAngle = currentScreenAngle
         if (typeof orientation.beta !== 'number' || !Number.isFinite(orientation.beta)
           || typeof orientation.gamma !== 'number' || !Number.isFinite(orientation.gamma)) {
@@ -258,17 +346,23 @@ export function createOrientationSession(target: Window, report: OrientationHand
           return
         }
         const accuracyDegrees = typeof accuracy === 'number' && accuracy >= 0 ? accuracy : null
-        latestWebKit = { heading: rawHeading, accuracyDegrees, beta: orientation.beta, gamma: orientation.gamma }
+        latestWebKit = { heading: rawHeading, accuracyDegrees,
+          alpha: typeof orientation.alpha === 'number' && Number.isFinite(orientation.alpha) ? orientation.alpha : null,
+          beta: orientation.beta, gamma: orientation.gamma }
         hasCurrentReading = true
         permissionGranted = true
         rememberOrientationGrant(target)
         const sampleTimeMs = target.performance.now()
+        const motionEvidence = motionEvidenceSince(latestHeadingSampleTimeMs, sampleTimeMs, currentScreenAngle)
+        latestHeadingSampleTimeMs = sampleTimeMs
+        latestAttitude = { kind: 'euler', alpha: latestWebKit.alpha ?? 0, beta: orientation.beta, gamma: orientation.gamma }
         cancelProbe()
         emit('live-unverified', {
           headingMagneticDegrees: wrap360(rawHeading + currentScreenAngle),
           source: 'webkit-compass', accuracyDegrees, horizontalProjection: tilt.horizontalProjection,
           screenAngle: currentScreenAngle, northReference: 'magnetic', sampleTimeMs,
-          motionRateDegreesPerSecond: currentMotionRate(sampleTimeMs),
+          motionHeadingDeltaDegrees: motionEvidence.deltaDegrees,
+          motionEvidenceCoverage: motionEvidence.coverage,
         })
       } else if ((orientation.alpha === null || orientation.beta === null || orientation.gamma === null)
         && !hasCurrentReading && lastStatus !== 'calibrating') {
@@ -332,13 +426,17 @@ export function createOrientationSession(target: Window, report: OrientationHand
         permissionGranted = true
         rememberOrientationGrant(target)
         const sampleTimeMs = target.performance.now()
+        const motionEvidence = motionEvidenceSince(latestHeadingSampleTimeMs, sampleTimeMs, currentScreenAngle)
+        latestHeadingSampleTimeMs = sampleTimeMs
+        latestAttitude = { kind: 'quaternion', quaternion }
         cancelProbe()
         emit('live-unverified', {
           headingMagneticDegrees: geometry.heading,
           source: 'absolute-orientation-sensor', accuracyDegrees: null,
           horizontalProjection: geometry.horizontalProjection,
           screenAngle: currentScreenAngle, northReference: 'magnetic', sampleTimeMs,
-          motionRateDegreesPerSecond: currentMotionRate(sampleTimeMs),
+          motionHeadingDeltaDegrees: motionEvidence.deltaDegrees,
+          motionEvidenceCoverage: motionEvidence.coverage,
         })
       }
       currentSensor.onerror = event => {
@@ -346,7 +444,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
         const status = classifySensorError(event.error?.name)
         clearActiveSource()
         if (status) {
-          if (status === 'restricted') permissionGranted = false
+          if (status === 'restricted') { permissionGranted = false; forgetOrientationGrant(target) }
           emit(status)
         }
         else tryWebKitFallback()
@@ -358,7 +456,10 @@ export function createOrientationSession(target: Window, report: OrientationHand
       const name = error instanceof DOMException ? error.name : undefined
       clearActiveSource()
       const status = classifySensorError(name)
-      if (status) emit(status)
+      if (status) {
+        if (status === 'restricted') { permissionGranted = false; forgetOrientationGrant(target) }
+        emit(status)
+      }
       else tryWebKitFallback()
     }
   }
@@ -375,7 +476,10 @@ export function createOrientationSession(target: Window, report: OrientationHand
       if (enabled) emit('frame-unavailable')
       return
     }
+    const frameChanged = screenAngle !== angle
     screenAngle = angle
+    const sampleTimeMs = target.performance.now()
+    if (frameChanged) resetMotionWindow(sampleTimeMs)
     if (!enabled) return
     if (activeSource === 'webkit' && latestWebKit) {
       const tilt = eulerScreenTopHeading({ alpha: 0, beta: latestWebKit.beta ?? Number.NaN,
@@ -387,22 +491,22 @@ export function createOrientationSession(target: Window, report: OrientationHand
         emit(tilt.kind === 'tilt' ? 'tilt' : 'tilt-unknown')
         return
       }
-      const sampleTimeMs = target.performance.now()
+      latestAttitude = { kind: 'euler', alpha: latestWebKit.alpha ?? 0,
+        beta: latestWebKit.beta ?? Number.NaN, gamma: latestWebKit.gamma ?? Number.NaN }
       emit('live-unverified', {
         headingMagneticDegrees: wrap360(latestWebKit.heading + angle),
         source: 'webkit-compass', accuracyDegrees: latestWebKit.accuracyDegrees,
         horizontalProjection: tilt.horizontalProjection, screenAngle: angle, northReference: 'magnetic',
-        sampleTimeMs, motionRateDegreesPerSecond: currentMotionRate(sampleTimeMs),
+        sampleTimeMs, motionHeadingDeltaDegrees: null, motionEvidenceCoverage: 0,
       })
     } else if (activeSource === 'absolute' && latestQuaternion) {
       const geometry = quaternionScreenTopHeading(latestQuaternion, angle)
       if (geometry.kind === 'heading') {
-        const sampleTimeMs = target.performance.now()
         emit('live-unverified', {
           headingMagneticDegrees: geometry.heading, source: 'absolute-orientation-sensor',
           accuracyDegrees: null, horizontalProjection: geometry.horizontalProjection,
           screenAngle: angle, northReference: 'magnetic', sampleTimeMs,
-          motionRateDegreesPerSecond: currentMotionRate(sampleTimeMs),
+          motionHeadingDeltaDegrees: null, motionEvidenceCoverage: 0,
         })
       } else if (geometry.kind === 'tilt') { hasCurrentReading = false; if (!probeTimer) startProbe('absolute'); emit('tilt') }
       else emit('degraded')
@@ -431,10 +535,11 @@ export function createOrientationSession(target: Window, report: OrientationHand
       if (doc.visibilityState === 'hidden') { emit('degraded'); return }
       const canRestart = ['degraded', 'suspect', 'calibrating', 'tilt', 'tilt-unknown', 'timeout', 'null-reading', 'frame-unavailable'].includes(lastStatus)
       if (enabled && (activeSource !== null || probeTimer !== 0) && !canRestart) return
+      const permissionNeedsRecheck = ['restricted', 'denied'].includes(lastStatus)
       permissionInFlight = true
       emit('acquiring')
       const requestPermission = win.DeviceOrientationEvent?.requestPermission
-      if (requestPermission && !permissionGranted) {
+      if (requestPermission && (!permissionGranted || permissionNeedsRecheck)) {
         try {
           const permission = await requestPermission.call(win.DeviceOrientationEvent, true)
           if (permission !== 'granted') { forgetOrientationGrant(target); emit('denied'); return }
