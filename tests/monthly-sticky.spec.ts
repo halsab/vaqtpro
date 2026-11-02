@@ -16,6 +16,26 @@ async function openMonth(page: import('@playwright/test').Page) {
   await expect(page.getByRole('table', { name: 'Расписание намаза за месяц' })).toBeVisible()
 }
 
+test('a failed background PDF does not block changing the month and can be retried from the export icon', async ({ page }) => {
+  // Deliberately fail only the PDF's vector-logo image decoding; navigation
+  // must remain usable even when the export cannot be prepared in this browser.
+  await page.addInitScript(() => {
+    const decode = Image.prototype.decode
+    Image.prototype.decode = function () {
+      if (this.src.includes('/icons/light/favicon.svg')) {
+        return Promise.reject(new DOMException('PDF test asset unavailable', 'EncodingError'))
+      }
+      return decode.call(this)
+    }
+  })
+  await openMonth(page)
+  await expect(page.getByRole('alert')).toContainText('Не удалось выполнить экспорт')
+  await expect(page.getByRole('button', { name: 'Повторить: PDF' })).toBeEnabled()
+  await page.getByRole('button', { name: 'Следующий месяц' }).click()
+  await expect(page.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Повторить: PDF' })).toBeEnabled()
+})
+
 test('monthly table keeps its header, date column, and separators frozen on both axes', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 540 })
   await openMonth(page)
