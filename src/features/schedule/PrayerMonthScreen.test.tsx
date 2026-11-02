@@ -44,7 +44,7 @@ it('shows one table row per date with all seven Home events in the same row', ()
   renderMonth()
   const exportButton = screen.getByRole('button', { name: 'Экспортировать расписание на месяц' })
   expect(exportButton).toHaveClass('icon-button')
-  expect(exportButton).toBeDisabled()
+  expect(exportButton).toBeEnabled()
   expect(prepareMonthlyPdf).not.toHaveBeenCalled()
   expect(screen.getByRole('button', { name: 'Назад' })).toBeVisible()
   expect(screen.queryByRole('heading', { name: 'Расписание на месяц' })).not.toBeInTheDocument()
@@ -169,7 +169,8 @@ it('switches between complete months without selecting dates in the table', asyn
 it('keeps the current calculation context for export without showing it on the monthly screen', async () => {
   renderMonth()
   expect(prepareMonthlyPdf).not.toHaveBeenCalled()
-  // PDF preparation starts after the screen paints, not from a disabled icon click.
+  // Opening the monthly schedule must never start PDF work.
+  await userEvent.click(screen.getByRole('button', { name: 'Экспортировать расписание на месяц' }))
   await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
 
   expect(prepareMonthlyPdf).toHaveBeenCalledWith(expect.objectContaining({
