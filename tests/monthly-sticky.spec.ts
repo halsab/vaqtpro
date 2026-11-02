@@ -29,6 +29,8 @@ test('a failed background PDF does not block changing the month and can be retri
     }
   })
   await openMonth(page)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Экспортировать расписание на месяц' }).click()
   await expect(page.getByRole('alert')).toContainText('Не удалось выполнить экспорт')
   await expect(page.getByRole('button', { name: 'Повторить: PDF' })).toBeEnabled()
   await page.getByRole('button', { name: 'Следующий месяц' }).click()
