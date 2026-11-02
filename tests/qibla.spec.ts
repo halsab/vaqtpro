@@ -122,12 +122,30 @@ test('orientation permission starts only on user action and WebKit magnetic read
   })))
   await expect(page.locator('.qibla-accuracy')).toHaveText('Точность: Хорошая')
 
-  await page.setViewportSize({ width: 390, height: 320 })
-  await expect(page.locator('.qibla-accuracy')).toBeVisible()
-  const shortDial = await page.locator('.qibla-dial').boundingBox()
-  expect(shortDial).not.toBeNull()
-  if (!shortDial) throw new Error('Compass dial is missing in short landscape')
-  expect(shortDial.width).toBeLessThanOrEqual(320)
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 390, height: 844 }, { width: 390, height: 320 }]) {
+    await page.setViewportSize(viewport)
+    await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+    await expect(page.locator('.qibla-accuracy')).toBeVisible()
+    const layout = await page.evaluate(async () => {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      const dial = document.querySelector('.qibla-dial')?.getBoundingClientRect()
+      const content = document.querySelector('.qibla-screen-content')
+      if (!dial || !content) return null
+      const bounds = content.getBoundingClientRect()
+      return {
+        dial: { x: dial.x, y: dial.y, width: dial.width, height: dial.height },
+        content: { x: bounds.x, y: bounds.y, width: content.clientWidth, height: content.clientHeight },
+      }
+    })
+    expect(layout).not.toBeNull()
+    if (!layout) throw new Error('Compass layout bounds are missing')
+    expect(layout.dial.width).toBeLessThanOrEqual(layout.content.width)
+    expect(layout.dial.height).toBeLessThanOrEqual(layout.content.height)
+    expect(layout.dial.x).toBeGreaterThanOrEqual(layout.content.x - 1)
+    expect(layout.dial.y).toBeGreaterThanOrEqual(layout.content.y - 1)
+    expect(layout.dial.x + layout.dial.width).toBeLessThanOrEqual(layout.content.x + layout.content.width + 1)
+    expect(layout.dial.y + layout.dial.height).toBeLessThanOrEqual(layout.content.y + layout.content.height + 1)
+  }
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
   await expect(page.locator('.qibla-accuracy')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
