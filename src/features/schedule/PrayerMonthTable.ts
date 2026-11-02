@@ -1,4 +1,4 @@
-import { createElement, type KeyboardEvent } from 'react'
+import { createElement, useId, useLayoutEffect, useState, type CSSProperties, type KeyboardEvent } from 'react'
 
 import { SCHEDULE_EVENT_KEYS, type PrayerSchedule } from '../../domain/scheduleEvents'
 import { useLocalization } from '../../localization'
@@ -39,8 +39,51 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
   tableLabel: string
 }) {
   const { t } = useLocalization()
-  return createElement('div', { className: 'prayer-month-table-scroll', role: 'region', 'aria-label': tableLabel, tabIndex: 0, onKeyDown: handleTableScrollKeyDown },
-    createElement('table', { className: 'prayer-month-table' },
+  const regionId = useId()
+  const [minimumTableWidth, setMinimumTableWidth] = useState(0)
+  useLayoutEffect(() => {
+    const table = document.getElementById(regionId)?.querySelector<HTMLTableElement>('.prayer-month-table')
+    if (!table) return
+
+    // Равные колонки должны вмещать самую широкую ячейку при текущем масштабе и шрифте.
+    let active = true
+    const measure = () => {
+      if (!active) return
+      const cells = table.querySelectorAll<HTMLElement>('th, td')
+      let widestCell = 0
+      for (const cell of cells) {
+        const range = document.createRange()
+        range.selectNodeContents(cell)
+        const textWidth = typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect().width : 0
+        const style = getComputedStyle(cell)
+        widestCell = Math.max(widestCell, textWidth + Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.paddingRight))
+      }
+      const nextWidth = Math.ceil(widestCell * (PRAYER_MONTH_KEYS.length + 1))
+      setMinimumTableWidth(current => current === nextWidth ? current : nextWidth)
+    }
+
+    measure()
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    if (table.parentElement) resizeObserver?.observe(table.parentElement)
+    const rootObserver = new MutationObserver(measure)
+    rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
+    const contentObserver = new MutationObserver(measure)
+    contentObserver.observe(table, { attributes: true, childList: true, characterData: true, subtree: true })
+    window.addEventListener('resize', measure)
+    const fonts = Reflect.get(document, 'fonts') as FontFaceSet | undefined
+    if (fonts) void fonts.ready.then(measure)
+
+    return () => {
+      active = false
+      resizeObserver?.disconnect()
+      rootObserver.disconnect()
+      contentObserver.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [dateLabel, labels, regionId, rows, tableLabel, weekdayLabels])
+  const tableStyle = { '--prayer-month-table-min-width': `${minimumTableWidth}px` } as CSSProperties
+  return createElement('div', { id: regionId, className: 'prayer-month-table-scroll', role: 'region', 'aria-label': tableLabel, tabIndex: 0, onKeyDown: handleTableScrollKeyDown },
+    createElement('table', { className: 'prayer-month-table', style: tableStyle },
       createElement('caption', null, tableLabel),
       createElement('colgroup', null, ...Array.from({ length: PRAYER_MONTH_KEYS.length + 1 }, (_, index) =>
         createElement('col', { key: index }))),

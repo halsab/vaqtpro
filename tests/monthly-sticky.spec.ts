@@ -1,4 +1,5 @@
 import { choosePlace, expect, test } from './fixtures'
+import { themePalettes } from '../src/ui/themePalette'
 
 async function openMonth(page: import('@playwright/test').Page) {
   await page.emulateMedia({ reducedMotion: 'reduce' })
@@ -77,15 +78,43 @@ test('monthly table keeps its header, date column, and separators frozen on both
   expect(after.separatorX).toBe(before.separatorX)
   expect(after.separatorY).toBe(before.separatorY)
 
-  const topLeftIntersection = await page.evaluate(() => {
+  const stickySurfaceHits = await page.evaluate(() => {
     const cell = document.querySelector<HTMLElement>('.prayer-month-date-heading')
-    if (!cell) throw new Error('Missing top-left header cell')
-    const rect = cell.getBoundingClientRect()
-    const hit = document.elementFromPoint(rect.left + 4, rect.top + 4)
-    return { matches: hit === cell, hit: hit?.outerHTML.slice(0, 120), rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-      background: getComputedStyle(cell).backgroundColor, zIndex: getComputedStyle(cell).zIndex }
+    const dateColumn = document.querySelector<HTMLElement>('.prayer-month-table tbody .prayer-month-date')
+    const normalHeader = document.querySelector<HTMLElement>('.prayer-month-table thead th:nth-child(2)')
+    const tableViewport = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    if (!cell || !dateColumn || !normalHeader || !tableViewport) throw new Error('Missing sticky surfaces')
+    const head = cell.getBoundingClientRect()
+    const date = dateColumn.getBoundingClientRect()
+    const view = tableViewport.getBoundingClientRect()
+    const at = (x: number, y: number) => document.elementFromPoint(x, y)
+    const intersection = at(head.left + Math.min(4, head.width / 2), head.top + 4)
+    const rowHeader = at(date.left + date.width / 2, view.top + head.height + 16)
+    const rowHeaderSurface = rowHeader?.closest<HTMLElement>('.prayer-month-date') ?? null
+    const verticalLineHits = Array.from({ length: 4 }, (_, index) => {
+      const y = view.top + head.height + 12 + index * Math.max(12, (view.height - head.height - 24) / 4)
+      return Boolean(at(head.right - 0.5, y)?.closest('.prayer-month-date'))
+    })
+    const horizontalLineHits = Array.from({ length: 4 }, (_, index) => {
+      const x = head.right + 12 + index * Math.max(12, (view.right - head.right - 24) / 4)
+      return Boolean(at(Math.min(x, view.right - 4), head.bottom - 0.5)?.closest('thead th'))
+    })
+    const opaque = (color: string) => color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)'
+    return {
+      intersectionIsTopmost: intersection === cell,
+      intersectionZ: Number(getComputedStyle(cell).zIndex),
+      normalHeaderZ: Number(getComputedStyle(normalHeader).zIndex),
+      dateColumnZ: Number(getComputedStyle(dateColumn).zIndex),
+      intersectionBackgroundOpaque: opaque(getComputedStyle(cell).backgroundColor),
+      rowHeaderHit: Boolean(rowHeaderSurface),
+      rowHeaderBackgroundOpaque: rowHeaderSurface ? opaque(getComputedStyle(rowHeaderSurface).backgroundColor) : false,
+      verticalLineHits,
+      horizontalLineHits,
+    }
   })
-  expect(topLeftIntersection).toMatchObject({ matches: true })
+  expect(stickySurfaceHits).toMatchObject({ intersectionIsTopmost: true, intersectionZ: 3,
+    normalHeaderZ: 2, dateColumnZ: 2, intersectionBackgroundOpaque: true, rowHeaderHit: true,
+    rowHeaderBackgroundOpaque: true, verticalLineHits: [true, true, true, true], horizontalLineHits: [true, true, true, true] })
 
   await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; element.scrollLeft = element.scrollWidth })
   const lastCells = await page.locator('.prayer-month-table tbody tr').last().evaluate(row => {
@@ -101,27 +130,50 @@ test('monthly table keeps its header, date column, and separators frozen on both
   expect(lastCells).toEqual({ lastDateY: true, lastTimeX: true })
 })
 
-test('expanded calculation details and 200% text remain reachable on a short viewport', async ({ page }) => {
+test('short viewports keep navigation stationary and expose the full table through its own scrollport', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 360 })
   await openMonth(page)
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
-  const details = page.locator('.prayer-month-method')
-  await details.locator('summary').click()
-
-  const scroller = page.locator('.screen-content.prayer-month-content')
-  const dimensions = await scroller.evaluate(element => ({
-    clientHeight: element.clientHeight,
-    scrollHeight: element.scrollHeight,
-    scrollWidth: element.scrollWidth,
-    clientWidth: element.clientWidth,
-  }))
-  expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight)
-  expect(dimensions.scrollWidth).toBeGreaterThan(dimensions.clientWidth)
+  const scroller = page.locator('.prayer-month-table-scroll')
+  const dimensions = await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>('.prayer-month-content')
+    const controls = document.querySelector<HTMLElement>('.prayer-month-controls')
+    const title = document.querySelector<HTMLElement>('.prayer-month-heading')
+    const table = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    if (!content || !controls || !title || !table) throw new Error('Missing monthly layout')
+    const rect = (element: Element) => {
+      const { x, y, right, bottom } = element.getBoundingClientRect()
+      return { x, y, right, bottom }
+    }
+    return {
+      content: { clientWidth: content.clientWidth, scrollWidth: content.scrollWidth,
+        clientHeight: content.clientHeight, scrollHeight: content.scrollHeight },
+      controls: rect(controls), title: rect(title), table: rect(table),
+      tableScroll: { width: table.clientWidth, height: table.clientHeight,
+        scrollWidth: table.scrollWidth, scrollHeight: table.scrollHeight },
+      tableOverflow: getComputedStyle(table).overflow,
+      summaryAbsent: !document.querySelector('details, summary, .prayer-month-method'),
+    }
+  })
+  expect(dimensions.summaryAbsent).toBe(true)
+  expect(dimensions.content.scrollWidth).toBe(dimensions.content.clientWidth)
+  expect(dimensions.content.scrollHeight).toBe(dimensions.content.clientHeight)
+  expect(dimensions.tableScroll.width).toBeGreaterThan(0)
+  expect(dimensions.tableScroll.height).toBeGreaterThan(0)
+  expect(dimensions.tableScroll.scrollWidth).toBeGreaterThan(dimensions.tableScroll.width)
+  expect(dimensions.tableScroll.scrollHeight).toBeGreaterThan(dimensions.tableScroll.height)
+  expect(dimensions.tableOverflow).toBe('auto')
+  expect(dimensions.controls.x).toBeGreaterThanOrEqual(0)
+  expect(dimensions.controls.right).toBeLessThanOrEqual(320)
+  expect(dimensions.title.x).toBeGreaterThanOrEqual(0)
+  expect(dimensions.title.right).toBeLessThanOrEqual(320)
+  expect(dimensions.controls.bottom).toBeLessThanOrEqual(dimensions.table.y + 1)
   expect(await page.locator('.prayer-month-table th, .prayer-month-table td').evaluateAll(cells =>
     cells.every(cell => cell.scrollWidth <= cell.clientWidth))).toBe(true)
-  await scroller.evaluate(element => { element.scrollTop = element.scrollHeight })
+  await scroller.evaluate(element => { element.scrollTop = element.scrollHeight; element.scrollLeft = element.scrollWidth })
   await expect(page.locator('.prayer-month-table tbody tr').last()).toBeInViewport()
   await expect(page.locator('.prayer-month-table thead th').first()).toBeInViewport()
+  await expect(page.locator('.prayer-month-table thead th').last()).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
@@ -131,21 +183,163 @@ test('month navigation preserves one scroll owner and keeps changed rows reachab
   const scroller = page.locator('.prayer-month-table-scroll')
   const tableRegion = page.getByRole('region', { name: 'Расписание намаза за месяц' })
   await tableRegion.focus()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(tableRegion).toBeFocused()
+  await expect.poll(() => tableRegion.evaluate(element => getComputedStyle(element).outlineStyle)).not.toBe('none')
   await page.keyboard.press('ArrowDown')
   await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+  const arrowDownTop = await scroller.evaluate(element => element.scrollTop)
+  await page.keyboard.press('PageDown')
+  await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeGreaterThan(arrowDownTop)
+  const pageDownTop = await scroller.evaluate(element => element.scrollTop)
+  await page.keyboard.press('PageUp')
+  await expect.poll(() => scroller.evaluate(element => element.scrollTop)).toBeLessThan(pageDownTop)
   await page.keyboard.press('ArrowRight')
   await expect.poll(() => scroller.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
+  await scroller.evaluate(element => { element.scrollTop = 80; element.scrollLeft = 40 })
   await page.getByRole('button', { name: 'Следующий месяц' }).click()
   await expect(page.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
   await expect(page.locator('.prayer-month-table tbody tr')).toHaveCount(31)
   await expect(page.locator('.prayer-month-table tbody th time').first()).toHaveText('01 чт')
+  const stickyAfterMonthChange = await page.evaluate(() => {
+    const scroll = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    const header = document.querySelector<HTMLElement>('.prayer-month-table .prayer-month-date-heading')
+    const date = document.querySelector<HTMLElement>('.prayer-month-table tbody .prayer-month-date')
+    if (!scroll || !header || !date) throw new Error('Missing post-navigation sticky geometry')
+    return { headerY: header.getBoundingClientRect().y, viewportY: scroll.getBoundingClientRect().y,
+      dateX: date.getBoundingClientRect().x, viewportX: scroll.getBoundingClientRect().x }
+  })
+  expect(stickyAfterMonthChange.headerY).toBeCloseTo(stickyAfterMonthChange.viewportY, 0)
+  expect(stickyAfterMonthChange.dateX).toBeCloseTo(stickyAfterMonthChange.viewportX, 0)
   expect(await page.evaluate(() => document.querySelectorAll('.prayer-month-content').length)).toBe(1)
+})
+
+test('monthly geometry stays contained across the approved short-screen matrix and themes', async ({ page }) => {
+  await openMonth(page)
+  const viewportPairs = [
+    ...[320, 390].flatMap(width => [360, 479, 480, 481, 540, 720].map(height => [width, height] as const)),
+    [740, 360] as const,
+  ]
+
+  for (const [width, height] of viewportPairs) {
+    await page.setViewportSize({ width, height })
+    for (const textScale of ['100%', '200%']) {
+      await page.evaluate(scale => {
+        document.documentElement.style.fontSize = scale
+        const screen = document.querySelector<HTMLElement>('.app-screen')
+        screen?.style.setProperty('--screen-inset-left', scale === '200%' ? '32px' : '16px')
+        screen?.style.setProperty('--screen-inset-right', scale === '200%' ? '32px' : '16px')
+        screen?.style.setProperty('--app-keyboard-inset', '0px')
+      }, textScale)
+      const geometry = await page.evaluate(() => {
+        const content = document.querySelector<HTMLElement>('.prayer-month-content')
+        const controls = document.querySelector<HTMLElement>('.prayer-month-controls')
+        const table = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+        if (!content || !controls || !table) throw new Error('Missing monthly viewport geometry')
+        const nav = controls.getBoundingClientRect()
+        const body = table.getBoundingClientRect()
+        return {
+          content: { width: content.clientWidth, scrollWidth: content.scrollWidth,
+            height: content.clientHeight, scrollHeight: content.scrollHeight },
+          nav: { x: nav.x, right: nav.right, top: nav.top, bottom: nav.bottom },
+          table: { x: body.x, right: body.right, top: body.top, width: table.clientWidth,
+            height: table.clientHeight, scrollWidth: table.scrollWidth, scrollHeight: table.scrollHeight },
+          documentWidth: document.documentElement.scrollWidth,
+        }
+      })
+      expect(geometry.content.scrollWidth).toBe(geometry.content.width)
+      expect(geometry.content.scrollHeight).toBe(geometry.content.height)
+      expect(geometry.nav.x).toBeGreaterThanOrEqual(0)
+      expect(geometry.nav.right).toBeLessThanOrEqual(width)
+      expect(geometry.nav.top).toBeGreaterThanOrEqual(0)
+      expect(geometry.nav.bottom).toBeLessThanOrEqual(height)
+      expect(geometry.table.width).toBeGreaterThan(0)
+      expect(geometry.table.height, JSON.stringify({ width, height, textScale, geometry })).toBeGreaterThan(0)
+      expect(geometry.table.scrollHeight).toBeGreaterThan(geometry.table.height)
+      expect(geometry.table.right).toBeLessThanOrEqual(width)
+      expect(geometry.documentWidth).toBeLessThanOrEqual(width)
+    }
+  }
+
+  for (const [themeName, palette] of Object.entries(themePalettes)) {
+    const surface = await page.evaluate(({ themeName, palette }) => {
+      const root = document.documentElement
+      root.dataset.theme = themeName.startsWith('classic') ? 'classic' : 'seasonal'
+      root.dataset.themeTone = themeName.endsWith('dark') ? 'dark' : 'light'
+      for (const [key, value] of Object.entries({
+        '--background-primary': palette.backgroundPrimary,
+        '--background-secondary': palette.backgroundSecondary,
+        '--background-tertiary': palette.backgroundTertiary,
+        '--text-primary': palette.textPrimary,
+        '--text-secondary': palette.textSecondary,
+      })) root.style.setProperty(key, value)
+      const header = document.querySelector<HTMLElement>('.prayer-month-date-heading')
+      const dateCell = document.querySelector<HTMLElement>('.prayer-month-date')
+      const firstRow = document.querySelector<HTMLElement>('.prayer-month-table tbody tr:first-child')
+      const secondRow = document.querySelector<HTMLElement>('.prayer-month-table tbody tr:nth-child(2)')
+      const firstDate = firstRow?.firstElementChild
+      const firstValue = firstRow?.children.item(1)
+      const secondDate = secondRow?.firstElementChild
+      const secondValue = secondRow?.children.item(1)
+      if (!header || !dateCell || !(firstDate instanceof HTMLElement) || !(firstValue instanceof HTMLElement)
+        || !(secondDate instanceof HTMLElement) || !(secondValue instanceof HTMLElement)) throw new Error('Missing sticky surfaces')
+      return {
+        header: getComputedStyle(header).backgroundColor,
+        date: getComputedStyle(dateCell).backgroundColor,
+        separator: getComputedStyle(header, '::after').backgroundColor,
+        horizontal: getComputedStyle(header, '::before').backgroundColor,
+        firstDate: getComputedStyle(firstDate).backgroundColor,
+        firstValue: getComputedStyle(firstValue).backgroundColor,
+        secondDate: getComputedStyle(secondDate).backgroundColor,
+        secondValue: getComputedStyle(secondValue).backgroundColor,
+      }
+    }, { themeName, palette })
+    expect(surface.header).not.toBe('rgba(0, 0, 0, 0)')
+    expect(surface.date).not.toBe('rgba(0, 0, 0, 0)')
+    expect(surface.separator).not.toBe('rgba(0, 0, 0, 0)')
+    expect(surface.horizontal).not.toBe('rgba(0, 0, 0, 0)')
+    expect(surface.firstDate).toBe(surface.firstValue)
+    expect(surface.secondDate).toBe(surface.secondValue)
+    expect(surface.firstDate).not.toBe(surface.secondDate)
+  }
+
+  await page.setViewportSize({ width: 390, height: 720 })
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%'
+    const screen = document.querySelector<HTMLElement>('.app-screen')
+    screen?.style.setProperty('--screen-inset-left', '32px')
+    screen?.style.setProperty('--screen-inset-right', '32px')
+    screen?.style.setProperty('--app-keyboard-inset', '120px')
+  })
+  const keyboardGeometry = await page.evaluate(() => {
+    const content = document.querySelector<HTMLElement>('.prayer-month-content')
+    const controls = document.querySelector<HTMLElement>('.prayer-month-controls')
+    const table = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    if (!content || !controls || !table) throw new Error('Missing keyboard-adjusted layout')
+    const nav = controls.getBoundingClientRect()
+    return { contentHeight: content.clientHeight, contentScrollHeight: content.scrollHeight,
+      controlsBottom: nav.bottom, tableHeight: table.clientHeight, tableScrollHeight: table.scrollHeight,
+      tableScrollWidth: table.scrollWidth, tableWidth: table.clientWidth,
+      documentWidth: document.documentElement.scrollWidth }
+  })
+  expect(keyboardGeometry.contentScrollHeight).toBe(keyboardGeometry.contentHeight)
+  expect(keyboardGeometry.controlsBottom).toBeLessThan(720)
+  expect(keyboardGeometry.tableHeight).toBeGreaterThan(0)
+  expect(keyboardGeometry.tableScrollHeight).toBeGreaterThan(keyboardGeometry.tableHeight)
+  await page.locator('.prayer-month-table-scroll').evaluate(element => {
+    element.scrollTop = element.scrollHeight
+    element.scrollLeft = element.scrollWidth
+  })
+  await expect(page.locator('.prayer-month-table tbody tr').last()).toBeInViewport()
+  await expect(page.locator('.prayer-month-table thead th').last()).toBeInViewport()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 })
 
 test('monthly table uses available width before enabling horizontal scrolling', async ({ page }) => {
   await openMonth(page)
   const region = page.locator('.prayer-month-table-scroll')
-  for (const [width, shouldOverflow] of [[740, false], [320, true]] as const) {
+  for (const [width, shouldOverflow] of [[740, false], [390, true], [320, true]] as const) {
     await page.setViewportSize({ width, height: 740 })
     await expect.poll(() => region.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(shouldOverflow)
     if (!shouldOverflow) {
@@ -153,6 +347,46 @@ test('monthly table uses available width before enabling horizontal scrolling', 
       expect(Math.max(...widths) - Math.min(...widths)).toBeLessThan(1)
     }
   }
+})
+
+test('long localized cells, estimated markers, and unavailable values remain centered and readable at 200%', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 })
+  await openMonth(page)
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '200%'
+    const headers = document.querySelectorAll<HTMLElement>('.prayer-month-table thead th')
+    const firstTimeCell = document.querySelector<HTMLElement>('.prayer-month-table tbody tr:first-child td')
+    const unavailableCell = document.querySelector<HTMLElement>('.prayer-month-table tbody tr:nth-child(2) td:last-child')
+    if (!headers[7] || !firstTimeCell || !unavailableCell) throw new Error('Missing monthly table cells')
+    headers[7].textContent = 'Название молитвы на выбранном языке'
+    firstTimeCell.innerHTML = '<span class="prayer-month-time"><span class="prayer-month-estimated">примерно </span><time>23:59</time></span>'
+    unavailableCell.textContent = '—'
+    unavailableCell.setAttribute('aria-label', 'Время недоступно')
+  })
+
+  const layout = await page.evaluate(() => {
+    const scroll = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    const table = document.querySelector<HTMLTableElement>('.prayer-month-table')
+    if (!scroll || !table) throw new Error('Missing monthly table')
+    const cells = [...table.querySelectorAll<HTMLElement>('thead th, tbody th, tbody td')]
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      clientWidth: scroll.clientWidth,
+      scrollWidth: scroll.scrollWidth,
+      centered: cells.every(cell => getComputedStyle(cell).textAlign === 'center'),
+      fits: cells.every(cell => cell.scrollWidth <= cell.clientWidth),
+      widths: [...table.querySelectorAll('thead th')].map(cell => cell.getBoundingClientRect().width),
+      estimatedMarker: document.querySelector('.prayer-month-estimated')?.textContent.trim() ?? null,
+      unavailable: document.querySelector('.prayer-month-table tbody tr:nth-child(2) td:last-child')?.textContent.trim() ?? null,
+    }
+  })
+  expect(layout.documentWidth).toBeLessThanOrEqual(320)
+  expect(layout.scrollWidth).toBeGreaterThan(layout.clientWidth)
+  expect(layout.centered).toBe(true)
+  expect(layout.fits).toBe(true)
+  expect(layout.widths.every(width => Math.abs(width - (layout.widths[0] ?? 0)) < 1), JSON.stringify(layout.widths)).toBe(true)
+  expect(layout.estimatedMarker).toBe('примерно')
+  expect(layout.unavailable).toBe('—')
 })
 
 test('civil weekdays stay the same in distant browser timezones', async ({ browser }) => {
