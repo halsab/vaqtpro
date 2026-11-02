@@ -109,4 +109,5 @@ export function createServiceWorkerReloadGuard(
     writeTimestamp(storage, timestamp)
     reload()
   }
+  return requestReload
 }
