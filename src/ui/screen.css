@@ -62,8 +62,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 @keyframes monthly-export-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .monthly-export-spinner { animation: none; } }
 .monthly-export-control.is-disabled { opacity: .45; }
-.monthly-export-error { position: absolute; z-index: 2; top: calc(100% + 4px); right: 0; max-width: min(20rem, calc(100vw - 32px)); padding: 6px 10px; border-radius: 8px; background: var(--background-secondary); color: var(--text-primary); font: var(--font-footnote); box-shadow: 0 2px 12px rgb(0 0 0 / 18%); }
-.monthly-export-retry { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--text-primary); font: inherit; text-decoration: underline; cursor: pointer; }
+.monthly-export-error { pointer-events: none; position: absolute; z-index: 2; top: calc(100% + 4px); right: 0; max-width: min(20rem, calc(100vw - 32px)); padding: 6px 10px; border-radius: 8px; background: var(--background-secondary); color: var(--text-primary); font: var(--font-footnote); box-shadow: 0 2px 12px rgb(0 0 0 / 18%); }
 .screen-panel {
   position: relative;
   flex: 1 1 auto;
