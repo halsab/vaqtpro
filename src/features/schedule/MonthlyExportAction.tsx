@@ -35,6 +35,7 @@ function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExpor
   const [preparing, setPreparing] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [readyPrompt, setReadyPrompt] = useState(false)
   const preparationBusy = useRef(false)
   const sharingBusy = useRef(false)
   const mounted = useRef(true)
@@ -56,6 +57,7 @@ function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExpor
       .then(pdf => {
         if (!mounted.current) return
         setFile(pdf)
+        setReadyPrompt(true)
       })
       .catch(() => { if (mounted.current) setFailed(true) })
       .finally(() => {
@@ -68,6 +70,7 @@ function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExpor
     if (!file || sharingBusy.current) return
     sharingBusy.current = true
     setSharing(true)
+    setReadyPrompt(false)
     setFailed(false)
     // deliverFile calls navigator.share synchronously, before any await.
     void deliverFile(file, navigator).then(result => {
@@ -94,6 +97,7 @@ function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExpor
         {preparing || sharing ? <LoadingSpinner /> : <ShareIcon />}
       </IconActionButton>
     </span>
+    {readyPrompt && !failed ? <span className="monthly-export-ready" role="status">{t('monthlyPdfReady')}</span> : null}
     {failed ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}</span> : null}
   </>
 }
