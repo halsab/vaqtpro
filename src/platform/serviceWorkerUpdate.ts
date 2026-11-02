@@ -16,6 +16,26 @@ interface ServiceWorkerReloadGuardOptions {
 }
 
 const pageMemory: ServiceWorkerReloadMemory = {}
+let activeReloadDeferrals = 0
+const deferredReloadCallbacks = new Set<() => void>()
+
+/**
+ * Keep auto-updates from reloading the application while the monthly export
+ * screen is open. The pending update is applied when the screen is left.
+ */
+export function deferServiceWorkerReload(): () => void {
+  activeReloadDeferrals += 1
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    activeReloadDeferrals -= 1
+    if (activeReloadDeferrals !== 0) return
+    const callbacks = [...deferredReloadCallbacks]
+    deferredReloadCallbacks.clear()
+    for (const callback of callbacks) callback()
+  }
+}
 
 function defaultStorage(): ReloadTimestampStorage | undefined {
   try {
@@ -68,7 +88,11 @@ export function createServiceWorkerReloadGuard(
   const memory = options.memory ?? pageMemory
   const guardWindowMs = options.guardWindowMs ?? DEFAULT_GUARD_WINDOW_MS
 
-  return () => {
+  const requestReload = () => {
+    if (activeReloadDeferrals > 0) {
+      deferredReloadCallbacks.add(requestReload)
+      return
+    }
     const timestamp = now()
     if (isWithinWindow(memory.lastReloadAt, timestamp, guardWindowMs)) return
 
