@@ -101,6 +101,7 @@ it('retries sharing a previously prepared PDF without another generation', async
 })
 
 it('does not publish an obsolete PDF if the selected month changes during generation', async () => {
+  deliverFile.mockResolvedValue('shared')
   let finishOld: ((file: File) => void) | undefined
   prepareMonthlyPdf.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
     .mockResolvedValueOnce(pdf)
