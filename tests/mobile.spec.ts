@@ -86,9 +86,10 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
 
   const region = page.getByRole('region', { name: 'Расписание намаза за месяц' })
   const table = region.locator('table')
+  const scroll = page.locator('.prayer-month-table-scroll')
   await expect(table.locator('tbody tr')).toHaveCount(30)
   const firstDay = table.locator('tbody tr').first().locator('th time')
-  await expect(firstDay).toHaveText('01')
+  await expect(firstDay).toHaveText('01 вт')
   await expect(firstDay).toHaveAttribute('datetime', '2026-09-01')
   await expect(firstDay).toHaveAttribute('aria-label', '01.09.2026')
   await expect(table.locator('thead th')).toHaveCount(8)
@@ -145,10 +146,10 @@ test('monthly timetable remains usable at 320px, wide viewports and 200% text', 
 
   await page.setViewportSize({ width: 320, height: 640 })
   await page.evaluate(() => { document.documentElement.style.fontSize = '100%' })
-  const scroll = region
+  const tableRegion = region
   await scroll.evaluate(element => { element.scrollLeft = 0 })
-  await scroll.focus()
-  await expect(scroll).toBeFocused()
+  await tableRegion.focus()
+  await expect(tableRegion).toBeFocused()
   await page.keyboard.press('ArrowRight')
   await expect.poll(() => scroll.evaluate(element => element.scrollLeft)).toBeGreaterThan(0)
   await scroll.evaluate(element => { element.scrollLeft = element.scrollWidth })

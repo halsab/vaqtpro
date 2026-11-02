@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { civilMonthDates, localCivilMonth, shiftCivilMonth } from './civilMonth'
+import { civilMonthDates, civilWeekday, localCivilMonth, shiftCivilMonth } from './civilMonth'
 
 describe('civil month helpers', () => {
   it('returns every zero-padded day of the month, including leap February', () => {
@@ -13,6 +13,12 @@ describe('civil month helpers', () => {
   it('shifts month boundaries across years without carrying the selected day', () => {
     expect(shiftCivilMonth('2026-01-31', -1)).toBe('2025-12-01')
     expect(shiftCivilMonth('2026-12-01', 1)).toBe('2027-01-01')
+  })
+
+  it('calculates weekdays from Gregorian civil dates across year boundaries', () => {
+    expect(civilWeekday('2025-12-31')).toBe(3)
+    expect(civilWeekday('2026-01-01')).toBe(4)
+    expect(civilWeekday('2011-12-30')).toBe(5)
   })
 
   it('chooses the month using the place time zone', () => {
