@@ -16,18 +16,20 @@ async function openMonth(page: import('@playwright/test').Page) {
   await expect(page.getByRole('table', { name: 'Расписание намаза за месяц' })).toBeVisible()
 }
 
-test('a failed background PDF does not block changing the month and can be retried from the export icon', async ({ page }) => {
+test('a failed on-demand PDF does not block changing the month and can be retried from the export icon', async ({ page }) => {
   // Deliberately fail only the PDF's vector-logo image decoding; navigation
   // must remain usable even when the export cannot be prepared in this browser.
-  await page.addInitScript(() => {
-    const decode = Image.prototype.decode
-    Image.prototype.decode = function () {
-      if (this.src.includes('/icons/light/favicon.svg')) {
-        return Promise.reject(new DOMException('PDF test asset unavailable', 'EncodingError'))
-      }
-      return decode.call(this)
-    }
-  })
+  await page.addInitScript({ content: `
+    (() => {
+      const originalDecode = Image.prototype.decode;
+      Image.prototype.decode = function () {
+        if (this.src.includes('/icons/light/favicon.svg')) {
+          return Promise.reject(new DOMException('PDF test asset unavailable', 'EncodingError'));
+        }
+        return originalDecode.call(this);
+      };
+    })();
+  ` })
   await openMonth(page)
   await expect(page.getByRole('alert')).toHaveCount(0)
   await page.getByRole('button', { name: 'Экспортировать расписание на месяц' }).click()
