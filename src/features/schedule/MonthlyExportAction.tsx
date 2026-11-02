@@ -81,17 +81,18 @@ function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExpor
     setAttempt(value => value + 1)
   }
 
+  const handleAction = () => { if (failed) retry(); else sharePreparedPdf() }
+
   return <>
     <span className={`monthly-export-control${!view ? ' is-disabled' : ''}`}>
-      <IconActionButton label={t('shareMonthlyTimetable')} title={t('exportPdf')}
+      <IconActionButton label={failed ? `${t('retry')}: ${t('exportPdf')}` : t('shareMonthlyTimetable')}
+        title={failed ? `${t('retry')}: ${t('exportPdf')}` : t('exportPdf')}
         aria-busy={preparing || sharing || undefined}
-        disabled={!view || preparing || !file || sharing}
-        onClick={sharePreparedPdf}>
+        disabled={!view || preparing || sharing || (!file && !failed)}
+        onClick={handleAction}>
         {preparing || sharing ? <LoadingSpinner /> : <ShareIcon />}
       </IconActionButton>
     </span>
-    {failed ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}
-      <button type="button" className="monthly-export-retry" onClick={retry}>{t('retry')}</button>
-    </span> : null}
+    {failed ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}</span> : null}
   </>
 }
