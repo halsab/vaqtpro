@@ -298,6 +298,61 @@ test('monthly scrollport reaches panel edges, keeps horizontal insets, and clips
   expect(clipping.documentWidth).toBe(422)
 })
 
+test('mobile two-axis scrolling measures only visible cells while preserving frozen clipping', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openMonth(page)
+  const performance = await page.evaluate(async () => {
+    const scrollport = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
+    if (!scrollport) throw new Error('Missing monthly scrollport')
+    const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+    const originalRect = Reflect.get(Element.prototype, 'getBoundingClientRect')
+    let geometryReads = 0
+    const frameCosts: number[] = []
+    Element.prototype.getBoundingClientRect = function getMeasuredRect() {
+      if (this.matches('th, td') && this.closest('.prayer-month-table')) geometryReads += 1
+      return Reflect.apply(originalRect, this, [])
+    }
+    window.requestAnimationFrame = callback => nativeRequestAnimationFrame(time => {
+      const startedAt = window.performance.now()
+      callback(time)
+      frameCosts.push(window.performance.now() - startedAt)
+    })
+    try {
+      await new Promise<void>(resolve => nativeRequestAnimationFrame(() => resolve()))
+      geometryReads = 0
+      frameCosts.length = 0
+      const verticalRange = scrollport.scrollHeight - scrollport.clientHeight
+      const horizontalRange = scrollport.scrollWidth - scrollport.clientWidth
+      for (let frame = 0; frame < 75; frame += 1) {
+        scrollport.scrollTop = (frame * 23) % verticalRange
+        scrollport.scrollLeft = (frame * 41) % horizontalRange
+        await new Promise<void>(resolve => nativeRequestAnimationFrame(() => resolve()))
+      }
+      const sortedCosts = [...frameCosts].sort((left, right) => left - right)
+      const percentile = (position: number) => Number((sortedCosts[position] ?? 0).toFixed(3))
+      return {
+        viewport: `${innerWidth}x${innerHeight}`,
+        frames: frameCosts.length,
+        geometryReads,
+        geometryReadsPerFrame: geometryReads / Math.max(1, frameCosts.length),
+        p50FrameCallbackMs: percentile(Math.floor(sortedCosts.length * 0.5)),
+        p95FrameCallbackMs: percentile(Math.floor(sortedCosts.length * 0.95)),
+        maxFrameCallbackMs: percentile(sortedCosts.length - 1),
+        scrollTop: scrollport.scrollTop,
+        scrollLeft: scrollport.scrollLeft,
+      }
+    } finally {
+      Element.prototype.getBoundingClientRect = originalRect
+    }
+  })
+  console.info(`MONTHLY_SCROLL_PERF ${testInfo.project.name} ${JSON.stringify(performance)}`)
+  expect(performance.frames).toBeGreaterThan(0)
+  expect(performance.geometryReads).toBeGreaterThan(0)
+  expect(performance.geometryReadsPerFrame).toBeLessThan(170)
+  expect(performance.scrollTop).toBeGreaterThan(0)
+  expect(performance.scrollLeft).toBeGreaterThan(0)
+})
+
 test('month navigation preserves one scroll owner and keeps changed rows reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 720 })
   await openMonth(page)

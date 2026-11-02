@@ -68,6 +68,11 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
     },
     {
+      name: 'monthly-mobile-safari',
+      testMatch: ['**/monthly-sticky.spec.ts'],
+      use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
+    },
+    {
       name: 'webkit-deferred-loading',
       testMatch: ['**/deferred-loading.spec.ts'],
       use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },

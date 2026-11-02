@@ -48,6 +48,10 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
     // Равные колонки должны вмещать самую широкую ячейку при текущем масштабе и шрифте.
     let active = true
     let clipFrame = 0
+    let clippedCells = new Set<HTMLElement>()
+    let nextClippedCells = new Set<HTMLElement>()
+    const cellsToWrite: HTMLElement[] = []
+    const clipValues: string[] = []
     const updateFrozenClips = () => {
       clipFrame = 0
       if (!active) return
@@ -58,23 +62,54 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
       const headingRect = dateHeading.getBoundingClientRect()
       const frozenDateRight = headingRect.right
       const frozenHeaderBottom = headingRect.bottom
+      const viewportTop = viewportRect.top
+      const viewportBottom = viewportRect.bottom
+      const viewportLeft = viewportRect.left
+      const viewportRight = viewportRect.right
+      nextClippedCells.clear()
+      cellsToWrite.length = 0
+      clipValues.length = 0
 
-      // Прозрачные закреплённые ячейки не показывают прокручиваемое содержимое под собой.
-      for (const cell of table.querySelectorAll<HTMLElement>('th, td')) {
-        if (cell === dateHeading) continue
-        const rect = cell.getBoundingClientRect()
-        const isFrozenDate = cell.classList.contains('prayer-month-date')
-        const isHeader = cell.closest('thead') !== null
-        const left = isFrozenDate ? 0 : Math.max(0, Math.min(rect.width, frozenDateRight - rect.left))
-        const top = isHeader ? 0 : Math.max(0, Math.min(rect.height, frozenHeaderBottom - rect.top))
-        const overlapsViewport = rect.right > viewportRect.left && rect.left < viewportRect.right
-          && rect.bottom > viewportRect.top && rect.top < viewportRect.bottom
-        if (!overlapsViewport || (left === 0 && top === 0)) {
-          cell.style.removeProperty('clip-path')
-        } else {
-          cell.style.clipPath = `inset(${top}px 0px 0px ${left}px)`
+      // Сначала только читаем геометрию видимых строк, затем отдельным проходом пишем стили.
+      for (const row of table.rows) {
+        const isHeader = row.parentElement === table.tHead
+        if (!isHeader) {
+          const rowRect = row.getBoundingClientRect()
+          if (rowRect.bottom <= viewportTop || rowRect.top >= viewportBottom) continue
+        }
+        for (const cell of row.cells) {
+          if (cell === dateHeading) continue
+          const rect = cell.getBoundingClientRect()
+          if (rect.right <= viewportLeft || rect.left >= viewportRight
+            || rect.bottom <= viewportTop || rect.top >= viewportBottom) continue
+          const isFrozenDate = cell.classList.contains('prayer-month-date')
+          const left = isFrozenDate ? 0 : Math.max(0, Math.min(rect.width, frozenDateRight - rect.left))
+          const top = isHeader ? 0 : Math.max(0, Math.min(rect.height, frozenHeaderBottom - rect.top))
+          if (left === 0 && top === 0) continue
+          const clip = `inset(${top}px 0px 0px ${left}px)`
+          nextClippedCells.add(cell)
+          if (cell.style.clipPath !== clip) {
+            cellsToWrite.push(cell)
+            clipValues.push(clip)
+          }
         }
       }
+      for (const cell of clippedCells) {
+        if (!nextClippedCells.has(cell)) {
+          cellsToWrite.push(cell)
+          clipValues.push('')
+        }
+      }
+      for (let index = 0; index < cellsToWrite.length; index += 1) {
+        const cell = cellsToWrite[index]
+        const value = clipValues[index]
+        if (!cell) continue
+        if (value) cell.style.clipPath = value
+        else cell.style.removeProperty('clip-path')
+      }
+      const previousClippedCells = clippedCells
+      clippedCells = nextClippedCells
+      nextClippedCells = previousClippedCells
     }
     const scheduleFrozenClipUpdate = () => {
       if (!active || clipFrame) return
@@ -119,6 +154,7 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
       window.removeEventListener('resize', measure)
       table.parentElement?.removeEventListener('scroll', scheduleFrozenClipUpdate)
       if (clipFrame) window.cancelAnimationFrame(clipFrame)
+      for (const cell of clippedCells) cell.style.removeProperty('clip-path')
     }
   }, [dateLabel, labels, regionId, rows, tableLabel, weekdayLabels])
   const tableStyle = { '--prayer-month-table-min-width': `${minimumTableWidth}px` } as CSSProperties
