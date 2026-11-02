@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 
 import type { MonthlyExportView } from './monthlyExportModel'
-import { encodePngOnceWithinLimit, prepareMonthlyExportFiles } from './monthlyExportRenderer'
+import { prepareMonthlyPdf } from './monthlyExportRenderer'
 
 const view: MonthlyExportView = {
   month: '2026-10', monthTitle: 'Октябрь 2026', location: 'Казань',
@@ -9,73 +9,61 @@ const view: MonthlyExportView = {
   brandSubtitle: 'Времена намаза', sourcePrefix: 'Источник: ', sourceUrl: 'https://vaqt.pro', rows: [],
 }
 
-it('keeps PNG available when PDF rendering fails', async () => {
-  const pdfFailure = vi.fn().mockRejectedValue(new Error('PDF renderer failed'))
-  const pngFile = new File(['png'], 'month.png', { type: 'image/png' })
-  const pngSuccess = vi.fn().mockResolvedValue(pngFile)
-
-  await expect(prepareMonthlyExportFiles(view, { pdf: pdfFailure, png: pngSuccess })).resolves.toEqual({
-    pdf: null, png: pngFile, failures: ['pdf'],
-  })
-  expect(pdfFailure).toHaveBeenCalledOnce()
-  expect(pngSuccess).toHaveBeenCalledOnce()
+it('generates only a PDF with the current month/location and caches the result', async () => {
+  const renderer = vi.fn((_view: MonthlyExportView, _month: string, filename: string) =>
+    Promise.resolve(new File(['pdf'], filename, { type: 'application/pdf' })))
+  const file = await prepareMonthlyPdf(view, renderer)
+  expect(file.name).toBe('VaqtPro_казань_2026-10.pdf')
+  expect(file.type).toBe('application/pdf')
+  expect(await prepareMonthlyPdf(view, renderer)).toBe(file)
+  expect(renderer).toHaveBeenCalledOnce()
 })
 
-it('keeps PDF available when PNG rendering fails', async () => {
-  const pdfFile = new File(['pdf'], 'month.pdf', { type: 'application/pdf' })
-  const pdfSuccess = vi.fn().mockResolvedValue(pdfFile)
-  const pngFailure = vi.fn().mockRejectedValue(new Error('PNG renderer failed'))
-
-  await expect(prepareMonthlyExportFiles(view, { pdf: pdfSuccess, png: pngFailure })).resolves.toEqual({
-    pdf: pdfFile, png: null, failures: ['png'],
-  })
-  expect(pdfSuccess).toHaveBeenCalledOnce()
-  expect(pngFailure).toHaveBeenCalledOnce()
-})
-it('reports failure only when both independent renderers fail', async () => {
-  const renderers = {
-    pdf: vi.fn().mockRejectedValue(new Error('PDF renderer failed')),
-    png: vi.fn().mockRejectedValue(new Error('PNG renderer failed')),
-  }
-
-  await expect(prepareMonthlyExportFiles(view, renderers)).rejects.toThrow('Could not prepare monthly exports')
-  expect(renderers.pdf).toHaveBeenCalledOnce()
-  expect(renderers.png).toHaveBeenCalledOnce()
+it('does not cache generation failures and allows retry', async () => {
+  const renderer = vi.fn()
+    .mockRejectedValueOnce(new Error('PDF renderer failed'))
+    .mockResolvedValueOnce(new File(['pdf'], 'month.pdf', { type: 'application/pdf' }))
+  await expect(prepareMonthlyPdf(view, renderer)).rejects.toThrow('PDF renderer failed')
+  await expect(prepareMonthlyPdf(view, renderer)).resolves.toHaveProperty('type', 'application/pdf')
+  expect(renderer).toHaveBeenCalledTimes(2)
 })
 
-it('encodes a PNG once and accepts a file at the byte limit', async () => {
-  const render = vi.fn(() => Promise.resolve(new Blob([new Uint8Array(1_200_000)])))
-
-  const blob = await encodePngOnceWithinLimit(render, 1_200_000)
-
-  expect(blob.size).toBe(1_200_000)
-  expect(render).toHaveBeenCalledOnce()
+it('deduplicates concurrent preparation of an identical snapshot', async () => {
+  let finish: ((file: File) => void) | undefined
+  const renderer = vi.fn(() => new Promise<File>(resolve => { finish = resolve }))
+  const first = prepareMonthlyPdf(view, renderer)
+  const second = prepareMonthlyPdf(view, renderer)
+  expect(first).toBe(second)
+  await vi.waitFor(() => expect(renderer).toHaveBeenCalledOnce())
+  finish?.(new File(['pdf'], 'month.pdf', { type: 'application/pdf' }))
+  await expect(first).resolves.toHaveProperty('type', 'application/pdf')
 })
 
-it('fails safely without a second render when the PNG exceeds the byte limit', async () => {
-  const render = vi.fn(() => Promise.resolve(new Blob([new Uint8Array(1_200_001)])))
-
-  await expect(encodePngOnceWithinLimit(render, 1_200_000)).rejects.toThrow('exceeds the 1,200,000-byte size limit')
-  expect(render).toHaveBeenCalledOnce()
-})
-
-it('reuses the last three prepared month/location documents and evicts the least recently used', async () => {
-  const renderers = {
-    pdf: vi.fn((_view: MonthlyExportView, _month: string, filename: string) => Promise.resolve(new File(['pdf'], filename, { type: 'application/pdf' }))),
-    png: vi.fn((_view: MonthlyExportView, _month: string, filename: string) => Promise.resolve(new File(['png'], filename, { type: 'image/png' }))),
-  }
+it('reuses three PDF snapshots and evicts the least recently used', async () => {
+  const renderer = vi.fn((_view: MonthlyExportView, _month: string, filename: string) =>
+    Promise.resolve(new File(['pdf'], filename, { type: 'application/pdf' })))
   const forMonth = (month: string): MonthlyExportView => ({ ...view, month, monthTitle: month })
+  await prepareMonthlyPdf(forMonth('2026-10'), renderer)
+  await prepareMonthlyPdf(forMonth('2026-11'), renderer)
+  await prepareMonthlyPdf(forMonth('2026-12'), renderer)
+  await prepareMonthlyPdf(forMonth('2026-10'), renderer)
+  await prepareMonthlyPdf(forMonth('2027-01'), renderer)
+  await prepareMonthlyPdf(forMonth('2026-10'), renderer)
+  expect(renderer).toHaveBeenCalledTimes(4)
+  await prepareMonthlyPdf(forMonth('2026-11'), renderer)
+  expect(renderer).toHaveBeenCalledTimes(5)
+})
 
-  await prepareMonthlyExportFiles(forMonth('2026-10'), renderers)
-  await prepareMonthlyExportFiles(forMonth('2026-11'), renderers)
-  await prepareMonthlyExportFiles(forMonth('2026-12'), renderers)
-  await prepareMonthlyExportFiles(forMonth('2026-10'), renderers)
-  await prepareMonthlyExportFiles(forMonth('2027-01'), renderers)
-  await prepareMonthlyExportFiles(forMonth('2026-10'), renderers)
-  expect(renderers.pdf).toHaveBeenCalledTimes(4)
-  expect(renderers.png).toHaveBeenCalledTimes(4)
-
-  await prepareMonthlyExportFiles(forMonth('2026-11'), renderers)
-  expect(renderers.pdf).toHaveBeenCalledTimes(5)
-  expect(renderers.png).toHaveBeenCalledTimes(5)
+it('serializes expensive PDF renders for different months to limit peak memory', async () => {
+  let releaseFirst: ((file: File) => void) | undefined
+  const renderer = vi.fn()
+    .mockImplementationOnce(() => new Promise<File>(resolve => { releaseFirst = resolve }))
+    .mockImplementationOnce(() => Promise.resolve(new File(['second'], 'second.pdf', { type: 'application/pdf' })))
+  const first = prepareMonthlyPdf({ ...view, month: '2026-05' }, renderer)
+  const second = prepareMonthlyPdf({ ...view, month: '2026-06' }, renderer)
+  await vi.waitFor(() => expect(renderer).toHaveBeenCalledTimes(1))
+  releaseFirst?.(new File(['first'], 'first.pdf', { type: 'application/pdf' }))
+  await first
+  await second
+  expect(renderer).toHaveBeenCalledTimes(2)
 })

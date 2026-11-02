@@ -4,8 +4,12 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 import { MonthlyExportAction } from './MonthlyExportAction'
 
-const { prepareMonthlyExportFiles } = vi.hoisted(() => ({ prepareMonthlyExportFiles: vi.fn() }))
-vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyExportFiles }))
+const { prepareMonthlyPdf, deliverFile } = vi.hoisted(() => ({
+  prepareMonthlyPdf: vi.fn(),
+  deliverFile: vi.fn(),
+}))
+vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyPdf }))
+vi.mock('./monthlyExportDelivery', () => ({ deliverFile }))
 
 const snapshot = { month: '2026-10', location: 'Москва', rows: [
   { date: '2026-10-01', schedule: { entries: Object.fromEntries(['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha'].map(key => [key, { time: '00:00' }])), estimatedPrayers: [] } as never },
@@ -17,55 +21,102 @@ const labels = {
   weekdayThursdayShort: 'чт', weekdayFridayShort: 'пт', weekdaySaturdayShort: 'сб',
 }
 const pdf = new File(['pdf'], 'month.pdf', { type: 'application/pdf' })
-const png = new File(['png'], 'month.png', { type: 'image/png' })
 const shareLabel = 'Экспортировать расписание на месяц'
 
 afterEach(() => {
-  prepareMonthlyExportFiles.mockReset()
-  Reflect.deleteProperty(HTMLSelectElement.prototype, 'showPicker')
+  prepareMonthlyPdf.mockReset()
+  deliverFile.mockReset()
 })
 
-it('shows preparation progress, attempts the native picker, and keeps the ready files for a fallback tap', async () => {
-  let finish: ((files: { pdf: File; png: File; failures: [] }) => void) | undefined
-  prepareMonthlyExportFiles.mockImplementation(() => new Promise(resolve => { finish = resolve }))
-  const showPicker = vi.fn(() => { throw new DOMException('User activation expired', 'NotAllowedError') })
-  Object.defineProperty(HTMLSelectElement.prototype, 'showPicker', { configurable: true, value: showPicker })
-  const user = userEvent.setup()
-  render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
-
-  expect(prepareMonthlyExportFiles).not.toHaveBeenCalled()
-  const button = screen.getByRole('button', { name: shareLabel })
-  const control = button.parentElement
-  await user.click(button)
-  expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
-  expect(button).toHaveAttribute('aria-busy', 'true')
-  expect(button).not.toBeDisabled()
-  expect(control).not.toHaveClass('is-disabled')
-  expect(control?.querySelector('.monthly-export-spinner')).not.toBeNull()
-
-  act(() => { finish?.({ pdf, png, failures: [] }) })
-  const select = await screen.findByRole('combobox', { name: shareLabel })
-  await waitFor(() => expect(showPicker).toHaveBeenCalledOnce())
-  expect(control?.querySelector('.monthly-export-spinner')).toBeNull()
-  expect(control?.querySelector('button')).not.toBeDisabled()
-  expect(control?.querySelector('button')).toHaveAttribute('aria-hidden', 'true')
-  await user.click(select)
-  expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
-})
-
-it('keeps the action unavailable after a rejected preparation until Retry starts a fresh attempt', async () => {
-  prepareMonthlyExportFiles.mockRejectedValueOnce(new Error('render failed')).mockResolvedValueOnce({ pdf, png, failures: [] })
+it('never prepares PDF on screen entry; first tap prepares and second tap shares directly', async () => {
+  let complete: ((file: File) => void) | undefined
+  prepareMonthlyPdf.mockImplementation(() => new Promise(resolve => { complete = resolve }))
+  deliverFile.mockResolvedValue('shared')
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
   const button = screen.getByRole('button', { name: shareLabel })
-  await user.click(button)
-  await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'))
-  await user.click(button)
-  expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce()
+  expect(button).toBeEnabled()
+  expect(button.parentElement?.querySelector('.monthly-export-spinner')).toBeNull()
+  await new Promise(resolve => setTimeout(resolve, 130))
+  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
 
-  await user.click(await screen.findByRole('button', { name: 'Повторить' }))
-  await waitFor(() => expect(screen.getByRole('combobox', { name: shareLabel })).toBeEnabled())
-  expect(prepareMonthlyExportFiles).toHaveBeenCalledTimes(2)
+  await user.click(button)
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
+  expect(button).toBeDisabled()
+  expect(button.parentElement?.querySelector('.monthly-export-spinner')).not.toBeNull()
+  expect(deliverFile).not.toHaveBeenCalled()
+  act(() => { complete?.(pdf) })
+  await waitFor(() => expect(button).toBeEnabled())
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('PDF готов. Нажмите ещё раз')
+  expect(deliverFile).not.toHaveBeenCalled()
+
+  await user.click(button)
+  expect(deliverFile).toHaveBeenCalledWith(pdf, navigator)
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
+  await waitFor(() => expect(button).toBeEnabled())
+  await user.click(button)
+  expect(deliverFile).toHaveBeenCalledTimes(2)
+  expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
+})
+
+it('retries preparation through the same icon after a PDF failure', async () => {
+  prepareMonthlyPdf.mockRejectedValueOnce(new Error('render failed')).mockResolvedValueOnce(pdf)
+  const user = userEvent.setup()
+  render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+
+  const button = screen.getByRole('button', { name: shareLabel })
+  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
+  await user.click(button)
+  await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
+  expect(button).toBeEnabled()
+  expect(button).toHaveAccessibleName('Повторить: PDF')
+  expect(deliverFile).not.toHaveBeenCalled()
+
+  await user.click(button)
+  await waitFor(() => expect(button).toBeEnabled())
+  expect(prepareMonthlyPdf).toHaveBeenCalledTimes(2)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(button).toHaveAccessibleName(shareLabel)
+  expect(deliverFile).not.toHaveBeenCalled()
+})
+
+it('retries sharing a previously prepared PDF without another generation', async () => {
+  prepareMonthlyPdf.mockResolvedValue(pdf)
+  deliverFile.mockResolvedValueOnce('failed').mockResolvedValueOnce('shared')
+  const user = userEvent.setup()
+  render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+  const button = screen.getByRole('button', { name: shareLabel })
+  await user.click(button)
+  await waitFor(() => expect(button).toBeEnabled())
+  await user.click(button)
+  await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
+  expect(button).toHaveAccessibleName('Повторить: PDF')
+  await user.click(button)
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(deliverFile).toHaveBeenCalledTimes(2)
+  expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
+})
+
+it('does not publish an obsolete PDF if the selected month changes during generation', async () => {
+  deliverFile.mockResolvedValue('shared')
+  let finishOld: ((file: File) => void) | undefined
+  prepareMonthlyPdf.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    .mockResolvedValueOnce(pdf)
+  const user = userEvent.setup()
+  const { rerender } = render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+  await user.click(screen.getByRole('button', { name: shareLabel }))
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
+  rerender(<MonthlyExportAction snapshot={{ ...snapshot, month: '2026-11' }} labels={labels} />)
+  act(() => { finishOld?.(new File(['old'], 'old.pdf', { type: 'application/pdf' })) })
+  const button = screen.getByRole('button', { name: shareLabel })
+  expect(button).toBeEnabled()
+  expect(deliverFile).not.toHaveBeenCalled()
+  await user.click(button)
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(button).toBeEnabled())
+  await user.click(button)
+  expect(deliverFile).toHaveBeenCalledWith(pdf, navigator)
 })

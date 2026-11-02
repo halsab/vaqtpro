@@ -12,13 +12,12 @@ import { PrayerMonthScreen } from './PrayerMonthScreen'
 import { PRAYER_MONTH_KEYS } from './PrayerMonthTable'
 import { buildScheduleEvents, SCHEDULE_EVENT_KEYS } from '../../domain/scheduleEvents'
 import type { MonthlyExportView } from './monthlyExportModel'
-import type { MonthlyExportPreparation } from './monthlyExportRenderer'
 
-const { prepareMonthlyExportFiles } = vi.hoisted(() => ({
-  prepareMonthlyExportFiles: vi.fn<(view: MonthlyExportView) => Promise<MonthlyExportPreparation>>()
-    .mockResolvedValue({ pdf: null, png: null, failures: [] }),
+const { prepareMonthlyPdf } = vi.hoisted(() => ({
+  prepareMonthlyPdf: vi.fn<(view: MonthlyExportView) => Promise<File>>()
+    .mockResolvedValue(new File(['pdf'], 'month.pdf', { type: 'application/pdf' })),
 }))
-vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyExportFiles }))
+vi.mock('./monthlyExportRenderer', () => ({ prepareMonthlyPdf }))
 
 const place = createCityPlace({ id: 524901, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва',
   latitude: 55.7522, longitude: 37.6156, population: 10_381_222, timeZone: 'Europe/Moscow' }, 0)
@@ -32,7 +31,7 @@ const onRetrySchedule = vi.fn()
 
 afterEach(() => {
   vi.restoreAllMocks()
-  prepareMonthlyExportFiles.mockClear()
+  prepareMonthlyPdf.mockClear()
   onRetrySchedule.mockReset()
 })
 
@@ -46,7 +45,7 @@ it('shows one table row per date with all seven Home events in the same row', ()
   const exportButton = screen.getByRole('button', { name: 'Экспортировать расписание на месяц' })
   expect(exportButton).toHaveClass('icon-button')
   expect(exportButton).toBeEnabled()
-  expect(prepareMonthlyExportFiles).not.toHaveBeenCalled()
+  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
   expect(screen.getByRole('button', { name: 'Назад' })).toBeVisible()
   expect(screen.queryByRole('heading', { name: 'Расписание на месяц' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
@@ -169,15 +168,16 @@ it('switches between complete months without selecting dates in the table', asyn
 
 it('keeps the current calculation context for export without showing it on the monthly screen', async () => {
   renderMonth()
-  expect(prepareMonthlyExportFiles).not.toHaveBeenCalled()
+  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
+  // Opening the monthly schedule must never start PDF work.
   await userEvent.click(screen.getByRole('button', { name: 'Экспортировать расписание на месяц' }))
-  await waitFor(() => expect(prepareMonthlyExportFiles).toHaveBeenCalledOnce())
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
 
-  expect(prepareMonthlyExportFiles).toHaveBeenCalledWith(expect.objectContaining({
+  expect(prepareMonthlyPdf).toHaveBeenCalledWith(expect.objectContaining({
     month: '2026-10',
     location: 'Москва',
   }))
-  const exportView = prepareMonthlyExportFiles.mock.calls[0]?.[0]
+  const exportView = prepareMonthlyPdf.mock.calls[0]?.[0]
   const expectedFajr = calculatePrayerSchedule(context.location, '2026-10-01', context.timeZone, context.settings).entries.fajr
   expect(exportView?.rows[0]?.times[0]?.value).toBe(expectedFajr.time)
   expect(screen.queryByText('Москва')).not.toBeInTheDocument()

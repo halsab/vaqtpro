@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { civilMonthDates, shiftCivilMonth } from '../../domain/civilMonth'
 import { homePlaceLabel, type Place } from '../../domain/place'
@@ -6,6 +6,7 @@ import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import type { ScheduleContext } from '../../domain/scheduleContext'
 import { PROFILE_LABEL_KEYS } from '../../ui/calculationLabels'
 import { useLocalization } from '../../localization'
+import { deferServiceWorkerReload } from '../../platform/serviceWorkerUpdate'
 import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
 import { PrayerMonthTable, PRAYER_MONTH_KEYS } from './PrayerMonthTable'
@@ -30,6 +31,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
   onRetrySchedule: () => void
 }) {
   const { locale, t } = useLocalization()
+  useEffect(() => deferServiceWorkerReload(), [])
   const [month, setMonth] = useState(() => civilMonthDates(selectedDate)[0] ?? selectedDate)
   const [calculationRetry, setCalculationRetry] = useState(0)
   // Токен делает новый вход для useMemo при явном повторе расчёта того же месяца.

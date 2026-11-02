@@ -17,9 +17,9 @@ it('shares only a file the current platform confirms it can share', async () => 
 
 it('downloads when file sharing is unsupported or capability checks fail', async () => {
   const fallback = vi.fn()
-  await expect(deliverFile(file, {}, fallback)).resolves.toBe('downloaded')
-  await expect(deliverFile(file, { share: vi.fn(), canShare: () => false }, fallback)).resolves.toBe('downloaded')
-  await expect(deliverFile(file, { share: vi.fn(), canShare: () => { throw new Error('unsupported') } }, fallback)).resolves.toBe('downloaded')
+  await expect(deliverFile(file, {}, fallback)).resolves.toBe('download-started')
+  await expect(deliverFile(file, { share: vi.fn(), canShare: () => false }, fallback)).resolves.toBe('download-started')
+  await expect(deliverFile(file, { share: vi.fn(), canShare: () => { throw new Error('unsupported') } }, fallback)).resolves.toBe('download-started')
   expect(fallback).toHaveBeenCalledTimes(3)
   expect(fallback).toHaveBeenCalledWith(file)
 })
