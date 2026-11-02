@@ -175,6 +175,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
   let enabled = false
   let stopped = false
   let permissionGranted = false
+  let permissionNeedsRecheck = false
   let permissionInFlight = false
   let lastStatus: OrientationStatus = 'idle'
   let activeSource: 'absolute' | 'webkit' | null = null
@@ -190,10 +191,14 @@ export function createOrientationSession(target: Window, report: OrientationHand
   let latestHeadingSampleTimeMs: number | null = null
   let motionSegments: MotionSegment[] = []
   let hasCurrentReading = false
+  let sourceHadValidReading = false
   const screenOrientation = (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
   const emit: OrientationHandler = (status, reading) => {
     if (stopped) return
     lastStatus = status
+    if (status === 'timeout' && permissionGranted && win.DeviceOrientationEvent?.requestPermission) {
+      permissionNeedsRecheck = true
+    }
     report(status, reading)
   }
 
@@ -213,6 +218,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
     latestWebKit = null
     latestQuaternion = null
     hasCurrentReading = false
+    sourceHadValidReading = false
     if (eventHandler) target.removeEventListener('deviceorientation', eventHandler)
     eventHandler = null
     if (sensor) {
@@ -289,6 +295,10 @@ export function createOrientationSession(target: Window, report: OrientationHand
       else emit('timeout')
     }, NO_READING_TIMEOUT_MS)
   }
+  // Тишина после первого валидного чтения не доказывает отказ: неподвижный WebKit может не слать события.
+  const probeUntilFirstReading = (source: 'absolute' | 'webkit') => {
+    if (!sourceHadValidReading && !probeTimer) startProbe(source)
+  }
   const startWebKitSource = () => {
     if (typeof win.DeviceOrientationEvent !== 'function') {
       clearMotionEvidence()
@@ -299,6 +309,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
     startMotionEvidence()
     latestWebKit = null
     hasCurrentReading = false
+    sourceHadValidReading = false
     eventHandler = event => {
       if (stopped || activeSource !== 'webkit') return
       const orientation = event as OrientationEventLike
@@ -309,7 +320,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
         if (!Number.isFinite(rawHeading) || rawHeading < 0 || accuracyIsUnusable) {
           latestWebKit = null
           hasCurrentReading = false
-          if (!probeTimer) startProbe('webkit')
+          probeUntilFirstReading('webkit')
           emit('calibrating')
           return
         }
@@ -325,7 +336,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
           || typeof orientation.gamma !== 'number' || !Number.isFinite(orientation.gamma)) {
           latestWebKit = null
           hasCurrentReading = false
-          if (!probeTimer) startProbe('webkit')
+          probeUntilFirstReading('webkit')
           emit('tilt-unknown')
           return
         }
@@ -334,14 +345,14 @@ export function createOrientationSession(target: Window, report: OrientationHand
         if (tilt.kind === 'tilt') {
           latestWebKit = null
           hasCurrentReading = false
-          if (!probeTimer) startProbe('webkit')
+          probeUntilFirstReading('webkit')
           emit('tilt')
           return
         }
         if (tilt.kind !== 'heading') {
           latestWebKit = null
           hasCurrentReading = false
-          if (!probeTimer) startProbe('webkit')
+          probeUntilFirstReading('webkit')
           emit('tilt-unknown')
           return
         }
@@ -350,7 +361,9 @@ export function createOrientationSession(target: Window, report: OrientationHand
           alpha: typeof orientation.alpha === 'number' && Number.isFinite(orientation.alpha) ? orientation.alpha : null,
           beta: orientation.beta, gamma: orientation.gamma }
         hasCurrentReading = true
+        sourceHadValidReading = true
         permissionGranted = true
+        permissionNeedsRecheck = false
         rememberOrientationGrant(target)
         const sampleTimeMs = target.performance.now()
         const motionEvidence = motionEvidenceSince(latestHeadingSampleTimeMs, sampleTimeMs, currentScreenAngle)
@@ -364,7 +377,6 @@ export function createOrientationSession(target: Window, report: OrientationHand
           motionHeadingDeltaDegrees: motionEvidence.deltaDegrees,
           motionEvidenceCoverage: motionEvidence.coverage,
         })
-        startProbe('webkit')
       } else if ((orientation.alpha === null || orientation.beta === null || orientation.gamma === null)
         && !hasCurrentReading && lastStatus !== 'calibrating') {
         emit('null-reading')
@@ -400,11 +412,12 @@ export function createOrientationSession(target: Window, report: OrientationHand
       sensor = new win.AbsoluteOrientationSensor({ referenceFrame: 'device' })
       const currentSensor = sensor
       activeSource = 'absolute'
+      sourceHadValidReading = false
       currentSensor.onreading = () => {
         if (stopped || activeSource !== 'absolute' || sensor !== currentSensor) return
         if (!currentSensor.quaternion) {
           hasCurrentReading = false
-          if (!probeTimer) startProbe('absolute')
+          probeUntilFirstReading('absolute')
           emit('null-reading')
           return
         }
@@ -419,12 +432,14 @@ export function createOrientationSession(target: Window, report: OrientationHand
         const geometry = quaternionScreenTopHeading(quaternion, currentScreenAngle)
         if (geometry.kind !== 'heading') {
           hasCurrentReading = false
-          if (!probeTimer) startProbe('absolute')
+          probeUntilFirstReading('absolute')
           emit(geometry.kind === 'tilt' ? 'tilt' : 'degraded')
           return
         }
         hasCurrentReading = true
+        sourceHadValidReading = true
         permissionGranted = true
+        permissionNeedsRecheck = false
         rememberOrientationGrant(target)
         const sampleTimeMs = target.performance.now()
         const motionEvidence = motionEvidenceSince(latestHeadingSampleTimeMs, sampleTimeMs, currentScreenAngle)
@@ -439,7 +454,6 @@ export function createOrientationSession(target: Window, report: OrientationHand
           motionHeadingDeltaDegrees: motionEvidence.deltaDegrees,
           motionEvidenceCoverage: motionEvidence.coverage,
         })
-        startProbe('absolute')
       }
       currentSensor.onerror = event => {
         if (stopped || sensor !== currentSensor) return
@@ -489,7 +503,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
       if (tilt.kind !== 'heading') {
         latestWebKit = null
         hasCurrentReading = false
-        if (!probeTimer) startProbe('webkit')
+        probeUntilFirstReading('webkit')
         emit(tilt.kind === 'tilt' ? 'tilt' : 'tilt-unknown')
         return
       }
@@ -510,7 +524,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
           screenAngle: angle, northReference: 'magnetic', sampleTimeMs,
           motionHeadingDeltaDegrees: null, motionEvidenceCoverage: 0,
         })
-      } else if (geometry.kind === 'tilt') { hasCurrentReading = false; if (!probeTimer) startProbe('absolute'); emit('tilt') }
+      } else if (geometry.kind === 'tilt') { hasCurrentReading = false; probeUntilFirstReading('absolute'); emit('tilt') }
       else emit('degraded')
     } else if (!activeSource) startSource()
   }
@@ -537,17 +551,26 @@ export function createOrientationSession(target: Window, report: OrientationHand
       if (doc.visibilityState === 'hidden') { emit('degraded'); return }
       const canRestart = ['degraded', 'suspect', 'calibrating', 'tilt', 'tilt-unknown', 'timeout', 'null-reading', 'frame-unavailable'].includes(lastStatus)
       if (enabled && (activeSource !== null || probeTimer !== 0) && !canRestart) return
-      const permissionNeedsRecheck = ['restricted', 'denied'].includes(lastStatus)
+      const shouldRecheckPermission = permissionNeedsRecheck || ['restricted', 'denied', 'timeout'].includes(lastStatus)
       permissionInFlight = true
       emit('acquiring')
       const requestPermission = win.DeviceOrientationEvent?.requestPermission
-      if (requestPermission && (!permissionGranted || permissionNeedsRecheck)) {
+      if (requestPermission && (!permissionGranted || shouldRecheckPermission)) {
         try {
           const permission = await requestPermission.call(win.DeviceOrientationEvent, true)
-          if (permission !== 'granted') { forgetOrientationGrant(target); emit('denied'); return }
+          if (permission !== 'granted') {
+            permissionGranted = false
+            permissionNeedsRecheck = false
+            forgetOrientationGrant(target)
+            emit('denied')
+            return
+          }
           permissionGranted = true
+          permissionNeedsRecheck = false
         } catch (error) {
           const name = error instanceof DOMException ? error.name : undefined
+          permissionGranted = false
+          permissionNeedsRecheck = false
           forgetOrientationGrant(target)
           emit(name === 'SecurityError' ? 'security' : name === 'NotAllowedError' ? 'restricted' : 'denied')
           return

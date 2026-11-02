@@ -256,7 +256,7 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
   })
 
-  it('clears accuracy and hides the live direction when an active sensor falls silent', async () => {
+  it('preserves the last accepted direction and reported accuracy during stationary foreground silence', async () => {
     vi.useFakeTimers()
     render(<QiblaScreen place={place} onBack={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
@@ -264,10 +264,10 @@ describe('QiblaScreen orientation presentation', () => {
     dispatchHeading(0, 1000, { accuracy: 5 })
     expect(screen.getByText('Точность: Отличная', { selector: '.qibla-accuracy' })).toBeVisible()
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
-    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
-    expect(screen.getByRole('status')).toHaveTextContent(/Компас не ответил/)
-    expect(screen.getByText('Точность: Неизвестна', { selector: '.qibla-accuracy' })).toBeVisible()
-    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+    expect(screen.queryByText(/Компас не ответил/)).toBeNull()
+    expect(screen.getByText('Точность: Отличная', { selector: '.qibla-accuracy' })).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
   })
 
   it('shows a concise WMM caution while withholding any claim of physical accuracy', async () => {
