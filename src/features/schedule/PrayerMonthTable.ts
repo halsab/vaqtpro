@@ -47,6 +47,39 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
 
     // Равные колонки должны вмещать самую широкую ячейку при текущем масштабе и шрифте.
     let active = true
+    let clipFrame = 0
+    const updateFrozenClips = () => {
+      clipFrame = 0
+      if (!active) return
+      const viewport = table.parentElement
+      const dateHeading = table.querySelector<HTMLElement>('.prayer-month-date-heading')
+      if (!viewport || !dateHeading) return
+      const viewportRect = viewport.getBoundingClientRect()
+      const headingRect = dateHeading.getBoundingClientRect()
+      const frozenDateRight = headingRect.right
+      const frozenHeaderBottom = headingRect.bottom
+
+      // Прозрачные закреплённые ячейки не показывают прокручиваемое содержимое под собой.
+      for (const cell of table.querySelectorAll<HTMLElement>('th, td')) {
+        if (cell === dateHeading) continue
+        const rect = cell.getBoundingClientRect()
+        const isFrozenDate = cell.classList.contains('prayer-month-date')
+        const isHeader = cell.closest('thead') !== null
+        const left = isFrozenDate ? 0 : Math.max(0, Math.min(rect.width, frozenDateRight - rect.left))
+        const top = isHeader ? 0 : Math.max(0, Math.min(rect.height, frozenHeaderBottom - rect.top))
+        const overlapsViewport = rect.right > viewportRect.left && rect.left < viewportRect.right
+          && rect.bottom > viewportRect.top && rect.top < viewportRect.bottom
+        if (!overlapsViewport || (left === 0 && top === 0)) {
+          cell.style.removeProperty('clip-path')
+        } else {
+          cell.style.clipPath = `inset(${top}px 0px 0px ${left}px)`
+        }
+      }
+    }
+    const scheduleFrozenClipUpdate = () => {
+      if (!active || clipFrame) return
+      clipFrame = window.requestAnimationFrame(updateFrozenClips)
+    }
     const measure = () => {
       if (!active) return
       const cells = table.querySelectorAll<HTMLElement>('th, td')
@@ -60,6 +93,7 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
       }
       const nextWidth = Math.ceil(widestCell * (PRAYER_MONTH_KEYS.length + 1))
       setMinimumTableWidth(current => current === nextWidth ? current : nextWidth)
+      scheduleFrozenClipUpdate()
     }
 
     measure()
@@ -67,9 +101,13 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
     if (table.parentElement) resizeObserver?.observe(table.parentElement)
     const rootObserver = new MutationObserver(measure)
     rootObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] })
-    const contentObserver = new MutationObserver(measure)
+    const contentObserver = new MutationObserver(records => {
+      if (records.every(record => record.type === 'attributes' && record.attributeName === 'style')) return
+      measure()
+    })
     contentObserver.observe(table, { attributes: true, childList: true, characterData: true, subtree: true })
     window.addEventListener('resize', measure)
+    table.parentElement?.addEventListener('scroll', scheduleFrozenClipUpdate, { passive: true })
     const fonts = Reflect.get(document, 'fonts') as FontFaceSet | undefined
     if (fonts) void fonts.ready.then(measure)
 
@@ -79,6 +117,8 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
       rootObserver.disconnect()
       contentObserver.disconnect()
       window.removeEventListener('resize', measure)
+      table.parentElement?.removeEventListener('scroll', scheduleFrozenClipUpdate)
+      if (clipFrame) window.cancelAnimationFrame(clipFrame)
     }
   }, [dateLabel, labels, regionId, rows, tableLabel, weekdayLabels])
   const tableStyle = { '--prayer-month-table-min-width': `${minimumTableWidth}px` } as CSSProperties
