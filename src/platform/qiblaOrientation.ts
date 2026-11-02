@@ -364,6 +364,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
           motionHeadingDeltaDegrees: motionEvidence.deltaDegrees,
           motionEvidenceCoverage: motionEvidence.coverage,
         })
+        startProbe('webkit')
       } else if ((orientation.alpha === null || orientation.beta === null || orientation.gamma === null)
         && !hasCurrentReading && lastStatus !== 'calibrating') {
         emit('null-reading')
@@ -438,6 +439,7 @@ export function createOrientationSession(target: Window, report: OrientationHand
           motionHeadingDeltaDegrees: motionEvidence.deltaDegrees,
           motionEvidenceCoverage: motionEvidence.coverage,
         })
+        startProbe('absolute')
       }
       currentSensor.onerror = event => {
         if (stopped || sensor !== currentSensor) return

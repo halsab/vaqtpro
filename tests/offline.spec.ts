@@ -5,6 +5,7 @@ test('сохранённое расписание и поиск города р�
     Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
     Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
     Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { platform: 'iOS' } })
   })
   const manifest = await (await request.get('./manifest.webmanifest')).json() as Record<string, unknown>
   expect(manifest).toMatchObject({ id: '/', scope: '/', start_url: '/' })

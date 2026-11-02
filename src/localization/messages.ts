@@ -21,7 +21,7 @@ type QiblaLocationAccuracyParams = { meters: number }
 type QiblaPlaceSourceParams = { source: string }
 type QiblaOriginBearingUncertaintyParams = { degrees: string }
 type QiblaLocationRecordedAtParams = { value: string }
-type QiblaSensorAccuracyParams = { degrees: string }
+type QiblaAccuracyStatusParams = { category: string }
 type QiblaRelativeTurnParams = { direction: string; degrees: number }
 
 export const RU_MESSAGES = Object.freeze({
@@ -90,7 +90,15 @@ export const RU_MESSAGES = Object.freeze({
   qiblaMagneticCaution: 'Компас может ошибаться. Сверьте направление с ориентиром.',
   qiblaMagneticModelUnavailable: 'Живой компас недоступен. Показано расчётное направление.',
   qiblaWmmAltitudeAssumption: 'Для магнитной модели принято 0 км над эллипсоидом WGS 84: высота места неизвестна.',
-  qiblaSensorAccuracy: ({ degrees }: QiblaSensorAccuracyParams) => `Оценка датчика направления: ±${degrees}°; физически не подтверждена.`,
+  qiblaAccuracyExcellent: 'Отличная',
+  qiblaAccuracyGood: 'Хорошая',
+  qiblaAccuracyMedium: 'Средняя',
+  qiblaAccuracyLow: 'Низкая',
+  qiblaAccuracyVeryLow: 'Очень низкая',
+  qiblaAccuracyUnavailable: 'Недоступна',
+  qiblaAccuracyUnknown: 'Неизвестна',
+  qiblaAccuracyPrefix: 'Точность: ',
+  qiblaAccuracyStatus: ({ category }: QiblaAccuracyStatusParams) => `Оценка точности компаса: ${category}.`,
   qiblaRelativeAhead: 'Кибла прямо перед вами.',
   qiblaRelativeBehind: 'Кибла позади: повернитесь на 180° в любую сторону.',
   qiblaTurnRight: 'направо',

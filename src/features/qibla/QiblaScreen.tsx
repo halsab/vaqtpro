@@ -7,6 +7,7 @@ import { qiblaRelativeAngle, toTrueHeading } from '../../domain/magneticHeading'
 import { calculateWmm2025 } from '../../domain/wmm2025'
 import type { WmmResult } from '../../domain/wmm2025'
 import { QiblaHeadingEvidenceGate } from '../../domain/qiblaHeadingEvidence'
+import { classifyQiblaAccuracy, type QiblaAccuracyCategory } from '../../domain/qiblaAccuracy'
 import { createOrientationSession, hasRememberedOrientationGrant, type OrientationReading, type OrientationStatus } from '../../platform/qiblaOrientation'
 import { createQiblaDiagnosticTrace, qiblaDiagnosticsRequested, type QiblaDiagnosticTrace } from '../../platform/qiblaDiagnostics'
 import { useLocalization } from '../../localization'
@@ -101,6 +102,18 @@ function shouldOfferRetry(status: OrientationStatus): boolean {
     'frame-unavailable', 'null-reading', 'timeout'].includes(status)
 }
 
+function accuracyCategoryText(category: QiblaAccuracyCategory, t: ReturnType<typeof useLocalization>['t']): string {
+  switch (category) {
+    case 'excellent': return t('qiblaAccuracyExcellent')
+    case 'good': return t('qiblaAccuracyGood')
+    case 'medium': return t('qiblaAccuracyMedium')
+    case 'low': return t('qiblaAccuracyLow')
+    case 'very-low': return t('qiblaAccuracyVeryLow')
+    case 'unavailable': return t('qiblaAccuracyUnavailable')
+    case 'unknown': return t('qiblaAccuracyUnknown')
+  }
+}
+
 export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: () => void }) {
   const { t } = useLocalization()
   const tRef = useRef(t)
@@ -109,9 +122,15 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     ? { status: 'acquiring', reason: null } : INITIAL_COMPASS_STATE)
   const [pointerVisible, setPointerVisible] = useState(false)
   const [accessibleRelative, setAccessibleRelative] = useState('')
+  const [accuracyCategory, setAccuracyCategory] = useState<QiblaAccuracyCategory>('unknown')
+  const [announcedAccuracyCategory, setAnnouncedAccuracyCategory] = useState<QiblaAccuracyCategory | null>(null)
   const compassStateRef = useRef(compass)
   const pointerVisibleRef = useRef(false)
   const accessibleRelativeRef = useRef('')
+  const accuracyCategoryRef = useRef<QiblaAccuracyCategory>('unknown')
+  const lastAccuracyAnnouncementAt = useRef(Number.NEGATIVE_INFINITY)
+  const pendingAccuracyCategory = useRef<QiblaAccuracyCategory | null>(null)
+  const accuracyAnnouncementTimer = useRef<number | null>(null)
   const session = useRef<ReturnType<typeof createOrientationSession> | null>(null)
   const traceRef = useRef<QiblaDiagnosticTrace | null>(null)
   const pointerRef = useRef<HTMLSpanElement>(null)
@@ -227,6 +246,26 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     setCompass(next)
   }, [])
 
+  const publishAccuracyCategory = useCallback((next: QiblaAccuracyCategory) => {
+    if (accuracyCategoryRef.current === next) return
+    accuracyCategoryRef.current = next
+    setAccuracyCategory(next)
+    pendingAccuracyCategory.current = next
+    const publish = () => {
+      accuracyAnnouncementTimer.current = null
+      const pending = pendingAccuracyCategory.current
+      pendingAccuracyCategory.current = null
+      if (pending === null) return
+      lastAccuracyAnnouncementAt.current = performance.now()
+      setAnnouncedAccuracyCategory(pending)
+    }
+    const remaining = ACCESSIBLE_ANNOUNCEMENT_INTERVAL_MS - (performance.now() - lastAccuracyAnnouncementAt.current)
+    if (remaining <= 0) publish()
+    else if (accuracyAnnouncementTimer.current === null) {
+      accuracyAnnouncementTimer.current = window.setTimeout(publish, remaining)
+    }
+  }, [])
+
   const processReading = (reading: OrientationReading) => {
     const derived = deriveRelativePointer(reading, modelRef.current, bearingRef.current, uncertaintyRef.current)
     if (derived.kind !== 'direction') {
@@ -302,6 +341,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         processReadingRef.current(recoveredReading)
       } else if (decision.kind === 'degraded') {
         suspectReading.current = null
+        publishAccuracyCategory('unknown')
         clearPointer()
         clearAccessibleDirection()
         trace.record({ event: 'status', status: 'degraded',
@@ -315,6 +355,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     }
     const setIssue = (status: OrientationStatus) => {
       if (!active) return
+      publishAccuracyCategory('unknown')
       cancelEvidenceTimer()
       suspectReading.current = null
       if (status !== 'suspect') {
@@ -334,6 +375,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         setIssue(status)
         return
       }
+      publishAccuracyCategory(classifyQiblaAccuracy(reading.accuracyDegrees))
       if (reading.horizontalProjection < 0.35) {
         setIssue('tilt')
         return
@@ -398,12 +440,15 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       frameRequest.current = null
       if (announcementTimer.current !== null) window.clearTimeout(announcementTimer.current)
       announcementTimer.current = null
+      if (accuracyAnnouncementTimer.current !== null) window.clearTimeout(accuracyAnnouncementTimer.current)
+      accuracyAnnouncementTimer.current = null
+      pendingAccuracyCategory.current = null
       cancelEvidenceTimer()
       suspectReading.current = null
       trace.close()
       if (traceRef.current === trace) traceRef.current = null
     }
-  }, [clearAccessibleDirection, clearPointer, publishCompassState])
+  }, [clearAccessibleDirection, clearPointer, publishAccuracyCategory, publishCompassState])
 
   const issue = orientationIssue(compass.status, compass.reason, t)
   const placeIssue = bearing.kind === 'undefined'
@@ -414,6 +459,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const staticState = !pointerVisible
   const showInitialAction = compass.status === 'idle' && bearing.kind === 'bearing' && originUncertainty.kind !== 'unbounded'
   const showRetry = shouldOfferRetry(compass.status)
+  const accuracyText = accuracyCategoryText(accuracyCategory, t)
   const actionLabel = showInitialAction ? t('qiblaEnableCompass')
     : compass.status === 'calibrating' || compass.status === 'suspect' || compass.status === 'tilt' || compass.status === 'tilt-unknown'
       ? t('qiblaCheckCompass') : t('retryAgain')
@@ -422,18 +468,27 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     : t('qiblaDirectionUndefined')
 
   return <Screen label={t('qiblaTitle')} top={<BackButton onClick={onBack} />}
-    bottom={visibleIssue || showInitialAction || showRetry ? <div className="qibla-recovery">
-      {visibleIssue ? <p role="status">{visibleIssue}</p> : null}
-      {showInitialAction || showRetry ? <ActionButton disabled={compass.status === 'acquiring'} onClick={() => {
-        traceRef.current?.record({ event: 'retry', status: compass.status })
-        continuity.current.reset()
-        limitedReacquisition.current = false
-        suspectReading.current = null
-        if (evidenceTimer.current !== null) window.clearTimeout(evidenceTimer.current)
-        evidenceTimer.current = null
-        void session.current?.enableFromGesture()
-      }}>{compass.status === 'acquiring' ? t('qiblaCompassConnecting') : actionLabel}</ActionButton> : null}
-    </div> : undefined}
+    bottom={<div className="qibla-footer">
+      {visibleIssue || showInitialAction || showRetry ? <div className="qibla-recovery">
+        {visibleIssue ? <p role="status">{visibleIssue}</p> : null}
+        {showInitialAction || showRetry ? <ActionButton disabled={compass.status === 'acquiring'} onClick={() => {
+          traceRef.current?.record({ event: 'retry', status: compass.status })
+          continuity.current.reset()
+          limitedReacquisition.current = false
+          suspectReading.current = null
+          publishAccuracyCategory('unknown')
+          if (evidenceTimer.current !== null) window.clearTimeout(evidenceTimer.current)
+          evidenceTimer.current = null
+          void session.current?.enableFromGesture()
+        }}>{compass.status === 'acquiring' ? t('qiblaCompassConnecting') : actionLabel}</ActionButton> : null}
+      </div> : null}
+      <span className="qibla-accuracy" role="note" aria-label={t('qiblaAccuracyStatus', { category: accuracyText })}>{t('qiblaAccuracyPrefix')}{accuracyText}</span>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {announcedAccuracyCategory === null ? '' : t('qiblaAccuracyStatus', {
+          category: accuracyCategoryText(announcedAccuracyCategory, t),
+        })}
+      </span>
+    </div>}
     contentClassName="qibla-screen-content">
     <div className="qibla-screen">
       <div className="qibla-dial" data-live={pointerVisible || undefined} role="img" aria-label={dialLabel}>

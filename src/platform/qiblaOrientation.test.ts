@@ -160,6 +160,35 @@ describe('Qibla orientation browser adapters', () => {
     vi.useRealTimers()
   })
 
+  it('restarts the sensor watchdog after valid samples and expires a silent live source', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('DeviceOrientationEvent', class extends Event {})
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      await session.enableFromGesture()
+      const reading = () => window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 15, webkitCompassAccuracy: 5,
+      }))
+
+      reading()
+      expect(reports.at(-1)).toBe('live-unverified')
+      await vi.advanceTimersByTimeAsync(3500)
+      reading()
+      expect(reports.at(-1)).toBe('live-unverified')
+      await vi.advanceTimersByTimeAsync(3999)
+      expect(reports.at(-1)).toBe('live-unverified')
+      await vi.advanceTimersByTimeAsync(1)
+      expect(reports.at(-1)).toBe('timeout')
+
+      await session.enableFromGesture()
+      reading()
+      expect(reports.at(-1)).toBe('live-unverified')
+    } finally {
+      session.stop()
+    }
+  })
+
   it('uses the documented WebKit magnetic heading and applies screen angle once', async () => {
     const requestPermission = vi.fn().mockResolvedValue('granted')
     vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
