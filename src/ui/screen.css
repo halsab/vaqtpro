@@ -58,18 +58,9 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 .screen-top { padding-inline: var(--screen-navigation-inset-left) var(--screen-navigation-inset-right); }
 .monthly-screen-navigation { position: relative; display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; }
 .monthly-export-control { position: relative; display: inline-flex; width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; }
-.monthly-export-control > button { pointer-events: auto; }
-.monthly-export-control:has(select) > button { pointer-events: none; }
 .monthly-export-spinner { display: block; width: 24px; height: 24px; animation: monthly-export-spin 800ms linear infinite; }
 @keyframes monthly-export-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .monthly-export-spinner { animation: none; } }
-.monthly-export-control > select {
-  position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; margin: 0;
-  border: 0; opacity: 0; cursor: pointer; appearance: none; -webkit-appearance: none;
-  font-size: 16px; touch-action: manipulation;
-}
-html[data-input='keyboard'] .monthly-export-control:has(select:focus-visible) { outline: 2px solid var(--text-primary); outline-offset: -3px; }
-html[data-input='pointer'] .monthly-export-control:has(select:focus-visible) { outline: none; }
 .monthly-export-control.is-disabled { opacity: .45; }
 .monthly-export-error { position: absolute; z-index: 2; top: calc(100% + 4px); right: 0; max-width: min(20rem, calc(100vw - 32px)); padding: 6px 10px; border-radius: 8px; background: var(--background-secondary); color: var(--text-primary); font: var(--font-footnote); box-shadow: 0 2px 12px rgb(0 0 0 / 18%); }
 .monthly-export-retry { margin-left: 8px; padding: 0; border: 0; background: none; color: var(--text-primary); font: inherit; text-decoration: underline; cursor: pointer; }
