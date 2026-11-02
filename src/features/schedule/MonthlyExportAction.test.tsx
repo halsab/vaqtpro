@@ -57,13 +57,15 @@ it('retries preparation after a renderer failure without triggering a share or P
 
   const button = screen.getByRole('button', { name: shareLabel })
   await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
-  expect(button).toBeDisabled()
+  expect(button).toBeEnabled()
+  expect(button).toHaveAccessibleName('Повторить: PDF')
   expect(deliverFile).not.toHaveBeenCalled()
 
-  await user.click(screen.getByRole('button', { name: 'Повторить' }))
+  await user.click(button)
   await waitFor(() => expect(button).toBeEnabled())
   expect(prepareMonthlyPdf).toHaveBeenCalledTimes(2)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(button).toHaveAccessibleName(shareLabel)
 })
 
 it('retries native delivery with the already generated PDF', async () => {
@@ -76,7 +78,8 @@ it('retries native delivery with the already generated PDF', async () => {
 
   await user.click(button)
   await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
-  await user.click(screen.getByRole('button', { name: 'Повторить' }))
+  expect(button).toHaveAccessibleName('Повторить: PDF')
+  await user.click(button)
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   expect(deliverFile).toHaveBeenCalledTimes(2)
   expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
