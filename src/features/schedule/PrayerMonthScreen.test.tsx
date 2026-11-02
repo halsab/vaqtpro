@@ -169,7 +169,7 @@ it('switches between complete months without selecting dates in the table', asyn
 it('keeps the current calculation context for export without showing it on the monthly screen', async () => {
   renderMonth()
   expect(prepareMonthlyPdf).not.toHaveBeenCalled()
-  await userEvent.click(screen.getByRole('button', { name: 'Экспортировать расписание на месяц' }))
+  // PDF preparation starts after the screen paints, not from a disabled icon click.
   await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
 
   expect(prepareMonthlyPdf).toHaveBeenCalledWith(expect.objectContaining({
