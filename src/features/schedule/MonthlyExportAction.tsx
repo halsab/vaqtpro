@@ -32,30 +32,37 @@ export function MonthlyExportAction({ snapshot, labels }: {
 function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExportView> | null }) {
   const { t } = useLocalization()
   const [file, setFile] = useState<File | null>(null)
-  const [preparing, setPreparing] = useState(Boolean(view))
+  const [preparing, setPreparing] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [failed, setFailed] = useState(false)
-  const [attempt, setAttempt] = useState(0)
+  const preparationBusy = useRef(false)
   const sharingBusy = useRef(false)
+  const mounted = useRef(true)
 
   useEffect(() => {
-    if (!view) return
-    let active = true
-    // Paint the monthly screen first; prepare the PDF once, so sharing happens
-    // directly inside a later user gesture (required by iOS Safari).
-    const timer = window.setTimeout(() => {
-      void import('./monthlyExportRenderer')
-        .then(({ prepareMonthlyPdf }) => prepareMonthlyPdf(view))
-        .then(pdf => {
-          if (!active) return
-          setFile(pdf)
-          setFailed(false)
-        })
-        .catch(() => { if (active) setFailed(true) })
-        .finally(() => { if (active) setPreparing(false) })
-    }, 80)
-    return () => { active = false; window.clearTimeout(timer) }
-  }, [view, attempt])
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  const prepareFromTap = () => {
+    if (!view || preparationBusy.current) return
+    preparationBusy.current = true
+    setFailed(false)
+    setPreparing(true)
+    // Never import or render a PDF on screen entry. Preparation starts
+    // exclusively with this explicit button action.
+    void import('./monthlyExportRenderer')
+      .then(({ prepareMonthlyPdf }) => prepareMonthlyPdf(view))
+      .then(pdf => {
+        if (!mounted.current) return
+        setFile(pdf)
+      })
+      .catch(() => { if (mounted.current) setFailed(true) })
+      .finally(() => {
+        preparationBusy.current = false
+        if (mounted.current) setPreparing(false)
+      })
+  }
 
   const sharePreparedPdf = () => {
     if (!file || sharingBusy.current) return
@@ -71,24 +78,18 @@ function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExpor
     })
   }
 
-  const retry = () => {
-    if (file) {
-      sharePreparedPdf()
-      return
-    }
-    setFailed(false)
-    setPreparing(true)
-    setAttempt(value => value + 1)
+  const handleAction = () => {
+    if (preparing || sharing) return
+    if (file) sharePreparedPdf()
+    else prepareFromTap()
   }
-
-  const handleAction = () => { if (failed) retry(); else sharePreparedPdf() }
 
   return <>
     <span className={`monthly-export-control${!view ? ' is-disabled' : ''}`}>
       <IconActionButton label={failed ? `${t('retry')}: ${t('exportPdf')}` : t('shareMonthlyTimetable')}
         title={failed ? `${t('retry')}: ${t('exportPdf')}` : t('exportPdf')}
         aria-busy={preparing || sharing || undefined}
-        disabled={!view || preparing || sharing || (!file && !failed)}
+        disabled={!view || preparing || sharing}
         onClick={handleAction}>
         {preparing || sharing ? <LoadingSpinner /> : <ShareIcon />}
       </IconActionButton>
