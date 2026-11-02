@@ -14,7 +14,7 @@ export function downloadFile(file: File): void {
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 export async function deliverFile(file: File, environment: ShareEnvironment,
