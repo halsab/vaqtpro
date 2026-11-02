@@ -184,6 +184,48 @@ describe('VaqtPro', () => {
     view.unmount()
   })
 
+  it('opens the offline Qibla bearing and restores focus without requesting location or sensor permission', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('iPhone')
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone)')
+    const services = createServices()
+    render(<App services={services} />)
+
+    const compassButton = await screen.findByRole('button', { name: 'Компас киблы' })
+    expect(compassButton).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Настройки' })).toBeVisible()
+    await userEvent.click(compassButton)
+
+    expect(await screen.findByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+    expect(screen.getByText('195°')).toBeVisible()
+    expect(screen.getByRole('img', { name: /Азимут 195 градусов от истинного севера/ })).toBeVisible()
+    expect(screen.queryByRole('heading')).toBeNull()
+    expect(screen.queryByRole('button', { name: /место|локация|город/i })).toBeNull()
+    expect(screen.queryByText(/от истинного севера/)).toBeNull()
+    expect(services.getPosition).not.toHaveBeenCalled()
+    expect(services.getPermission).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
+    expect(await screen.findByRole('region', { name: 'Главная' })).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Настройки' })).toBeVisible()
+  })
+
+  it('does not render a directional needle when the accepted location uncertainty reaches the Kaaba', async () => {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('iPhone')
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone)')
+    const singularPlace = { ...defaultPlace, latitude: 21.4225241, longitude: 39.8261818, accuracy: 25 }
+    const services = createServices({
+      initialize: vi.fn().mockResolvedValue(initialized({
+        locationChoice: { mode: 'calculated', coordinates: singularPlace, place: singularPlace, source: 'default' },
+      })),
+    })
+    render(<App services={services} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Компас киблы' }))
+    expect(await screen.findByText(/Для этого места направление не удаётся определить/)).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    expect(services.getPosition).not.toHaveBeenCalled()
+    expect(services.getPermission).not.toHaveBeenCalled()
+  })
+
   it('continues using the calculated snapshot without requesting legacy schedule data', async () => {
     const initialization = deferred<Awaited<ReturnType<AppServices['initialize']>>>()
     const services = createServices({ initialize: vi.fn(() => initialization.promise),

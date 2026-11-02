@@ -1,5 +1,6 @@
 import { DEFAULT_CALENDAR_PREFERENCES, restoreCalendarPreferences, supportsHijriCalendar, type CalendarPreferences } from './domain/calendar'
 import { DateScreen } from './features/calendar/DateScreen'
+import { isDesktopPlatform } from './platform/devicePlatform'
 import {
   useCallback,
   useEffect,
@@ -101,6 +102,8 @@ const loadSecondaryScreens = () => loadDeferredScreenModule('SecondaryScreens', 
 const SECONDARY_SCREENS: readonly AppScreen[] = ['settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'monthly-schedule']
 const religiousEventScreenImporter = () => import('./features/religiousEvents/ReligiousEventScreen')
 const loadReligiousEventScreen = () => loadDeferredScreenModule('ReligiousEventScreen', religiousEventScreenImporter)
+const qiblaScreenImporter = () => import('./features/qibla/QiblaScreen')
+const loadQiblaScreen = () => loadDeferredScreenModule('QiblaScreen', qiblaScreenImporter)
 const SCREEN_MODULE_TIMEOUT_MS = 15_000
 
 function waitForScreenModule<T>(module: Promise<T>): Promise<T> {
@@ -291,6 +294,7 @@ export function App({
   const screenLoadGeneration = useRef(0)
   const failedScreenGeneration = useRef<number | null>(null)
   const [religiousEventScreen, setReligiousEventScreen] = useState<typeof import('./features/religiousEvents/ReligiousEventScreen')['ReligiousEventScreen'] | null>(null)
+  const [qiblaScreen, setQiblaScreen] = useState<typeof import('./features/qibla/QiblaScreen')['QiblaScreen'] | null>(null)
   const [religiousEventLoadError, setReligiousEventLoadError] = useState<string | null>(null)
   const [religiousEventLoadPending, setReligiousEventLoadPending] = useState(false)
   const [failedReligiousEventId, setFailedReligiousEventId] = useState<import('./domain/religiousEvents').ReligiousEventId | null>(null)
@@ -336,8 +340,22 @@ export function App({
       }).finally(() => {
         if (screenLoadGeneration.current === generation) setScreenLoadPending(false)
       })
+    } else if (target === 'qibla' && !qiblaScreen) {
+      setScreenLoadPending(true)
+      void openScreenPrepared(target, async () => {
+        const module = await waitForScreenModule(loadQiblaScreen())
+        flushSync(() => setQiblaScreen(() => module.QiblaScreen))
+      }).catch(() => {
+        if (screenLoadGeneration.current === generation) {
+          setScreenLoadFailed(true)
+          setFailedScreenTarget(target)
+          failedScreenGeneration.current = generation
+        }
+      }).finally(() => {
+        if (screenLoadGeneration.current === generation) setScreenLoadPending(false)
+      })
     } else openImmediately(target)
-  }, [openImmediately, openScreenPrepared, secondaryScreens])
+  }, [openImmediately, openScreenPrepared, qiblaScreen, secondaryScreens])
   const SettingsScreens = secondaryScreens?.SettingsScreens
   const SourceInfo = secondaryScreens?.SourceInfo
   const PrayerMonthScreen = secondaryScreens?.PrayerMonthScreen
@@ -364,6 +382,7 @@ export function App({
   const locationButtonRef = useRef<HTMLButtonElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const LoadedReligiousEventScreen = religiousEventScreen
+  const QiblaScreen = qiblaScreen
 
   const onPlaceChosen = useCallback(() => { homeScreen(); pulseHaptic() }, [homeScreen])
   const locations = TATARSTAN_LOCALITIES
@@ -754,6 +773,7 @@ export function App({
     || navigation.screen === 'source-info'
     || navigation.screen === 'religious-events'
     || navigation.screen === 'religious-event'
+    || navigation.screen === 'qibla'
     || navigation.screen === 'date'
     || navigation.screen === 'monthly-schedule'
 
@@ -813,12 +833,21 @@ export function App({
             onOpenReligiousEvent={openReligiousEvent}
             top={<AppHeader locationButtonRef={locationButtonRef} locationLabel={homeLocationLabel} locationTime={locationTime} selectedDate={selectedDate}
               calendarPreferences={calendarPreferences} onOpenLocation={openLocationDialog} onOpenDate={() => openScreen('date')} />}
-            actions={<IconActionButton id="home-settings" ref={settingsButtonRef} label={t('settings')} title={t('settings')} onClick={openSettingsDialog}>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 3.75 19.15 7.9v8.2L12 20.25 4.85 16.1V7.9L12 3.75Z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round" />
-                <circle cx="12" cy="12" r="1.6" fill="currentColor" />
-              </svg>
-            </IconActionButton>}
+            actions={<div className="home-toolbar-actions">
+              {!isDesktopPlatform(navigator) ? <IconActionButton id="home-qibla" label={t('qiblaCompass')} title={t('qiblaCompass')} onClick={() => openScreen('qibla')}>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="8.25" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="m14.7 9.3-1.8 4.05-3.6 1.35 1.35-3.6 4.05-1.8Z" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+                  <path d="M12 3.75v1.5M20.25 12h-1.5M12 20.25v-1.5M3.75 12h1.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+                </svg>
+              </IconActionButton> : null}
+              <IconActionButton id="home-settings" ref={settingsButtonRef} label={t('settings')} title={t('settings')} onClick={openSettingsDialog}>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3.75 19.15 7.9v8.2L12 20.25 4.85 16.1V7.9L12 3.75Z" stroke="currentColor" strokeWidth="1.55" strokeLinejoin="round" />
+                  <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+                </svg>
+              </IconActionButton>
+            </div>}
             notice={<>{religiousEventLoadError ? <p role="alert">{religiousEventLoadError}</p> : null}
               {locationNotice ? <p className="note" role="status">{locationNotice}</p> : null}
               {!locationNotice && nearbyCityNotice ? <p className="note" role="status">{nearbyCityNotice}</p> : null}{persistenceNotice}{recoveryNotices}</>}
@@ -832,6 +861,8 @@ export function App({
         onDateChange={changeScheduleDate} onPreferencesChange={updateCalendarPreferences} onOpenReligiousEvents={() => openScreen('religious-events')}
         onOpenMonthlySchedule={() => openScreen('monthly-schedule')} hasPlace={Boolean(place)}
         onBack={backScreen} notice={persistenceNotice} /> : null}
+
+      {navigation.screen === 'qibla' && QiblaScreen ? <QiblaScreen place={place} onBack={backScreen} /> : null}
 
       {navigation.screen === 'monthly-schedule' && PrayerMonthScreen
         ? <PrayerMonthScreen place={place} context={context} scheduleError={scheduleError} selectedDate={selectedDate}

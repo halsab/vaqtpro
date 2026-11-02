@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:lan": "sh scripts/dev-lan.sh",
     "build": "tsc -b && vite build",
     "build:check": "tsx scripts/checkBuildArtifacts.ts",
     "actions:check": "tsx scripts/checkActionPins.ts",

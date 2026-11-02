@@ -1,6 +1,12 @@
 import { choosePlace, expectSchedule, readSavedSetting, expect, test } from './fixtures'
 
 test('сохранённое расписание и поиск города работают без сети', async ({ page, context, request }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(navigator, 'userAgentData', { configurable: true, value: { platform: 'iOS' } })
+  })
   const manifest = await (await request.get('./manifest.webmanifest')).json() as Record<string, unknown>
   expect(manifest).toMatchObject({ id: '/', scope: '/', start_url: '/' })
   expect(manifest).not.toHaveProperty('orientation')
@@ -37,6 +43,13 @@ test('сохранённое расписание и поиск города р�
     await expect(page.getByRole('button', { name: 'Москва, Москва, Россия', exact: true })).toBeVisible()
 
     await page.reload({ waitUntil: 'domcontentloaded' })
+    await expectSchedule(page, 7)
+    await page.locator('#home-qibla').click()
+    await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+    await expect(page.getByText('152°')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Включить компас' })).toBeVisible()
+    await expect(page.locator('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    await page.getByRole('button', { name: 'Назад' }).click()
     await expectSchedule(page, 7)
     await page.locator('#home-settings').click()
     await expect(page.getByRole('button', { name: 'Данные и конфиденциальность' })).toBeVisible()

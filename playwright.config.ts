@@ -32,6 +32,7 @@ export default defineConfig({
         '**/deferred-loading.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
+        '**/qibla.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], launchOptions: {
         args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],
@@ -79,7 +80,7 @@ export default defineConfig({
     },
     {
       name: 'webkit-mobile-jelly',
-      testMatch: ['**/jelly-pointer.spec.ts', '**/navigation-transition.spec.ts'],
+      testMatch: ['**/jelly-pointer.spec.ts', '**/navigation-transition.spec.ts', '**/qibla.spec.ts'],
       use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
     },
     {
