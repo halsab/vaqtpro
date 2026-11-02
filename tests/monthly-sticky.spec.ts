@@ -35,7 +35,8 @@ test('a failed background PDF does not block changing the month and can be retri
   await expect(page.getByRole('button', { name: 'Повторить: PDF' })).toBeEnabled()
   await page.getByRole('button', { name: 'Следующий месяц' }).click()
   await expect(page.getByRole('heading', { name: 'октябрь 2026' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Повторить: PDF' })).toBeEnabled()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Экспортировать расписание на месяц' })).toBeEnabled()
 })
 
 test('monthly table keeps its header, date column, and separators frozen on both axes', async ({ page }, testInfo) => {
