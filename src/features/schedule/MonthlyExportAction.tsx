@@ -4,7 +4,6 @@ import { useLocalization } from '../../localization'
 import { IconActionButton } from '../../ui/controls'
 import { deliverFile } from './monthlyExportDelivery'
 import { createMonthlyExportView, type MonthlyExportSnapshot } from './monthlyExportModel'
-import type { MonthlyExportPreparation } from './monthlyExportRenderer'
 
 function ShareIcon() {
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -27,105 +26,72 @@ export function MonthlyExportAction({ snapshot, labels }: {
     try { return createMonthlyExportView(snapshot, labels) } catch { return null }
   }, [snapshot, labels])
   const viewKey = view ? JSON.stringify(view) : ''
-  return <MonthlyExportActionForView key={viewKey} view={view} />
+  return <MonthlyPdfAction key={viewKey} view={view} />
 }
 
-function MonthlyExportActionForView({ view }: { view: ReturnType<typeof createMonthlyExportView> | null }) {
+function MonthlyPdfAction({ view }: { view: ReturnType<typeof createMonthlyExportView> | null }) {
   const { t } = useLocalization()
-  const [prepared, setPrepared] = useState<MonthlyExportPreparation | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [preparing, setPreparing] = useState(Boolean(view))
+  const [sharing, setSharing] = useState(false)
   const [failed, setFailed] = useState(false)
-  const [preparationRequest, setPreparationRequest] = useState(0)
-  const [preparing, setPreparing] = useState(false)
-  const preparationBusy = useRef(false)
-  const busy = useRef(false)
-  const preparation = useRef<Promise<MonthlyExportPreparation> | null>(null)
-  const select = useRef<HTMLSelectElement>(null)
-  const autoOpenPicker = useRef(false)
+  const [attempt, setAttempt] = useState(0)
+  const sharingBusy = useRef(false)
 
   useEffect(() => {
-    let current = true
-    if (view && preparationRequest > 0) {
-      preparation.current ??= import('./monthlyExportRenderer')
-        .then(({ prepareMonthlyExportFiles }) => prepareMonthlyExportFiles(view))
-      void preparation.current.then(result => {
-          if (!current) return
-          setPrepared(result)
+    if (!view) return
+    let active = true
+    // Paint the monthly screen first; prepare the PDF once, so sharing happens
+    // directly inside a later user gesture (required by iOS Safari).
+    const timer = window.setTimeout(() => {
+      void import('./monthlyExportRenderer')
+        .then(({ prepareMonthlyPdf }) => prepareMonthlyPdf(view))
+        .then(pdf => {
+          if (!active) return
+          setFile(pdf)
           setFailed(false)
         })
-        .catch(() => { if (current) setFailed(true) })
-        .finally(() => {
-          if (!current) return
-          preparationBusy.current = false
-          setPreparing(false)
-        })
-    }
-    return () => { current = false }
-  }, [view, preparationRequest])
-  const result = prepared
-  const hasAvailableFormat = Boolean(result?.pdf || result?.png)
-  const error = failed || Boolean(result?.failures.length)
+        .catch(() => { if (active) setFailed(true) })
+        .finally(() => { if (active) setPreparing(false) })
+    }, 80)
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [view, attempt])
 
-  useEffect(() => {
-    if (!hasAvailableFormat || preparing || !autoOpenPicker.current) return
-    autoOpenPicker.current = false
-    try {
-      select.current?.showPicker()
-    } catch {
-      // При блокировке браузером готовый селектор остаётся доступен по следующему тапу.
-    }
-  }, [hasAvailableFormat, preparing])
-
-  const onChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    autoOpenPicker.current = false
-    const format = event.currentTarget.value
-    event.currentTarget.value = ''
-    if (!result || busy.current || (format !== 'pdf' && format !== 'png')) return
-    busy.current = true
+  const sharePreparedPdf = () => {
+    if (!file || sharingBusy.current) return
+    sharingBusy.current = true
+    setSharing(true)
     setFailed(false)
-    const file = format === 'pdf' ? result.pdf : result.png
-    if (!file) {
-      busy.current = false
+    // deliverFile calls navigator.share synchronously, before any await.
+    void deliverFile(file, navigator).then(result => {
+      if (result === 'failed') setFailed(true)
+    }).catch(() => setFailed(true)).finally(() => {
+      sharingBusy.current = false
+      setSharing(false)
+    })
+  }
+
+  const retry = () => {
+    if (file) {
+      sharePreparedPdf()
       return
     }
-    void deliverFile(file, navigator).then(deliveryResult => {
-      if (deliveryResult === 'failed') setFailed(true)
-    }).catch(() => setFailed(true)).finally(() => { busy.current = false })
+    setFailed(false)
+    setPreparing(true)
+    setAttempt(value => value + 1)
   }
 
   return <>
     <span className={`monthly-export-control${!view ? ' is-disabled' : ''}`}>
-      {hasAvailableFormat ? <>
-        <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')} aria-hidden="true" tabIndex={-1}>
-          {preparing ? <LoadingSpinner /> : <ShareIcon />}
-        </IconActionButton>
-        <select ref={select} aria-label={t('shareMonthlyTimetable')} aria-busy={preparing || undefined}
-          value="" onChange={onChange}>
-          <option value="" hidden />
-          <option value="pdf" disabled={!result?.pdf}>{t('exportPdf')}</option>
-          <option value="png" disabled={!result?.png}>{t('exportPng')}</option>
-        </select>
-      </> : <IconActionButton label={t('shareMonthlyTimetable')} title={t('shareMonthlyTimetable')}
-        aria-busy={preparing || undefined} aria-disabled={!view || preparing || failed || undefined} disabled={!view}
-        onClick={() => {
-          if (!view || preparationBusy.current || failed) return
-          preparationBusy.current = true
-          autoOpenPicker.current = true
-          setPreparing(true)
-          setPreparationRequest(value => value + 1)
-        }}>
-        {preparing ? <LoadingSpinner /> : <ShareIcon />}
-      </IconActionButton>}
+      <IconActionButton label={t('shareMonthlyTimetable')} title={t('exportPdf')}
+        aria-busy={preparing || sharing || undefined}
+        disabled={!view || preparing || !file || sharing}
+        onClick={sharePreparedPdf}>
+        {preparing || sharing ? <LoadingSpinner /> : <ShareIcon />}
+      </IconActionButton>
     </span>
-    {error ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}
-      <button type="button" className="monthly-export-retry" onClick={() => {
-        setPrepared(null)
-        setFailed(false)
-        preparation.current = null
-        preparationBusy.current = true
-        autoOpenPicker.current = true
-        setPreparing(true)
-        setPreparationRequest(value => value + 1)
-      }}>{t('retry')}</button>
+    {failed ? <span className="monthly-export-error" role="alert">{t('monthlyExportFailed')}
+      <button type="button" className="monthly-export-retry" onClick={retry}>{t('retry')}</button>
     </span> : null}
   </>
 }
