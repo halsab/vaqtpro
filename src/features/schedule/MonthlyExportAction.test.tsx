@@ -49,10 +49,12 @@ it('never prepares PDF on screen entry; first tap prepares and second tap shares
   act(() => { complete?.(pdf) })
   await waitFor(() => expect(button).toBeEnabled())
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('PDF готов. Нажмите ещё раз')
   expect(deliverFile).not.toHaveBeenCalled()
 
   await user.click(button)
   expect(deliverFile).toHaveBeenCalledWith(pdf, navigator)
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
   expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
   await waitFor(() => expect(button).toBeEnabled())
   await user.click(button)
