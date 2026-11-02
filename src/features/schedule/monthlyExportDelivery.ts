@@ -3,7 +3,7 @@ export interface ShareEnvironment {
   canShare?: ((data: ShareData) => boolean) | undefined
 }
 
-export type DeliveryResult = 'shared' | 'downloaded' | 'cancelled' | 'failed'
+export type DeliveryResult = 'shared' | 'download-started' | 'cancelled' | 'failed'
 
 export function downloadFile(file: File): void {
   const url = URL.createObjectURL(file)
@@ -30,7 +30,7 @@ export async function deliverFile(file: File, environment: ShareEnvironment,
   }
   if (!supported || !environment.share) {
     fallback(file)
-    return 'downloaded'
+    return 'download-started'
   }
   try {
     await environment.share(data)
