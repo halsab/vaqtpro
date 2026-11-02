@@ -127,13 +127,31 @@ describe('Qibla heading evidence continuity', () => {
     expect(gate.push(sample(225, 1180))).toMatchObject({ kind: 'accepted', headingDegrees: 225, recoveredFromSuspect: true })
   })
 
-  it('ignores equal-time duplicates and nonmonotonic samples without reseeding the accepted heading', () => {
+  it('ignores duplicate and out-of-order samples even when their reported accuracy changes', () => {
     const gate = new QiblaHeadingEvidenceGate()
-    gate.push(sample(0, 1000))
-    expect(gate.push(sample(1, 1000)).kind).toBe('ignored')
-    expect(gate.push(sample(180, 1000)).kind).toBe('suspect')
-    expect(gate.push(sample(90, 999)).kind).toBe('ignored')
-    expect(gate.push(sample(2, 1010))).toMatchObject({ kind: 'accepted', headingDegrees: 2, recoveredFromSuspect: true })
+    gate.push(sample(0, 1000, { reportedAccuracyDegrees: 25 }))
+    expect(gate.push(sample(1, 1000, { reportedAccuracyDegrees: 1 })).kind).toBe('ignored')
+    expect(gate.push(sample(180, 1000, { reportedAccuracyDegrees: 0 })).kind).toBe('ignored')
+    expect(gate.push(sample(90, 999, { reportedAccuracyDegrees: 0 })).kind).toBe('ignored')
+    expect(gate.push(sample(2, 1010, { reportedAccuracyDegrees: 25 })))
+      .toMatchObject({ kind: 'accepted', headingDegrees: 2, recoveredFromSuspect: false })
+  })
+
+  it('records a current unusable-accuracy timestamp before degrading and ignores stale recovery samples', () => {
+    const gate = new QiblaHeadingEvidenceGate()
+    expect(gate.push(sample(0, 1000, { reportedAccuracyDegrees: 5 })).kind).toBe('accepted')
+    expect(gate.push(sample(90, 1100, { reportedAccuracyDegrees: 61 })).kind).toBe('degraded')
+    expect(gate.push(sample(0, 1050, { reportedAccuracyDegrees: 1 })).kind).toBe('ignored')
+    expect(gate.push(sample(0, 1100, { reportedAccuracyDegrees: 1 })).kind).toBe('ignored')
+    expect(gate.push(sample(0, 1116, { reportedAccuracyDegrees: 5 })).kind).toBe('accepted')
+  })
+
+  it('ignores duplicate quality improvements but immediately degrades on duplicate unusable accuracy', () => {
+    const gate = new QiblaHeadingEvidenceGate()
+    expect(gate.push(sample(0, 1000, { reportedAccuracyDegrees: 25 })).kind).toBe('accepted')
+    expect(gate.push(sample(0, 1000, { reportedAccuracyDegrees: 1 })).kind).toBe('ignored')
+    expect(gate.push(sample(0, 1000, { reportedAccuracyDegrees: 61 })).kind).toBe('degraded')
+    expect(gate.push(sample(0, 1000, { reportedAccuracyDegrees: 1 })).kind).toBe('ignored')
   })
 
   it('quarantines an unexplained large change after a long sampling gap instead of trusting it as a new baseline', () => {
@@ -147,7 +165,7 @@ describe('Qibla heading evidence continuity', () => {
   it('checks screen-frame changes in a canonical device frame and rejects arbitrary source changes', () => {
     const gate = new QiblaHeadingEvidenceGate()
     gate.push(sample(0, 1000))
-    expect(gate.push(sample(90, 1000, { screenAngle: 90 })))
+    expect(gate.push(sample(90, 1001, { screenAngle: 90 })))
       .toMatchObject({ kind: 'accepted', headingDegrees: 90 })
     expect(gate.push(sample(90, 1010, { source: 'absolute-orientation-sensor', screenAngle: 90 })))
       .toMatchObject({ kind: 'accepted', headingDegrees: 90 })

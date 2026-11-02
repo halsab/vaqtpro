@@ -189,6 +189,7 @@ describe('QiblaScreen orientation presentation', () => {
     dispatchHeading(0, 1000, { accuracy: 6 })
     const liveRegion = document.querySelector('.qibla-footer .sr-only[aria-live="polite"]')
     expect(liveRegion).toHaveTextContent('Оценка точности компаса: Хорошая.')
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
     dispatchHeading(0, 1016, { accuracy: 5 })
     expect(screen.getByText('Точность: Отличная', { selector: '.qibla-accuracy' })).toBeVisible()
     expect(liveRegion).toHaveTextContent('Оценка точности компаса: Хорошая.')
@@ -241,8 +242,9 @@ describe('QiblaScreen orientation presentation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
     await act(async () => { await Promise.resolve() })
     dispatchHeading(0, 1000)
+    await act(async () => { await vi.advanceTimersByTimeAsync(50) })
     dispatchHeading(180, 1050)
-    expect(screen.getByText('Точность: Хорошая', { selector: '.qibla-accuracy' })).toBeVisible()
+    expect(screen.getByText('Точность: Неизвестна', { selector: '.qibla-accuracy' })).toBeVisible()
     for (const timeMs of [1650, 2250, 2850, 3450]) {
       await act(async () => {
         sampleTime = timeMs
@@ -367,6 +369,81 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
     expect(screen.getByRole('status')).toHaveTextContent(/Показано расчётное направление/)
     expect(screen.getByText('Точность: Недоступна', { selector: '.qibla-accuracy' })).toBeVisible()
+  })
+
+  it('does not restore a degraded heading after a Place change without a new sensor sample', async () => {
+    const view = render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000, { accuracy: 5 })
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(15, 1016, { accuracy: 61 })
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    expect(screen.getByText('Точность: Недоступна', { selector: '.qibla-accuracy' })).toBeVisible()
+    view.rerender(<QiblaScreen place={london} onBack={() => {}} />)
+    await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 0)) })
+
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    expect(screen.getByText('Точность: Недоступна', { selector: '.qibla-accuracy' })).toBeVisible()
+  })
+
+  it('does not restore a degraded heading after UTC midnight model refresh without new sensor evidence', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(Date.UTC(2029, 11, 31, 23, 59, 59, 500))
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    dispatchHeading(0, 1000, { accuracy: 5 })
+    await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+    dispatchHeading(10, 1016, { accuracy: 90 })
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1001) })
+
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    expect(screen.getByText('Точность: Недоступна', { selector: '.qibla-accuracy' })).toBeVisible()
+  })
+
+  it('restores live guidance only after a new valid reading following degradation', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000, { accuracy: 5 })
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(90, 1016, { accuracy: 61 })
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+    dispatchHeading(0, 1032, { accuracy: 5 })
+
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(screen.getByText('Точность: Отличная', { selector: '.qibla-accuracy' })).toBeVisible()
+  })
+
+  it('does not improve the accuracy label from out-of-order or duplicate timestamps', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000, { accuracy: 25 })
+    expect(screen.getByText('Точность: Низкая', { selector: '.qibla-accuracy' })).toBeVisible()
+
+    dispatchHeading(0, 999, { accuracy: 1 })
+    dispatchHeading(0, 1000, { accuracy: 1 })
+    expect(screen.getByText('Точность: Низкая', { selector: '.qibla-accuracy' })).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+
+    dispatchHeading(0, 1016, { accuracy: 5 })
+    expect(screen.getByText('Точность: Отличная', { selector: '.qibla-accuracy' })).toBeVisible()
+  })
+
+  it('withholds improved accuracy while a new heading remains suspect', async () => {
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    await activateCompass()
+    dispatchHeading(0, 1000, { accuracy: 25 })
+    expect(screen.getByText('Точность: Низкая', { selector: '.qibla-accuracy' })).toBeVisible()
+
+    dispatchHeading(180, 1016, { accuracy: 1 })
+
+    expect(screen.getByText('Точность: Неизвестна', { selector: '.qibla-accuracy' })).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
   })
 
   it('recomputes the pointer after a Place change without waiting for another sensor event', async () => {

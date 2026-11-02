@@ -269,6 +269,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const processReading = (reading: OrientationReading) => {
     const derived = deriveRelativePointer(reading, modelRef.current, bearingRef.current, uncertaintyRef.current)
     if (derived.kind !== 'direction') {
+      latestReading.current = null
       clearPointer()
       clearAccessibleDirection()
       const status: OrientationStatus = derived.reason === 'tilt' ? 'tilt' : 'degraded'
@@ -335,12 +336,14 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         const recoveredReading = suspectReading.current
         suspectReading.current = null
         latestReading.current = recoveredReading
+        publishAccuracyCategory(classifyQiblaAccuracy(recoveredReading.accuracyDegrees))
         trace.record({ event: 'status', status: 'live-unverified', source: recoveredReading.source,
           reportedAccuracyDegrees: recoveredReading.accuracyDegrees, screenAngleDegrees: recoveredReading.screenAngle,
           modelValid: modelRef.current.kind === 'calculated' })
         processReadingRef.current(recoveredReading)
       } else if (decision.kind === 'degraded') {
         suspectReading.current = null
+        latestReading.current = null
         publishAccuracyCategory('unknown')
         clearPointer()
         clearAccessibleDirection()
@@ -375,7 +378,6 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         setIssue(status)
         return
       }
-      publishAccuracyCategory(classifyQiblaAccuracy(reading.accuracyDegrees))
       if (reading.horizontalProjection < 0.35) {
         setIssue('tilt')
         return
@@ -395,8 +397,11 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       if (decision.kind === 'degraded') {
         cancelEvidenceTimer()
         suspectReading.current = null
+        latestReading.current = null
         clearPointer()
         clearAccessibleDirection()
+        const reportedAccuracy = classifyQiblaAccuracy(reading.accuracyDegrees)
+        publishAccuracyCategory(reportedAccuracy === 'unavailable' ? 'unavailable' : 'unknown')
         trace.record({ event: 'status', status: 'degraded', source: reading.source,
           reportedAccuracyDegrees: reading.accuracyDegrees, modelValid: modelRef.current.kind === 'calculated' })
         publishCompassState({ status: 'degraded', reason: null })
@@ -407,6 +412,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         suspectReading.current = reading
         scheduleEvidenceSettlement()
         latestReading.current = null
+        publishAccuracyCategory('unknown')
         clearPointer()
         clearAccessibleDirection()
         trace.record({ event: 'status', status: 'suspect', source: reading.source,
@@ -419,6 +425,7 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
       cancelEvidenceTimer()
       suspectReading.current = null
       latestReading.current = reading
+      publishAccuracyCategory(classifyQiblaAccuracy(reading.accuracyDegrees))
       if (lastSource.current && lastSource.current !== reading.source) trace.record({ event: 'source-change', source: reading.source })
       lastSource.current = reading.source
       if (decision.confidence === 'limited') limitedReacquisition.current = true

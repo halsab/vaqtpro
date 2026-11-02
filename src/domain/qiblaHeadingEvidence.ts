@@ -76,12 +76,20 @@ export class QiblaHeadingEvidenceGate {
           || sample.reportedAccuracyDegrees >= 180))) return { kind: 'invalid' }
 
     const normalized = { ...sample, headingDegrees: wrap360(sample.headingDegrees) }
-    if (normalized.reportedAccuracyDegrees !== null && normalized.reportedAccuracyDegrees > MAX_LIVE_ACCURACY_DEGREES) {
-      return { kind: 'degraded', candidateHeadingDegrees: normalized.headingDegrees }
-    }
     if (this.lastObservedTimeMs !== null && normalized.timeMs < this.lastObservedTimeMs) return { kind: 'ignored' }
+    if (this.lastObservedTimeMs !== null && normalized.timeMs === this.lastObservedTimeMs) {
+      if (normalized.reportedAccuracyDegrees !== null && normalized.reportedAccuracyDegrees > MAX_LIVE_ACCURACY_DEGREES) {
+        this.candidate = null
+        return { kind: 'degraded', candidateHeadingDegrees: normalized.headingDegrees }
+      }
+      return { kind: 'ignored' }
+    }
     if (this.candidate?.lastSeenAtMs === normalized.timeMs) return { kind: 'ignored' }
     this.lastObservedTimeMs = normalized.timeMs
+    if (normalized.reportedAccuracyDegrees !== null && normalized.reportedAccuracyDegrees > MAX_LIVE_ACCURACY_DEGREES) {
+      this.candidate = null
+      return { kind: 'degraded', candidateHeadingDegrees: normalized.headingDegrees }
+    }
 
     const previous = this.accepted
     if (!previous) {
