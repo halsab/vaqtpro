@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createServiceWorkerReloadGuard,
+  deferServiceWorkerReload,
   type ServiceWorkerReloadMemory,
 } from './serviceWorkerUpdate'
 
@@ -95,5 +96,28 @@ describe('service worker update reload guard', () => {
     })()
 
     expect(reload).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('service worker reload deferrals', () => {
+  it('does not reload while monthly export is active and resumes once after leaving', () => {
+    const reload = vi.fn()
+    const guard = createServiceWorkerReloadGuard({
+      reload,
+      now: () => 50_000,
+      storage: createMemoryStorage(),
+      memory: {},
+    })
+    const finish = deferServiceWorkerReload()
+    const finishNested = deferServiceWorkerReload()
+    guard()
+    guard()
+    expect(reload).not.toHaveBeenCalled()
+    finish()
+    expect(reload).not.toHaveBeenCalled()
+    finishNested()
+    finishNested()
+    expect(reload).toHaveBeenCalledOnce()
   })
 })
