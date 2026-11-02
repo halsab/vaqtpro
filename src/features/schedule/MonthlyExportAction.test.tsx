@@ -28,7 +28,7 @@ afterEach(() => {
   deliverFile.mockReset()
 })
 
-it('prepares only PDF and invokes native delivery inside the later direct button gesture', async () => {
+it('never prepares PDF on screen entry; first tap prepares and second tap shares directly', async () => {
   let complete: ((file: File) => void) | undefined
   prepareMonthlyPdf.mockImplementation(() => new Promise(resolve => { complete = resolve }))
   deliverFile.mockResolvedValue('shared')
@@ -36,26 +36,38 @@ it('prepares only PDF and invokes native delivery inside the later direct button
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
   const button = screen.getByRole('button', { name: shareLabel })
+  expect(button).toBeEnabled()
+  expect(button.parentElement?.querySelector('.monthly-export-spinner')).toBeNull()
+  await new Promise(resolve => setTimeout(resolve, 130))
+  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
+
+  await user.click(button)
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
   expect(button).toBeDisabled()
   expect(button.parentElement?.querySelector('.monthly-export-spinner')).not.toBeNull()
-  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
+  expect(deliverFile).not.toHaveBeenCalled()
   act(() => { complete?.(pdf) })
   await waitFor(() => expect(button).toBeEnabled())
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(deliverFile).not.toHaveBeenCalled()
 
   await user.click(button)
-  expect(deliverFile).toHaveBeenCalledOnce()
   expect(deliverFile).toHaveBeenCalledWith(pdf, navigator)
   expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
   await waitFor(() => expect(button).toBeEnabled())
+  await user.click(button)
+  expect(deliverFile).toHaveBeenCalledTimes(2)
+  expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
 })
 
-it('retries preparation after a renderer failure without triggering a share or PNG work', async () => {
+it('retries preparation through the same icon after a PDF failure', async () => {
   prepareMonthlyPdf.mockRejectedValueOnce(new Error('render failed')).mockResolvedValueOnce(pdf)
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
   const button = screen.getByRole('button', { name: shareLabel })
+  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
+  await user.click(button)
   await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
   expect(button).toBeEnabled()
   expect(button).toHaveAccessibleName('Повторить: PDF')
@@ -66,16 +78,17 @@ it('retries preparation after a renderer failure without triggering a share or P
   expect(prepareMonthlyPdf).toHaveBeenCalledTimes(2)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(button).toHaveAccessibleName(shareLabel)
+  expect(deliverFile).not.toHaveBeenCalled()
 })
 
-it('retries native delivery with the already generated PDF', async () => {
+it('retries sharing a previously prepared PDF without another generation', async () => {
   prepareMonthlyPdf.mockResolvedValue(pdf)
   deliverFile.mockResolvedValueOnce('failed').mockResolvedValueOnce('shared')
   const user = userEvent.setup()
   render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
   const button = screen.getByRole('button', { name: shareLabel })
+  await user.click(button)
   await waitFor(() => expect(button).toBeEnabled())
-
   await user.click(button)
   await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
   expect(button).toHaveAccessibleName('Повторить: PDF')
@@ -83,4 +96,24 @@ it('retries native delivery with the already generated PDF', async () => {
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   expect(deliverFile).toHaveBeenCalledTimes(2)
   expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
+})
+
+it('does not publish an obsolete PDF if the selected month changes during generation', async () => {
+  let finishOld: ((file: File) => void) | undefined
+  prepareMonthlyPdf.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    .mockResolvedValueOnce(pdf)
+  const user = userEvent.setup()
+  const { rerender } = render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
+  await user.click(screen.getByRole('button', { name: shareLabel }))
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledOnce())
+  rerender(<MonthlyExportAction snapshot={{ ...snapshot, month: '2026-11' }} labels={labels} />)
+  act(() => { finishOld?.(new File(['old'], 'old.pdf', { type: 'application/pdf' })) })
+  const button = screen.getByRole('button', { name: shareLabel })
+  expect(button).toBeEnabled()
+  expect(deliverFile).not.toHaveBeenCalled()
+  await user.click(button)
+  await waitFor(() => expect(prepareMonthlyPdf).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(button).toBeEnabled())
+  await user.click(button)
+  expect(deliverFile).toHaveBeenCalledWith(pdf, navigator)
 })
