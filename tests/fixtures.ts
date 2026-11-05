@@ -5,9 +5,16 @@ export const FIXED_BROWSER_TIME = new Date('2026-09-04T09:30:00.000Z')
 export const test = base.extend<{ deterministicClock: true }>({
   deterministicClock: [async ({ page, context }, use) => {
     await page.clock.setFixedTime(FIXED_BROWSER_TIME)
+    // Never evaluate page JavaScript from an intercepted request. WebKit can stall
+    // request handling during navigation, leaving place selection permanently pending.
+    let offline = false
+    const setOffline = context.setOffline.bind(context)
+    context.setOffline = async value => {
+      await setOffline(value)
+      offline = value
+    }
     await context.route('https://secure.geonames.org/searchJSON**', async route => {
-      const online = await route.request().frame().page().evaluate(() => navigator.onLine).catch(() => false)
-      if (!online) {
+      if (offline) {
         await route.abort('internetdisconnected')
         return
       }
@@ -20,7 +27,11 @@ export const test = base.extend<{ deterministicClock: true }>({
         body: JSON.stringify({ geonames }),
       })
     })
-    await use(true)
+    try {
+      await use(true)
+    } finally {
+      context.setOffline = setOffline
+    }
   }, { auto: true }],
 })
 
