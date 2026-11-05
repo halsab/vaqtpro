@@ -14,12 +14,22 @@ interface IndexedDBFactoryLike {
 export function clearLegacyCatalogStorage(): Promise<void> {
   const factory = Reflect.get(globalThis, 'indexedDB') as IndexedDBFactoryLike | undefined
   if (!factory) return Promise.resolve()
-  cleanup ??= new Promise(resolve => {
-    const request = factory.deleteDatabase(databaseName)
-    const finish = () => resolve()
-    request.onsuccess = finish
-    request.onerror = finish
-    request.onblocked = finish
+  cleanup ??= new Promise((resolve, reject) => {
+    let request: DeleteRequestLike
+    try {
+      request = factory.deleteDatabase(databaseName)
+    } catch {
+      cleanup = undefined
+      reject(new Error('Legacy catalog cleanup failed'))
+      return
+    }
+    request.onsuccess = () => resolve()
+    const retry = () => {
+      cleanup = undefined
+      reject(new Error('Legacy catalog cleanup blocked or failed'))
+    }
+    request.onerror = retry
+    request.onblocked = retry
   })
   return cleanup
 }

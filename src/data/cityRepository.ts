@@ -8,7 +8,7 @@ const SEED_URL = '/data/cities/offline-seed.json'
 
 export async function loadOfflineCitySeed(): Promise<Result<CityDataset, DataFailure>> {
   try {
-    await clearLegacyCatalogStorage()
+    void clearLegacyCatalogStorage().catch(() => undefined)
     const response = await fetch(SEED_URL, { cache: 'no-store' })
     if (!response.ok) {
       const isOffline = !navigator.onLine

@@ -31,7 +31,7 @@ export function isCityRecord(value: unknown): value is CompactCityRecord {
 
 export function parseOfflineCitySeed(value: unknown): CityDataset {
   if (!object(value) || value.schemaVersion !== 1 || !isSource(value.source)
-    || !Array.isArray(value.cities) || value.cities.length > 1000
+    || !Array.isArray(value.cities) || value.cities.length > 10000
     || !value.cities.every(isCityRecord)
     || new Set(value.cities.map(city => city[0])).size !== value.cities.length) {
     throw new Error('Невалидный офлайн-набор мест')

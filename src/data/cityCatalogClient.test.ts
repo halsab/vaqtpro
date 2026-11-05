@@ -36,7 +36,7 @@ describe('online place search', () => {
     const service = createCityCatalogService({
       fetcher,
       geonamesUsername: 'vaqtpro-test',
-      loadOfflineSeed: () => Promise.resolve(success(offlineSeed),)
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed))
     })
 
     await service.load()
@@ -128,7 +128,7 @@ describe('online place search', () => {
     const service = createCityCatalogService({
       fetcher,
       geonamesUsername: 'vaqtpro-test',
-      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' }),)
+      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' }))
     })
 
     await expect(service.search('Село')).resolves.toMatchObject({
@@ -147,7 +147,7 @@ describe('online place search', () => {
       const service = createCityCatalogService({
         fetcher,
         geonamesUsername: 'vaqtpro-test',
-        loadOfflineSeed: () => Promise.resolve(success(offlineSeed),)
+        loadOfflineSeed: () => Promise.resolve(success(offlineSeed))
       })
       const pending = service.search('Киров')
       await vi.advanceTimersByTimeAsync(12_000)
@@ -176,7 +176,7 @@ describe('online place search', () => {
     const service = createCityCatalogService({
       fetcher: vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline')),
       geonamesUsername: 'vaqtpro-test',
-      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' }),)
+      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' }))
     })
 
     await expect(service.search('Село')).resolves.toEqual(failure({ kind: 'data', reason: 'unavailable' }))

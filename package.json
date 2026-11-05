@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
+    "prebuild": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
     "dev:lan": "sh scripts/dev-lan.sh",
     "build": "tsc -b && vite build",
     "build:check": "tsx scripts/checkBuildArtifacts.ts",
@@ -23,7 +25,9 @@
     "smoke:sw-update": "playwright test tests/sw-update.spec.ts --project=chromium-sw --no-deps --workers=1",
     "preview": "vite preview",
     "data:build:geography": "tsx scripts/buildLocalGeography.ts",
-    "data:check:geography": "tsx scripts/buildLocalGeography.ts --check"
+    "data:check:geography": "tsx scripts/buildLocalGeography.ts --check",
+    "data:update:offline-cities": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
+    "data:check:offline-cities": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts --check"
   },
   "dependencies": {
     "adhan": "4.4.6",

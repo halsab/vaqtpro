@@ -124,6 +124,9 @@ jobs:
         if: steps.changes.outputs.workflows == 'true'
         run: npm run actions:check
 
+      - name: Проверить генерацию офлайн-справочника
+        run: npm run data:update:offline-cities && npm run data:check:offline-cities
+
       - name: Проверить lint
         run: npm run lint
 
