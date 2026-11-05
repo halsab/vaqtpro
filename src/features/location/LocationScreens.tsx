@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { CityCatalogService, CitySearchResult } from '../../data/cityCatalog'
 import { cityFeatureKind, type City } from '../../domain/cities'
 import { compactPlaceLabel, getCountryLabel } from '../../domain/countryLabels'
@@ -122,6 +122,9 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
   const [text, setText] = useState('')
   const [completion, setCompletion] = useState<SearchCompletion | null>(null)
   const [retry, setRetry] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [moreFailed, setMoreFailed] = useState(false)
+  const pageRevision = useRef(0)
   const query = text.trim()
   useEffect(() => { onLoadCities() }, [onLoadCities])
   useEffect(() => () => onCancelSearch?.(), [onCancelSearch])
@@ -139,7 +142,24 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
   const ready = completion?.query === query ? completion : null
   const pending = query.length >= 2 && !ready
   const cities = ready?.data?.cities ?? []
-  const retrySearch = () => { setCompletion(null); setRetry(value => value + 1); onLoadCities(true) }
+  const retrySearch = () => { pageRevision.current += 1; setCompletion(null); setMoreFailed(false); setRetry(value => value + 1); onLoadCities(true) }
+  const loadMore = () => {
+    const offset = ready?.data?.nextOffset
+    if (offset === undefined || loadingMore || !ready?.data) return
+    const revision = ++pageRevision.current
+    setLoadingMore(true)
+    setMoreFailed(false)
+    void onSearchCities(query, locale, offset).then(result => {
+      if (revision !== pageRevision.current) return
+      if (!result.ok) { setMoreFailed(true); return }
+      setCompletion(previous => {
+        if (previous?.query !== query || !previous.data) return previous
+        const citiesById = new Map([...previous.data.cities, ...result.value.cities].map(city => [city.id, city]))
+        return { query, failed: false, data: { ...result.value, cities: [...citiesById.values()] } }
+      })
+    }).catch(() => { if (revision === pageRevision.current) setMoreFailed(true) })
+      .finally(() => { if (revision === pageRevision.current) setLoadingMore(false) })
+  }
   const status = query && query.length < 2 ? t('cityEnterMore')
     : pending ? t('citySearching')
     : query && ready?.failed ? t('citySearchFailed')
@@ -153,8 +173,8 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
     || (!query && ['offline', 'error'].includes(catalogStatus))
   return <Screen label={t('searchCity')} top={<BackButton onClick={onBack} label={t('cancel')} />}>
     <input className="text-field" data-screen-focus type="search" aria-label={t('searchPlaceLabel')} placeholder={t('locationSearch')} value={text}
-      onChange={event => { onCancelSearch?.(); setText(event.target.value); if (event.target.value.trim() !== query) setCompletion(null) }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
-    <ul className="city-results" aria-label={t('searchResults')} aria-busy={pending}>
+      onChange={event => { onCancelSearch?.(); pageRevision.current += 1; setMoreFailed(false); setLoadingMore(false); setText(event.target.value); if (event.target.value.trim() !== query) setCompletion(null) }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
+    <ul className="city-results" aria-label={t('searchResults')} aria-busy={pending || loadingMore}>
       {localities.map(item => <li key={item.id}><ActionRow className="city-result" title={item.name}
         secondary={<span className="note">{t('tatarstanLocalityResult')}</span>} onClick={() => onSelectLocality(item.id)} />
       </li>)}
@@ -168,6 +188,8 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
       })}
     </ul>
     {status ? <p className="note screen-space" role="status">{status}</p> : null}
+    {ready?.data?.nextOffset !== undefined ? <ActionButton className="screen-space" onClick={loadMore} disabled={loadingMore}>{t('cityMoreResults')}</ActionButton> : null}
+    {moreFailed ? <p className="note" role="alert">{t('cityMoreFailed')}</p> : null}
     {canRetry ? <ActionButton className="screen-space" onClick={retrySearch}>{t('retry')}</ActionButton> : null}
     {notice}
   </Screen>

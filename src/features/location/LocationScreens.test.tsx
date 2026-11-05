@@ -321,6 +321,21 @@ describe('экраны локации', () => {
     await waitFor(() => expect(search).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.queryByText('Онлайн-поиск недоступен. Показан небольшой офлайн-список мест.')).not.toBeInTheDocument())
   })
+  it('shows more GeoNames results without replacing prior selected candidates', async () => {
+    const second = { ...city, id: 42, name: 'Другое место' }
+    const search = vi.fn()
+      .mockResolvedValueOnce(success({ cities: [city], status: 'limited', nextOffset: 100 }))
+      .mockResolvedValueOnce(success({ cities: [second], status: 'complete' }))
+    render(<SearchScreen {...searchProps} onSearchCities={search} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Москва' } })
+    await screen.findByRole('button', { name: /Москва, Москва/ })
+    await userEvent.click(screen.getByRole('button', { name: 'Показать ещё' }))
+    await screen.findByRole('button', { name: /Другое место/ })
+    expect(screen.getByRole('button', { name: /Москва, Москва/ })).toBeVisible()
+    expect(search).toHaveBeenLastCalledWith('Москва', 'ru', 100)
+    expect(screen.queryByRole('button', { name: 'Показать ещё' })).not.toBeInTheDocument()
+  })
+
   it('оформляет триггер поиска как field-like, а гео-действие полноширинным', () => {
     render(<LocationScreen initial place={null} recentPlaces={[]} onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Найти место' })).toHaveClass('pill--field')

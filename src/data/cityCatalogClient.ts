@@ -79,11 +79,11 @@ function isGeoNamesResult(value: unknown): value is GeoNamesResult {
     && isCityFeatureCode(value.fcode)
 }
 
-function isLimited(value: unknown): boolean {
+function isLimited(value: unknown, startRow: number): boolean {
   if (!object(value)) return false
   const total = numberValue(value.totalResultsCount)
-  return (total !== null && total > MAX_RESULTS)
-    || (Array.isArray(value.geonames) && value.geonames.length >= MAX_RESULTS)
+  const rows = Array.isArray(value.geonames) ? value.geonames.length : 0
+  return total !== null ? total > startRow + rows : rows >= MAX_RESULTS
 }
 
 export function parseGeoNamesResults(value: unknown): City[] {
@@ -168,7 +168,10 @@ export function createCityCatalogService(dependencies: {
       : failure({ kind: 'data', reason: 'superseded' })
   }
 
-  const search = async (query: string, language = 'ru'): Promise<Result<CitySearchResult, DataFailure>> => {
+  const search = async (query: string, language = 'ru', startRow = 0): Promise<Result<CitySearchResult, DataFailure>> => {
+    if (!Number.isSafeInteger(startRow) || startRow < 0 || startRow > 10_000) {
+      return failure({ kind: 'data', reason: 'invalid' })
+    }
     const normalizedQuery = query.trim()
     const nameQuery = normalizedQuery.split(',')[0]?.trim() ?? ''
     const contextQuery = normalizedQuery.split(',').slice(1).join(' ').trim()
@@ -186,6 +189,7 @@ export function createCityCatalogService(dependencies: {
       const url = new URL(GEONAMES_SEARCH_URL)
       url.searchParams.set('name_startsWith', name)
       url.searchParams.set('maxRows', String(MAX_RESULTS))
+      if (startRow > 0) url.searchParams.set('startRow', String(startRow))
       url.searchParams.set('featureClass', 'P')
       url.searchParams.set('orderby', 'relevance')
       url.searchParams.set('lang', language)
@@ -201,26 +205,31 @@ export function createCityCatalogService(dependencies: {
       if (!response.ok) return await offlineFallback(normalizedQuery, revision)
       const raw: unknown = await response.json()
       let cities = parseGeoNamesResults(raw)
-      let limited = isLimited(raw)
+      let limited = isLimited(raw, startRow)
+      let received = Array.isArray((raw as { geonames?: unknown }).geonames)
+        ? (raw as { geonames: unknown[] }).geonames.length : 0
       if (revision !== searchRevision) return failure({ kind: 'data', reason: 'superseded' })
       const transliterated = transliterateLatinQuery(nameQuery)
-      if (!cities.length && transliterated) {
+      if (!cities.length && transliterated && startRow === 0) {
         const fallbackUrl = makeUrl(transliterated)
         const fallbackResponse = await fetcher(fallbackUrl, { cache: 'no-store', signal: controller.signal })
         if (!fallbackResponse.ok) return await offlineFallback(normalizedQuery, revision)
         const retryRaw: unknown = await fallbackResponse.json()
         cities = parseGeoNamesResults(retryRaw)
-        limited = isLimited(retryRaw)
+        limited = isLimited(retryRaw, startRow)
+        received = Array.isArray((retryRaw as { geonames?: unknown }).geonames)
+          ? (retryRaw as { geonames: unknown[] }).geonames.length : 0
       }
       if (contextQuery) {
         const terms = normalizeCitySearch(contextQuery).split(/\s+/).filter(Boolean)
         cities = cities.filter(city => {
-          const context = normalizeCitySearch(`${city.admin1Name} ${getCountryName(city.countryCode)}`)
+          const context = normalizeCitySearch(`${city.admin2Name ?? ''} ${city.admin1Name} ${getCountryName(city.countryCode)} ${city.countryCode}`)
           return terms.every(term => context.includes(term))
         })
       }
       return revision === searchRevision
-        ? success({ cities, status: limited ? 'limited' : 'complete' })
+        ? success({ cities, status: limited ? 'limited' : 'complete',
+          ...(limited && received > 0 ? { nextOffset: startRow + received } : {}) })
         : failure({ kind: 'data', reason: 'superseded' })
     } catch {
       if (revision !== searchRevision) return failure({ kind: 'data', reason: 'superseded' })

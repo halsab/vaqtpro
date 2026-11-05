@@ -229,9 +229,25 @@ describe('online place search', () => {
     expect(new URL(fetcher.mock.calls[0]?.[0] as URL).searchParams.get('name_startsWith')).toBe('Облово')
   })
 
+  it('fetches the next GeoNames page and stops when it is exhausted', async () => {
+    const row = (id: number) => ({ geonameId: id, name: 'Облово', lat: 55, lng: 49, countryCode: 'RU',
+      timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' })
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ totalResultsCount: 101, geonames: [row(1)] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ totalResultsCount: 101, geonames: [row(2)] })))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    const first = await service.search('Облово')
+    expect(first).toMatchObject({ ok: true, value: { status: 'limited', nextOffset: 1, cities: [{ id: 1 }] } })
+    const next = await service.search('Облово', 'ru', 1)
+    expect(next).toMatchObject({ ok: true, value: { status: 'limited', nextOffset: 2, cities: [{ id: 2 }] } })
+    expect(new URL(fetcher.mock.calls[1]?.[0] as URL).searchParams.get('startRow')).toBe('1')
+    await expect(service.search('Облово', 'ru', -1)).resolves.toMatchObject({ ok: false, error: { reason: 'invalid' } })
+  })
+
   it('does not call GeoNames without an explicitly configured username', async () => {
     const fetcher = vi.fn<typeof fetch>()
-    const service = createCityCatalogService({ fetcher, loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    const service = createCityCatalogService({ fetcher, geonamesUsername: '', loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
 
     await expect(service.search('Киров')).resolves.toMatchObject({
       ok: true,
