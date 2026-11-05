@@ -190,7 +190,7 @@ describe('навигация экранов', () => {
       },
     }
 
-    act(() => window.dispatchEvent(new PopStateEvent('popstate', { state: malformedState })))
+    act(() => { window.dispatchEvent(new PopStateEvent('popstate', { state: malformedState })) })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Рамадан' })).toBeVisible())
   })
 
