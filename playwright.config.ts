@@ -33,6 +33,7 @@ export default defineConfig({
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
         '**/qibla.spec.ts',
+        '**/fasting-duas.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], launchOptions: {
         args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],

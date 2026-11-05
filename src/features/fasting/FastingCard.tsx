@@ -35,7 +35,7 @@ function FastingEndpoint({ prefix, dateLabel, time, compact }: FastingEndpointDa
   </span>
 }
 
-export function FastingCard({ events, preferences, selectedDate, today, timeZone, correction, hijriSupported, now }: {
+export function FastingCard({ events, preferences, selectedDate, today, timeZone, correction, hijriSupported, now, onOpen }: {
   events: FastingScheduleEvents
   preferences: FastingModePreferences
   selectedDate: string
@@ -44,6 +44,7 @@ export function FastingCard({ events, preferences, selectedDate, today, timeZone
   correction: -1 | 0 | 1
   hijriSupported: boolean
   now: () => Date
+  onOpen?: () => void
 }) {
   const { locale, t } = useLocalization()
   const currentTime = now()
@@ -91,23 +92,23 @@ export function FastingCard({ events, preferences, selectedDate, today, timeZone
   const [firstEndpoint, secondEndpoint] = endpoints
   const endpointsDescription = t('fastingEndpointsDescription', { first: describe(firstEndpoint), second: describe(secondEndpoint) })
 
-  return <div className="fasting-card">
-    <div className="fasting-card-heading">
+  return <button className="fasting-card" type="button" aria-label={t('fastingTitle')} onClick={onOpen}>
+    <span className="fasting-card-heading">
       <span>{t('fastingTitle')}</span>
       {duration ? <span className="fasting-duration">{duration}</span> : null}
-    </div>
-    <div className="fasting-card-countdown">
+    </span>
+    <span className="fasting-card-countdown">
       <span className="fasting-card-label">{countdownLabel}</span>
       <time className="fasting-card-timer" role="timer" aria-live="off" aria-label={t('countdownAria', { label: countdownLabel, remaining: countdown })}>
         {countdown}
       </time>
-    </div>
-    <div className="fasting-progress" role="progressbar" aria-label={progressLabel} aria-valuemin={0} aria-valuemax={100}
+    </span>
+    <span className="fasting-progress" role="progressbar" aria-label={progressLabel} aria-valuemin={0} aria-valuemax={100}
       aria-valuenow={progressPercent} aria-valuetext={t('fastingProgressPercent', { percent: progressPercent })}>
       <span className="fasting-progress-fill" style={{ width: `${progress * 100}%` }} />
-    </div>
-    <div className="fasting-endpoints" role="group" aria-label={endpointsDescription}>
+    </span>
+    <span className="fasting-endpoints" role="group" aria-label={endpointsDescription}>
       {endpoints.map(endpoint => <FastingEndpoint key={`${endpoint.prefix}:${endpoint.time}`} {...endpoint} />)}
-    </div>
-  </div>
+    </span>
+  </button>
 }

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { isReligiousEventId, type ReligiousEventId } from '../domain/religiousEvents'
+import type { FastingDuaId } from '../features/fasting/fastingDuaContent'
 import { runNavigationTransition } from './navigationTransition'
 
-const SCREENS = ['home', 'date', 'monthly-schedule', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event', 'qibla'] as const
+const SCREENS = ['home', 'date', 'monthly-schedule', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event', 'fasting', 'fasting-dua', 'qibla'] as const
 export type AppScreen = typeof SCREENS[number]
-interface Entry { screen: AppScreen; returnFocus: string | null; religiousEventId?: ReligiousEventId; scrollTop?: number }
-type NavigationTarget = AppScreen | { screen: 'religious-event'; religiousEventId: ReligiousEventId }
+interface Entry { screen: AppScreen; returnFocus: string | null; religiousEventId?: ReligiousEventId; fastingDuaId?: FastingDuaId; scrollTop?: number }
+type NavigationTarget = AppScreen | { screen: 'religious-event'; religiousEventId: ReligiousEventId } | { screen: 'fasting-dua'; fastingDuaId: FastingDuaId }
 const HOME: Entry[] = [{ screen: 'home', returnFocus: null }]
 
 function readEntries(value: unknown, session: string): Entry[] | null {
@@ -17,7 +18,8 @@ function readEntries(value: unknown, session: string): Entry[] | null {
     && 'screen' in entry && SCREENS.some(screen => screen === entry.screen)
     && 'returnFocus' in entry && (entry.returnFocus === null || typeof entry.returnFocus === 'string')
     && (!('scrollTop' in entry) || typeof entry.scrollTop === 'number')
-    && (entry.screen !== 'religious-event' || ('religiousEventId' in entry && isReligiousEventId(entry.religiousEventId))))
+    && (entry.screen !== 'religious-event' || ('religiousEventId' in entry && isReligiousEventId(entry.religiousEventId)))
+    && (entry.screen !== 'fasting-dua' || ('fastingDuaId' in entry && ['suhur', 'iftar'].includes(String(entry.fastingDuaId)))))
   return entries.length > 0 && entries.every(valid) ? entries : null
 }
 
@@ -92,7 +94,8 @@ export function useAppNavigation() {
     const next: Entry[] = [...currentEntries, {
       screen,
       returnFocus: trigger,
-      ...(typeof target === 'string' ? {} : { religiousEventId: target.religiousEventId }),
+      ...(typeof target === 'string' ? {} : target.screen === 'religious-event'
+        ? { religiousEventId: target.religiousEventId } : { fastingDuaId: target.fastingDuaId }),
     }]
     runNavigationTransition(() => {
       window.history.replaceState({ salahNavigation: { session, entries: currentEntries } }, '')
@@ -146,5 +149,6 @@ export function useAppNavigation() {
 
   const active = entries.at(-1) ?? { screen: 'home', returnFocus: null }
   return { screen: active.screen, religiousEventId: active.screen === 'religious-event' ? active.religiousEventId ?? null : null,
+    fastingDuaId: active.screen === 'fasting-dua' ? active.fastingDuaId ?? null : null,
     open, openPrepared, back, home }
 }

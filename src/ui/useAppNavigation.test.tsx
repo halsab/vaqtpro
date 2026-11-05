@@ -68,6 +68,21 @@ function NestedReligiousNavigationExample() {
   return <><p>{navigation.religiousEventId}</p><button onClick={navigation.back}>Назад</button></>
 }
 
+function FastingNavigationExample() {
+  const navigation = useAppNavigation()
+  const [homeValue, setHomeValue] = useState(0)
+  if (navigation.screen === 'home') return <>
+    <p>home value: {homeValue}</p>
+    <button onClick={() => setHomeValue(value => value + 1)}>Change Home</button>
+    <button id="fasting-card" onClick={() => navigation.open('fasting')}>Пост</button>
+  </>
+  if (navigation.screen === 'fasting') return <>
+    <button onClick={() => navigation.open({ screen: 'fasting-dua', fastingDuaId: 'suhur' })}>Дуа сухура</button>
+    <button onClick={navigation.back}>Назад</button>
+  </>
+  return <><p>{navigation.fastingDuaId}</p><button onClick={navigation.back}>Назад</button></>
+}
+
 function controlFrames() {
   const callbacks = new Map<number, FrameRequestCallback>()
   let id = 0
@@ -81,6 +96,21 @@ function controlFrames() {
 }
 
 describe('навигация экранов', () => {
+  it('проходит Home → Пост → дуа и возвращает исходное состояние Home', async () => {
+    const user = userEvent.setup()
+    render(<FastingNavigationExample />)
+    await user.click(screen.getByRole('button', { name: 'Change Home' }))
+    const card = screen.getByRole('button', { name: 'Пост' })
+    await user.click(card)
+    await user.click(screen.getByRole('button', { name: 'Дуа сухура' }))
+    expect(screen.getByText('suhur')).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Назад' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Дуа сухура' })).toBeVisible())
+    await user.click(screen.getByRole('button', { name: 'Назад' }))
+    await waitFor(() => expect(screen.getByText('home value: 1')).toBeVisible())
+  })
+
   it('отменяет подготовленную навигацию, если пользователь выбрал другой экран', async () => {
     let resolvePreparation: (() => void) | undefined
     const prepare = () => new Promise<void>(resolve => { resolvePreparation = resolve })

@@ -43,6 +43,8 @@ import { compactPlaceLabel } from './domain/countryLabels'
 import { useCityCatalog } from './features/location/useCityCatalog'
 import { ScheduleContent } from './features/schedule/ScheduleContent'
 import { ReligiousEventsScreen } from './features/religiousEvents/ReligiousEventsScreen'
+import { FastingDuaScreen } from './features/fasting/FastingDuaScreen'
+import { FastingScreen } from './features/fasting/FastingScreen'
 import { usePrayerSchedules } from './features/schedule/usePrayerSchedules'
 import { activateFastScheduleContext, currentFastScheduleGeneration, invalidateFastScheduleSnapshot,
   readFastScheduleSnapshot, writeFastScheduleSnapshot } from './features/schedule/fastScheduleSnapshot'
@@ -773,6 +775,8 @@ export function App({
     || navigation.screen === 'source-info'
     || navigation.screen === 'religious-events'
     || navigation.screen === 'religious-event'
+    || navigation.screen === 'fasting'
+    || navigation.screen === 'fasting-dua'
     || navigation.screen === 'qibla'
     || navigation.screen === 'date'
     || navigation.screen === 'monthly-schedule'
@@ -831,6 +835,7 @@ export function App({
             timeZone={context?.timeZone}
             onSystemClockChange={syncCurrentTime}
             onOpenReligiousEvent={openReligiousEvent}
+            onOpenFasting={() => openImmediately('fasting')}
             top={<AppHeader locationButtonRef={locationButtonRef} locationLabel={homeLocationLabel} locationTime={locationTime} selectedDate={selectedDate}
               calendarPreferences={calendarPreferences} onOpenLocation={openLocationDialog} onOpenDate={() => openScreen('date')} />}
             actions={<div className="home-toolbar-actions">
@@ -888,6 +893,10 @@ export function App({
       {navigation.screen === 'religious-event' && navigation.religiousEventId
         ? LoadedReligiousEventScreen ? <LoadedReligiousEventScreen eventId={navigation.religiousEventId} onBack={backScreen} /> : null
         : null}
+      {navigation.screen === 'fasting' ? <FastingScreen onBack={backScreen}
+        onOpenDua={fastingDuaId => openImmediately({ screen: 'fasting-dua', fastingDuaId })} /> : null}
+      {navigation.screen === 'fasting-dua' && navigation.fastingDuaId
+        ? <FastingDuaScreen duaId={navigation.fastingDuaId} onBack={backScreen} /> : null}
       {settingsDialogOpen && SettingsScreens ? <SettingsScreens screen={navigation.screen} preferences={preferences} onChange={updatePreferences}
         fastingModeEnabled={fastingModeEnabled} onFastingModeChange={updateFastingMode}
         themeFamily={themeFamily} onThemeFamilyChange={updateThemeFamily}

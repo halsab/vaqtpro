@@ -65,6 +65,7 @@ interface ScheduleContentProps {
   fastingEvents?: FastingScheduleEvents
   timeZone?: string | null | undefined
   onOpenReligiousEvent?: (eventId: ReligiousEventId, origin: HTMLElement) => void
+  onOpenFasting?: () => void
   onChangeDate: (date: string) => void
   onRetrySchedule: () => void
   onSystemClockChange?: () => void
@@ -76,7 +77,7 @@ interface ScheduleContentProps {
 export function ScheduleContent({ schedule, schedules, scheduleLoading, scheduleError, selectedDate, today,
   contextReady = true, enrichmentError = false, onRetryEnrichment = () => {},
   currentTime, now, hijriSupported = false, fastingMode = DEFAULT_FASTING_MODE_PREFERENCES,
-  fastingModeEnabled = false, fastingEvents, timeZone, onOpenReligiousEvent = () => {},
+  fastingModeEnabled = false, fastingEvents, timeZone, onOpenReligiousEvent = () => {}, onOpenFasting,
   onChangeDate, onRetrySchedule, onSystemClockChange, top, actions, notice, calendarPreferences = DEFAULT_CALENDAR_PREFERENCES,
 }: ScheduleContentProps) {
   const { t } = useLocalization()
@@ -125,7 +126,7 @@ export function ScheduleContent({ schedule, schedules, scheduleLoading, schedule
             </div> : null}
             {live && fastingModeEnabled && timeZone ? <FastingCard events={fastingScheduleEvents} preferences={fastingMode}
               selectedDate={selectedDate} today={today} timeZone={timeZone} correction={calendarPreferences.correction}
-              hijriSupported={hijriSupported} now={now} /> : null}
+              hijriSupported={hijriSupported} now={now} {...(onOpenFasting ? { onOpen: onOpenFasting } : {})} /> : null}
             {schedule.estimatedPrayers.length > 0 ? <p className="note screen-space">{t('estimatedByHighLatitude')}</p> : null}
             {live && !next ? <p className="note screen-space">{t('nextEventUnavailable')}</p> : null}
           </>}
