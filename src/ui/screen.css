@@ -350,6 +350,8 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .share-label { display: block; margin-bottom: 8px; }
 .app-share-url { font: var(--font-body); appearance: none; display: block; width: 100%; height: 2.9em; min-height: 2.9em; padding: 0; margin: 0; border: 0; border-radius: 0; resize: none; background: var(--background-secondary); color: var(--text-primary); letter-spacing: 0; overflow-wrap: anywhere; text-align: center; }
 .markdown-article { font: var(--font-body); overflow-wrap: anywhere; }
+.ramadan-article-flow { display: grid; gap: 16px; }
+.ramadan-dhikr-arabic { direction: rtl; text-align: right; unicode-bidi: plaintext; overflow-wrap: anywhere; }
 .markdown-article > * + * { margin-top: 16px; }
 .markdown-article > * + blockquote { margin-top: 18px; }
 .markdown-article > blockquote + * { margin-top: 18px; }

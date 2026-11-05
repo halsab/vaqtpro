@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { DateScreen } from '../features/calendar/DateScreen'
 import { DEFAULT_CALENDAR_PREFERENCES } from '../domain/calendar'
 import { ReligiousEventsScreen } from '../features/religiousEvents/ReligiousEventsScreen'
+import { ReligiousEventScreen } from '../features/religiousEvents/ReligiousEventScreen'
+import { RamadanDhikrScreen } from '../features/religiousEvents/RamadanDhikrScreen'
 import { useAppNavigation } from './useAppNavigation'
 
 function NavigationExample() {
@@ -55,6 +57,16 @@ function ReligiousNavigationExample() {
   return navigation.screen === 'home'
     ? <button id="religious-event-banner" onClick={() => navigation.open({ screen: 'religious-event', religiousEventId: 'arafa' })}>День Арафа</button>
     : <><p>{navigation.religiousEventId}</p><button onClick={navigation.back}>Назад</button></>
+}
+
+function RamadanDhikrNavigationExample() {
+  const navigation = useAppNavigation()
+  if (navigation.screen === 'home') return <button id="ramadan-banner" onClick={() => navigation.open({ screen: 'religious-event', religiousEventId: 'ramadan' })}>Рамадан</button>
+  if (navigation.screen === 'religious-event' && navigation.religiousEventId) return <ReligiousEventScreen
+    eventId={navigation.religiousEventId} onBack={navigation.back}
+    onOpenRamadanDhikr={ramadanDhikrId => navigation.open({ screen: 'ramadan-dhikr', ramadanDhikrId })} />
+  if (navigation.screen === 'ramadan-dhikr' && navigation.ramadanDhikrId) return <RamadanDhikrScreen dhikrId={navigation.ramadanDhikrId} onBack={navigation.back} />
+  return null
 }
 
 function NestedReligiousNavigationExample() {
@@ -141,6 +153,20 @@ describe('навигация экранов', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'День Арафа' })).toHaveFocus())
     act(() => { window.history.forward() })
     await waitFor(() => expect(screen.getByText('arafa')).toBeVisible())
+  })
+
+  it('сохраняет Ramadan article → dhikr identity в Back/Forward и возвращает фокус выбранной декаде', async () => {
+    const user = userEvent.setup()
+    render(<RamadanDhikrNavigationExample />)
+    await user.click(screen.getByRole('button', { name: 'Рамадан' }))
+    const selected = screen.getByRole('button', { name: 'Зикр вторых 10 дней' })
+    await user.click(selected)
+    expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Назад' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Зикр вторых 10 дней' })).toHaveFocus())
+    act(() => { window.history.forward() })
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible())
   })
 
   it.each(['Сегодня', 'Месяц'])('отложенный автофокус не перехватывает фокус после действия «%s»', action => {

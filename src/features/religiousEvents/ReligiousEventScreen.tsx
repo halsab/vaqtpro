@@ -4,8 +4,14 @@ import { BackButton, Screen } from '../../ui/Screen'
 import { getReligiousEventContent } from './religiousEventContent'
 import { useLocalization } from '../../localization'
 import { localizedEventTitle } from '../../localization/religiousEvents'
+import { ActionRow } from '../../ui/controls'
+import { RAMADAN_DHIKR_IDS, RAMADAN_DHIKR_TITLES, type RamadanDhikrId } from './ramadanDhikrContent'
 
-export function ReligiousEventScreen({ eventId, onBack }: { eventId: ReligiousEventId; onBack: () => void }) {
+export function ReligiousEventScreen({ eventId, onBack, onOpenRamadanDhikr }: {
+  eventId: ReligiousEventId
+  onBack: () => void
+  onOpenRamadanDhikr?: (id: RamadanDhikrId) => void
+}) {
   const { locale, t } = useLocalization()
   const definition = RELIGIOUS_EVENTS.find(event => event.id === eventId)
   const resolved = getReligiousEventContent(eventId, locale)
@@ -13,6 +19,19 @@ export function ReligiousEventScreen({ eventId, onBack }: { eventId: ReligiousEv
   if (resolved.status !== 'resolved') return <Screen label={localizedEventTitle(eventId, locale)} top={<BackButton onClick={onBack} />}><p role="status">{t('contentUnavailable')}</p></Screen>
 
   return <Screen label={localizedEventTitle(eventId, locale)} top={<BackButton onClick={onBack} />}>
-    <MarkdownArticle content={resolved.content} />
+    {eventId === 'ramadan' && onOpenRamadanDhikr
+      ? <div className="ramadan-article-flow">
+        <div className="screen-stack">
+          {RAMADAN_DHIKR_IDS.map(id => <ActionRow
+            key={id}
+            id={`ramadan-dhikr-${id}`}
+            title={RAMADAN_DHIKR_TITLES[id]}
+            aria-label={RAMADAN_DHIKR_TITLES[id]}
+            onClick={() => onOpenRamadanDhikr(id)}
+          />)}
+        </div>
+        <MarkdownArticle content={resolved.content} />
+      </div>
+      : <MarkdownArticle content={resolved.content} />}
   </Screen>
 }

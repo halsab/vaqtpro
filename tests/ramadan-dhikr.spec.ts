@@ -1,0 +1,37 @@
+import { choosePlace, expect, test } from './fixtures'
+
+test('Ramadan dhikr pages support narrow layout, keyboard navigation and browser history', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 })
+  await page.goto('./')
+  await choosePlace(page, 'Стамбул', 'Стамбул, Стамбул, Турция')
+  await page.locator('#home-date').click()
+  await page.getByRole('button', { name: 'Праздники и события' }).click()
+  await page.getByRole('button', { name: /Начало Рамадана/ }).click()
+
+  const article = page.getByRole('region', { name: 'Рамадан' })
+  await expect(article).toBeVisible()
+  const dhikrButtons = article.getByRole('button', { name: /^Зикр/ })
+  await expect(dhikrButtons).toHaveCount(3)
+  const buttonWidths = await dhikrButtons.evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width))
+  expect(buttonWidths.every(width => width >= 44)).toBe(true)
+  await expect(article.locator('.markdown-article h1')).toHaveText('Рамадан')
+
+  await dhikrButtons.first().focus()
+  await page.keyboard.press('Enter')
+  const firstPage = page.getByRole('region', { name: 'Зикр первых 10 дней' })
+  await expect(firstPage).toBeVisible()
+  await expect(firstPage.getByRole('heading', { name: 'Зикр первых 10 дней', level: 1 })).toBeVisible()
+  await expect(firstPage.locator('.ramadan-dhikr-arabic')).toHaveAttribute('dir', 'rtl')
+  await expect(firstPage.locator('.ramadan-dhikr-arabic')).toHaveAttribute('lang', 'ar')
+  expect(await firstPage.locator('.ramadan-dhikr-arabic').evaluate(element => getComputedStyle(element).direction)).toBe('rtl')
+  expect(await firstPage.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(article.getByRole('button', { name: 'Зикр первых 10 дней' })).toBeFocused()
+  await page.goForward()
+  await expect(page.getByRole('region', { name: 'Зикр первых 10 дней' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(page.getByRole('region', { name: 'Рамадан' })).toBeVisible()
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(page.getByRole('region', { name: 'Праздники и события' })).toBeVisible()
+})
