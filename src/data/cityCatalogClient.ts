@@ -26,6 +26,7 @@ interface GeoNamesResult {
   countryCode: string
   adminCode1?: string
   adminName1?: string
+  adminName2?: string
   population?: number | string
   timezone: { timeZoneId: string }
   fcode: CityFeatureCode
@@ -72,6 +73,7 @@ function isGeoNamesResult(value: unknown): value is GeoNamesResult {
     && typeof value.countryCode === 'string' && /^[A-Z]{2}$/.test(value.countryCode)
     && (value.adminCode1 === undefined || typeof value.adminCode1 === 'string')
     && (value.adminName1 === undefined || typeof value.adminName1 === 'string')
+    && (value.adminName2 === undefined || typeof value.adminName2 === 'string')
     && population !== null && Number.isSafeInteger(population) && population >= 0
     && object(value.timezone) && typeof value.timezone.timeZoneId === 'string' && isValidTimeZone(value.timezone.timeZoneId)
     && isCityFeatureCode(value.fcode)
@@ -102,6 +104,7 @@ export function parseGeoNamesResults(value: unknown): City[] {
       countryCode: row.countryCode,
       admin1Code: row.adminCode1?.trim() ?? '',
       admin1Name: row.adminName1?.trim() ?? '',
+      ...(row.adminName2?.trim() ? { admin2Name: row.adminName2.trim() } : {}),
       latitude: Number(row.lat),
       longitude: Number(row.lng),
       population: row.population === undefined ? 0 : Number(row.population),

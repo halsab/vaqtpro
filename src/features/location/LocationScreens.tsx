@@ -137,7 +137,7 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
   }, [query, onSearchCities, locale, retry])
   const localities = useMemo(() => query ? locations.filter(item => item.name.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru'))) : [], [locations, query])
   const ready = completion?.query === query ? completion : null
-  const pending = Boolean(query.length >= 2 && !ready)
+  const pending = query.length >= 2 && !ready
   const cities = ready?.data?.cities ?? []
   const retrySearch = () => { setCompletion(null); setRetry(value => value + 1); onLoadCities(true) }
   const status = query && query.length < 2 ? t('cityEnterMore')
@@ -160,7 +160,7 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
       </li>)}
       {cities.map(city => {
         const sameLabel = cities.some(other => other.id !== city.id && localizedCityLabel(other, false, locale, t) === localizedCityLabel(city, false, locale, t))
-        const entityContext = `${localizedCityRegion(city, t)}, ${getCountryLabel(city.countryCode, locale)}, ${cityFeatureLabel(city, t)}`
+        const entityContext = `${[city.admin2Name, localizedCityRegion(city, t), getCountryLabel(city.countryCode, locale), cityFeatureLabel(city, t)].filter(Boolean).join(', ')}`
         return <li key={city.id}><ActionRow className="city-result" aria-label={`${localizedCityLabel(city, sameLabel, locale, t)}, ${cityFeatureLabel(city, t)}`} title={city.name}
           secondary={<span className="note">{entityContext}{sameLabel ? ` · ${city.id}` : ''}</span>}
           onClick={() => onSelectCity(city)} />

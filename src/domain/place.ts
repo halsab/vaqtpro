@@ -1,4 +1,4 @@
-import { formatCityLabel, type City } from './cities'
+import { formatCityLabel, type City, type CityFeatureCode } from './cities'
 import { haversineDistanceKm, isConfirmedTatarstan } from './location'
 import { resolveGpsGeography, validPosition, type Coverage, type CoverageGeometry } from './localGeography'
 import { MOSCOW_TIME_ZONE, isValidTimeZone } from './locationTime'
@@ -10,6 +10,7 @@ export interface Place extends SavedCoordinates {
   name: string
   /** Unformatted catalog name; never derive it by splitting a display label. */
   cityName?: string
+  featureCode?: CityFeatureCode | null
   region: { code: string; name: string } | null
   coverage: Coverage
   automaticTimeZone: { id: string; source: 'city' | 'device' | 'legacy' }
@@ -60,7 +61,9 @@ export function createCityPlace(city: City, timestamp: number): Place {
       : null
   return {
     id: `geonames:${city.id}`, selection: 'city', cityId: city.id,
-    name: formatCityLabel(city), cityName: city.name, latitude: city.latitude, longitude: city.longitude,
+    name: formatCityLabel(city), cityName: city.name,
+    ...(city.featureCode ? { featureCode: city.featureCode } : {}),
+    latitude: city.latitude, longitude: city.longitude,
     accuracy: null, timestamp, timeZone: city.timeZone,
     automaticTimeZone: { id: city.timeZone, source: 'city' },
     region,

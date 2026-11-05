@@ -1,3 +1,4 @@
+import { isCityFeatureCode } from './cities'
 import { getDeviceTimeZone, isValidTimeZone } from './locationTime'
 import { createLocalityPlace, restorePlaceMetadata, type Place, type RestorablePlace } from './place'
 import { validPosition } from './localGeography'
@@ -38,6 +39,7 @@ export function isRestorablePlace(value: unknown): value is RestorablePlace {
   const legacyOverride = (value as { timeZoneOverride?: unknown }).timeZoneOverride
   return Boolean(restoreSavedCoordinates(value) && typeof place.id === 'string' && place.id
     && typeof place.name === 'string' && (place.cityName === undefined || typeof place.cityName === 'string')
+    && (place.featureCode === undefined || place.featureCode === null || isCityFeatureCode(place.featureCode))
     && ['gps', 'city', 'official'].includes(String(selection))
     && ['inside', 'outside', 'uncertain', 'unavailable'].includes(place.coverage ?? '')
     && (place.region === null || (place.region && typeof place.region.code === 'string' && typeof place.region.name === 'string'))

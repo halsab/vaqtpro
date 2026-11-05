@@ -12,6 +12,7 @@ export interface City {
   population: number
   timeZone: string
   featureCode?: CityFeatureCode | null
+  admin2Name?: string
 }
 
 export const CITY_FEATURE_CODES = [

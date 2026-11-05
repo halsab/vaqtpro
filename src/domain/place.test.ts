@@ -101,3 +101,14 @@ describe('place identity and timezone', () => {
     expect(isFreshGpsPlace(gps(), 0)).toBe(false)
   })
 })
+
+it('retains a detailed populated-place type through offline persistence', () => {
+  const city = createCityPlace({
+    id: 12345, name: 'Село', countryCode: 'RU', admin1Code: '73',
+    admin1Name: 'Татарстан', latitude: 55.1, longitude: 49.1, population: 300,
+    timeZone: 'Europe/Moscow', featureCode: 'PPLX',
+  }, 123)
+  expect(city.featureCode).toBe('PPLX')
+  const saved = placeFromChoice({ mode: 'calculated', source: 'manual', coordinates: city, place: city }, [])
+  expect(saved).toMatchObject({ id: 'geonames:12345', featureCode: 'PPLX', latitude: 55.1, longitude: 49.1 })
+})
