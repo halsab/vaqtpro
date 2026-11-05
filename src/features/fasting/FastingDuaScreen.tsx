@@ -1,0 +1,12 @@
+import { BackButton, Screen } from '../../ui/Screen'
+import { RecitationArticle } from '../../ui/RecitationArticle'
+import { useLocalization } from '../../localization'
+import { getFastingDuaContent, FASTING_DUA_TITLE_KEYS, type FastingDuaId } from './fastingDuaContent'
+
+export function FastingDuaScreen({ duaId, onBack }: { duaId: FastingDuaId; onBack: () => void }) {
+  const { t } = useLocalization()
+  const title = t(FASTING_DUA_TITLE_KEYS[duaId])
+  return <Screen label={title} top={<BackButton onClick={onBack} />}>
+    <RecitationArticle title={title} content={getFastingDuaContent(duaId)} />
+  </Screen>
+}

@@ -1,0 +1,60 @@
+import { choosePlace, expect, expectSchedule, test } from './fixtures'
+
+test('fasting dua flow stays keyboard accessible and works offline at 320px in both color schemes', async ({ page, context }) => {
+  await page.setViewportSize({ width: 320, height: 640 })
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-settings').click()
+  const fastingMode = page.getByRole('switch')
+  if (await fastingMode.getAttribute('aria-checked') !== 'true') await fastingMode.click()
+  await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expectSchedule(page)
+  await expect(page.getByRole('button', { name: 'Пост' })).toBeVisible()
+  await expect(page.getByRole('progressbar')).toBeVisible()
+  await expect(page.locator('.fasting-card').getByRole('timer')).toBeVisible()
+
+  await page.evaluate(async () => navigator.serviceWorker.ready)
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Пост' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+
+  await context.setOffline(true)
+  try {
+    await page.getByRole('button', { name: 'Пост' }).focus()
+    await page.keyboard.press('Enter')
+    const menu = page.getByRole('region', { name: 'Пост' })
+    await expect(menu.getByRole('heading', { name: 'Пост' })).toBeVisible()
+    await expect(menu.locator('.screen-stack button')).toHaveCount(2)
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.themeTone)).toBe('dark')
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+    const suhur = menu.getByRole('button', { name: 'Дуа сухура' })
+    await suhur.focus()
+    await page.keyboard.press('Enter')
+    const suhurArticle = page.getByRole('region', { name: 'Дуа сухура' })
+    await expect(suhurArticle.locator('h1')).toHaveText('Дуа сухура')
+    await expect(suhurArticle.locator('[dir="rtl"][lang="ar"]')).toContainText('نَوَيْتُ أَنْ أَصُومَ')
+    await expect.poll(() => suhurArticle.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+
+    await page.emulateMedia({ colorScheme: 'light' })
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.themeTone)).toBe('light')
+    await expect.poll(() => suhurArticle.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await suhurArticle.getByRole('button', { name: 'Назад' }).click()
+    await expect(menu.getByRole('button', { name: 'Дуа сухура' })).toBeFocused()
+
+    const iftar = menu.getByRole('button', { name: 'Дуа ифтара' })
+    await iftar.focus()
+    await page.keyboard.press('Enter')
+    const iftarArticle = page.getByRole('region', { name: 'Дуа ифтара' })
+    await expect(iftarArticle.locator('h1')).toHaveText('Дуа ифтара')
+    await expect(iftarArticle.locator('[dir="rtl"][lang="ar"]')).toContainText('اللَّهُمَّ لَكَ صُمْتُ')
+    await iftarArticle.getByRole('button', { name: 'Назад' }).click()
+    await expect(menu).toBeVisible()
+    await menu.getByRole('button', { name: 'Назад' }).click()
+    await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Пост' })).toBeFocused()
+  } finally {
+    await context.setOffline(false)
+  }
+})
