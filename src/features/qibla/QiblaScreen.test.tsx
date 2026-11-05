@@ -139,6 +139,7 @@ describe('QiblaScreen orientation presentation', () => {
     firstVisit.unmount()
 
     requestPermission.mockClear()
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
     render(<QiblaScreen place={place} onBack={() => {}} />)
     expect(screen.queryByRole('button', { name: 'Включить компас' })).toBeNull()
     dispatchHeading(25, 2000)

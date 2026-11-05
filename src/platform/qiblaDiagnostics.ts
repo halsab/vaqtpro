@@ -1,7 +1,10 @@
+import type { OrientationDiagnosticCause } from './qiblaOrientation'
+
 export interface QiblaTraceEntry {
   elapsedMs: number
-  event: 'status' | 'reading' | 'place-change' | 'model-change' | 'retry' | 'resume' | 'source-change'
+  event: 'status' | 'reading' | 'place-change' | 'model-change' | 'retry' | 'resume' | 'source-change' | 'adapter'
   status?: string
+  cause?: OrientationDiagnosticCause
   source?: string
   magneticHeadingDegrees?: number
   acceptedHeadingDegrees?: number

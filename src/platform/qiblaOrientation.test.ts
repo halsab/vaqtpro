@@ -93,6 +93,164 @@ describe('Qibla orientation browser adapters', () => {
     session.stop()
   })
 
+  it('resumes a remembered grant on a visible screen even when hasFocus reports false', () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    session.resumeFromRememberedGrant()
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 25, webkitCompassAccuracy: 5,
+    }))
+    expect(reports.at(-1)).toBe('live-unverified')
+    session.stop()
+  })
+
+  it('restores a remembered grant after a hidden screen becomes visible without prompting', () => {
+    const requestPermission = vi.fn()
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      session.resumeFromRememberedGrant()
+      expect(reports.at(-1)).toBe('degraded')
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 25, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+      expect(requestPermission).not.toHaveBeenCalled()
+    } finally {
+      session.stop()
+    }
+  })
+
+  it('recovers after permission-dialog blur and resume events arrive before the permission promise settles', async () => {
+    let resolvePermission: ((value: 'granted' | 'denied') => void) | undefined
+    const requestPermission = vi.fn(() => new Promise<'granted' | 'denied'>(resolve => { resolvePermission = resolve }))
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    const reports: string[] = []
+    const diagnostics: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status), event => diagnostics.push(event.cause))
+    try {
+      const pendingEnable = session.enableFromGesture()
+      window.dispatchEvent(new Event('blur'))
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('pageshow'))
+      window.dispatchEvent(new Event('focus'))
+      vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+      resolvePermission?.('granted')
+      await pendingEnable
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 35, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+      expect(requestPermission).toHaveBeenCalledOnce()
+      expect(diagnostics).toEqual(expect.arrayContaining([
+        'permission-requested', 'focus-lost', 'visibility-hidden', 'visibility-restored',
+        'page-restored', 'focus-restored', 'permission-granted', 'source-start',
+      ]))
+    } finally {
+      session.stop()
+    }
+  })
+
+  it('waits for page restoration when permission settles before foreground resume events', async () => {
+    let resolvePermission: ((value: 'granted' | 'denied') => void) | undefined
+    const requestPermission = vi.fn(() => new Promise<'granted' | 'denied'>(resolve => { resolvePermission = resolve }))
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    const added = vi.spyOn(window, 'addEventListener')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      const pendingEnable = session.enableFromGesture()
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(new Event('pagehide'))
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      resolvePermission?.('granted')
+      await pendingEnable
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(0)
+
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(0)
+      window.dispatchEvent(new Event('pageshow'))
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(0)
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 35, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
+    } finally {
+      session.stop()
+    }
+  })
+
+  it('stops on blur and reacquires once on focus even if hasFocus remains false', async () => {
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    vi.stubGlobal('DeviceOrientationEvent', class extends Event {})
+    const added = vi.spyOn(window, 'addEventListener')
+    const removed = vi.spyOn(window, 'removeEventListener')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      await session.enableFromGesture()
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 10, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+
+      vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 11, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('degraded')
+      window.dispatchEvent(new Event('focus'))
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 12, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(2)
+      expect(removed.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
+    } finally {
+      session.stop()
+    }
+  })
+
+  it('retries a previously working session after blur when hasFocus remains false', async () => {
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission: vi.fn().mockResolvedValue('granted') }))
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      await session.enableFromGesture()
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 15, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+
+      vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+      window.dispatchEvent(new Event('blur'))
+      expect(reports.at(-1)).toBe('degraded')
+      await session.enableFromGesture()
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 16, webkitCompassAccuracy: 5,
+      }))
+      expect(reports.at(-1)).toBe('live-unverified')
+    } finally {
+      session.stop()
+    }
+  })
+
   it('forgets remembered access when the Generic Sensor API reports a reliable permission denial', () => {
     const instances: { onerror: ((event: Event & { error?: { name?: string } }) => void) | null; start: () => void; stop: () => void }[] = []
     class MockAbsoluteOrientationSensor {
@@ -285,12 +443,14 @@ describe('Qibla orientation browser adapters', () => {
     const requestPermission = vi.fn().mockResolvedValue('granted')
     vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
     const reports: ({ status: string; reading?: { accuracyDegrees: number | null } | undefined } | undefined)[] = []
-    const session = createOrientationSession(window, (status, reading) => reports.push({ status, reading }))
+    const diagnostics: string[] = []
+    const session = createOrientationSession(window, (status, reading) => reports.push({ status, reading }), event => diagnostics.push(event.cause))
     await session.enableFromGesture()
     window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
       alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 42, webkitCompassAccuracy: -1,
     }))
     expect(reports.at(-1)).toMatchObject({ status: 'calibrating' })
+    expect(diagnostics).toContain('invalid-accuracy')
     window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
       alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 43, webkitCompassAccuracy: 7,
     }))
@@ -462,9 +622,11 @@ describe('Qibla orientation browser adapters', () => {
     vi.stubGlobal('AbsoluteOrientationSensor', undefined)
     const added = vi.spyOn(window, 'addEventListener')
     const reports: string[] = []
-    const session = createOrientationSession(window, status => reports.push(status))
+    const diagnostics: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status), event => diagnostics.push(event.cause))
     await session.enableFromGesture()
     expect(reports.at(-1)).toBe('unsupported')
+    expect(diagnostics).toContain('source-unsupported')
     expect(added.mock.calls.filter(([type]) => type === 'devicemotion')).toHaveLength(0)
     session.stop()
   })

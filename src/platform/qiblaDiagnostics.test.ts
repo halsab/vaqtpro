@@ -20,12 +20,14 @@ describe('Qibla diagnostics', () => {
     vi.spyOn(window.performance, 'now').mockImplementation(() => now)
     const trace = createQiblaDiagnosticTrace(window, true)
     now = 125
+    trace.record({ event: 'adapter', cause: 'focus-unavailable', status: 'degraded' })
     trace.record({ event: 'reading', source: 'webkit-compass', magneticHeadingDegrees: 5,
       displayedRelativeDegrees: -30, reportedAccuracyDegrees: 6, modelValid: true })
-    expect(window.__qiblaCompassTrace?.()).toEqual([{
-      event: 'reading', source: 'webkit-compass', magneticHeadingDegrees: 5,
-      displayedRelativeDegrees: -30, reportedAccuracyDegrees: 6, modelValid: true, elapsedMs: 25,
-    }])
+    expect(window.__qiblaCompassTrace?.()).toEqual([
+      { event: 'adapter', cause: 'focus-unavailable', status: 'degraded', elapsedMs: 25 },
+      { event: 'reading', source: 'webkit-compass', magneticHeadingDegrees: 5,
+        displayedRelativeDegrees: -30, reportedAccuracyDegrees: 6, modelValid: true, elapsedMs: 25 },
+    ])
 
     for (let index = 0; index < 250; index += 1) trace.record({ event: 'status', status: 'live-unverified' })
     expect(trace.read()).toHaveLength(240)
