@@ -114,7 +114,7 @@ describe('экраны локации', () => {
     expect(onCancelSearch).toHaveBeenCalledOnce()
     fireEvent.change(input, { target: { value: 'Москва ' } })
     expect(onCancelSearch).toHaveBeenCalledOnce()
-    await act(async () => { resolve(success({ cities: [city], status: 'complete' })) })
+    await act(async () => { resolve(success({ cities: [city], status: 'complete' })); await Promise.resolve() })
     expect(await screen.findByRole('button', { name: /Москва, Москва/ })).toBeVisible()
   })
   it('не теряет результаты при пробеле после уже найденного названия', async () => {
