@@ -220,6 +220,8 @@ export function createOrientationSession(
   let sourceHadValidReading = false
   let reportedUnverifiedOrientation = false
   const isCurrentActivation = (generation: number) => !stopped && generation === activationGeneration
+  // Foreground can change in another event callback while requestPermission() is awaited.
+  const hasForegroundReturnedDuringPermission = () => foregroundReturnDuringPermission
   const screenOrientation = (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
   const emit: OrientationHandler = (status, reading) => {
     if (stopped) return
@@ -736,7 +738,7 @@ export function createOrientationSession(
           diagnose({ cause: 'permission-granted' })
           restorePermissionDialogForeground()
           if (!documentHasFocus() && permissionFocusGeneration === focusEventGeneration
-            && !foregroundReturnDuringPermission) {
+            && !hasForegroundReturnedDuringPermission()) {
             focusLost = true
             permissionForegroundReturnPending = true
             diagnose({ cause: 'focus-unavailable', status: 'degraded' })
