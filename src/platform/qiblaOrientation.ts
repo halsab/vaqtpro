@@ -189,13 +189,15 @@ export function createOrientationSession(
   const doc = target.document
   let enabled = false
   let stopped = false
-  // hasFocus() может отставать после системного диалога; фокус отслеживаем по blur/focus, а фон — по видимости и page lifecycle.
+  // После blur одной видимости недостаточно; источник ждёт focus, подтверждённый hasFocus(), или явный жест пользователя.
   let focusLost = false
   let permissionGranted = false
   let permissionNeedsRecheck = false
   let permissionInFlight = false
   let permissionDialogBlurred = false
   let permissionForegroundReturnPending = false
+  let focusEventGeneration = 0
+  let permissionFocusGeneration = 0
   let activationGeneration = 0
   let sourceGeneration = 0
   let lastStatus: OrientationStatus = 'idle'
@@ -213,7 +215,7 @@ export function createOrientationSession(
   let motionSegments: MotionSegment[] = []
   let hasCurrentReading = false
   let sourceHadValidReading = false
-  let sawUnverifiedOrientation = false
+  let reportedUnverifiedOrientation = false
   const isCurrentActivation = (generation: number) => !stopped && generation === activationGeneration
   const screenOrientation = (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
   const emit: OrientationHandler = (status, reading) => {
@@ -231,6 +233,10 @@ export function createOrientationSession(
     const angle = typeof apiAngle === 'number' ? apiAngle : typeof legacyAngle === 'number' ? legacyAngle : undefined
     return screenAngleDegrees(angle)
   }
+  const documentHasFocus = () => {
+    try { return doc.hasFocus() }
+    catch { return false }
+  }
   const cancelProbe = () => {
     if (probeTimer) target.clearTimeout(probeTimer)
     probeTimer = 0
@@ -243,7 +249,7 @@ export function createOrientationSession(
     latestQuaternion = null
     hasCurrentReading = false
     sourceHadValidReading = false
-    sawUnverifiedOrientation = false
+    reportedUnverifiedOrientation = false
     if (eventHandler) target.removeEventListener('deviceorientation', eventHandler)
     eventHandler = null
     if (sensor) {
@@ -309,6 +315,7 @@ export function createOrientationSession(
   const classifySensorError = (name?: string): OrientationStatus | null => {
     if (name === 'NotAllowedError') return 'restricted'
     if (name === 'SecurityError') return 'security'
+    if (name === 'NotSupportedError') return 'unsupported'
     return null
   }
   const failActivation = (status: OrientationStatus, cause: 'permission-denied' | 'permission-error' | 'source-error') => {
@@ -331,7 +338,10 @@ export function createOrientationSession(
       permissionForegroundReturnPending = true
       return
     }
-    // После ответа системного окна WebKit не всегда отправляет focus; видимая страница уже вернулась на передний план.
+    if (!documentHasFocus()) {
+      permissionForegroundReturnPending = true
+      return
+    }
     focusLost = false
     permissionDialogBlurred = false
     permissionForegroundReturnPending = false
@@ -343,16 +353,11 @@ export function createOrientationSession(
     probeTimer = target.setTimeout(() => {
       probeTimer = 0
       if (stopped || permissionInFlight || generation !== sourceGeneration || activeSource !== source) return
-      const unsupportedOrientation = source === 'webkit' && sawUnverifiedOrientation
-      const status = unsupportedOrientation ? 'unsupported' : 'timeout'
-      diagnose({ cause: unsupportedOrientation ? 'source-unsupported' : 'source-timeout',
-        source: source === 'absolute' ? 'absolute-orientation-sensor' : 'webkit-compass', status })
+      diagnose({ cause: 'source-timeout',
+        source: source === 'absolute' ? 'absolute-orientation-sensor' : 'webkit-compass', status: 'timeout' })
       clearActiveSource()
       if (source === 'absolute') tryWebKitFallback()
-      else {
-        if (unsupportedOrientation) enabled = false
-        emit(status)
-      }
+      else emit('timeout')
     }, NO_READING_TIMEOUT_MS)
   }
   // Тишина после первого валидного чтения не доказывает отказ: неподвижный WebKit может не слать события.
@@ -364,14 +369,18 @@ export function createOrientationSession(
     if (typeof win.DeviceOrientationEvent !== 'function') {
       clearMotionEvidence()
       clearActiveSource()
-      enabled = false
-      diagnose({ cause: 'source-unsupported', status: 'unsupported' })
-      emit('unsupported')
+      if (win.AbsoluteOrientationSensor) {
+        emit('timeout')
+      } else {
+        enabled = false
+        diagnose({ cause: 'source-unsupported', status: 'unsupported' })
+        emit('unsupported')
+      }
       return
     }
     activeSource = 'webkit'
     const generation = sourceGeneration
-    sawUnverifiedOrientation = false
+    reportedUnverifiedOrientation = false
     diagnose({ cause: 'source-start', source: 'webkit-compass' })
     startMotionEvidence()
     latestWebKit = null
@@ -455,8 +464,8 @@ export function createOrientationSession(
       } else if (!hasCurrentReading && lastStatus !== 'calibrating'
         && [orientation.alpha, orientation.beta, orientation.gamma].every(value => typeof value === 'number' && Number.isFinite(value))) {
         // Ни absolute=true, ни Euler-углы сами по себе не подтверждают географическую привязку к северу.
-        if (!sawUnverifiedOrientation) diagnose({ cause: 'unverified-orientation', source: 'webkit-compass', status: 'acquiring' })
-        sawUnverifiedOrientation = true
+        if (!reportedUnverifiedOrientation) diagnose({ cause: 'unverified-orientation', source: 'webkit-compass', status: 'acquiring' })
+        reportedUnverifiedOrientation = true
       }
     }
     target.addEventListener('deviceorientation', eventHandler)
@@ -549,7 +558,7 @@ export function createOrientationSession(
         const status = classifySensorError(event.error?.name)
         clearActiveSource()
         diagnose({ cause: 'source-error', source: 'absolute-orientation-sensor', status: status ?? 'degraded' })
-        if (status) {
+        if (status && (status !== 'unsupported' || typeof win.DeviceOrientationEvent !== 'function')) {
           failActivation(status, 'source-error')
         }
         else tryWebKitFallback()
@@ -562,7 +571,7 @@ export function createOrientationSession(
       clearActiveSource()
       const status = classifySensorError(name)
       diagnose({ cause: 'source-error', source: 'absolute-orientation-sensor', status: status ?? 'degraded' })
-      if (status) {
+      if (status && (status !== 'unsupported' || typeof win.DeviceOrientationEvent !== 'function')) {
         failActivation(status, 'source-error')
       }
       else tryWebKitFallback()
@@ -575,22 +584,26 @@ export function createOrientationSession(
   }
   const onVisibility = () => {
     if (doc.visibilityState === 'hidden') {
+      focusLost = true
       diagnose({ cause: 'visibility-hidden', ...(enabled ? { status: 'degraded' as const } : {}) })
       suspend()
     } else {
       restorePermissionDialogForeground()
+      if (!permissionDialogBlurred && !permissionForegroundReturnPending && focusLost && documentHasFocus()) focusLost = false
       diagnose({ cause: 'visibility-restored' })
       if (enabled) startSource()
     }
   }
   const onPageHide = () => {
+    focusLost = true
     diagnose({ cause: 'page-hidden', ...(enabled ? { status: 'degraded' as const } : {}) })
     suspend()
   }
   const onPageShow = () => {
     restorePermissionDialogForeground()
+    if (!permissionDialogBlurred && !permissionForegroundReturnPending && focusLost && documentHasFocus()) focusLost = false
     diagnose({ cause: 'page-restored' })
-    if (enabled) startSource(true)
+    if (enabled) startSource()
   }
   const onBlur = () => {
     focusLost = true
@@ -600,6 +613,7 @@ export function createOrientationSession(
   }
   const onFocus = () => {
     focusLost = false
+    focusEventGeneration += 1
     permissionDialogBlurred = false
     permissionForegroundReturnPending = false
     diagnose({ cause: 'focus-restored' })
@@ -663,6 +677,12 @@ export function createOrientationSession(
       if (!target.isSecureContext) { emit('security'); return }
       enabled = true
       if (doc.visibilityState === 'hidden') { diagnose({ cause: 'visibility-hidden', status: 'degraded' }); emit('degraded'); return }
+      if (!documentHasFocus()) {
+        focusLost = true
+        diagnose({ cause: 'focus-unavailable', status: 'degraded' })
+        emit('degraded')
+        return
+      }
       startSource()
     },
     async enableFromGesture() {
@@ -670,6 +690,11 @@ export function createOrientationSession(
       if (!target.isSecureContext) { emit('security'); return }
       if (doc.visibilityState === 'hidden') { diagnose({ cause: 'visibility-hidden', status: 'degraded' }); emit('degraded'); return }
       focusLost = false
+      if (permissionDialogBlurred || permissionForegroundReturnPending) {
+        permissionDialogBlurred = false
+        permissionForegroundReturnPending = false
+        diagnose({ cause: 'permission-dialog-returned' })
+      }
       const canRestart = ['degraded', 'suspect', 'calibrating', 'tilt', 'tilt-unknown', 'timeout', 'null-reading', 'frame-unavailable'].includes(lastStatus)
       if (enabled && (activeSource !== null || probeTimer !== 0) && !canRestart) return
       const shouldRecheckPermission = permissionNeedsRecheck || ['restricted', 'denied', 'timeout'].includes(lastStatus)
@@ -678,6 +703,7 @@ export function createOrientationSession(
         const generation = ++activationGeneration
         enabled = false
         permissionInFlight = true
+        permissionFocusGeneration = focusEventGeneration
         clearActiveSource()
         clearMotionEvidence()
         emit('acquiring')
@@ -693,6 +719,11 @@ export function createOrientationSession(
           permissionNeedsRecheck = false
           diagnose({ cause: 'permission-granted' })
           restorePermissionDialogForeground()
+          if (!documentHasFocus() && permissionFocusGeneration === focusEventGeneration) {
+            focusLost = true
+            permissionForegroundReturnPending = true
+            diagnose({ cause: 'focus-unavailable', status: 'degraded' })
+          }
         } catch (error) {
           if (!isCurrentActivation(generation)) return
           const name = error instanceof DOMException ? error.name : undefined
