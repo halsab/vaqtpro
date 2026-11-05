@@ -20,6 +20,12 @@ describe('локальные дуа поста', () => {
       translation: '«О Аллах, ради Тебя я постился, в Тебя уверовал, на Тебя положился и Твоими дарами разговелся. О Всепрощающий, прости мои прежние и последующие прегрешения».',
     }],
   ] as const)('сохраняет текст статьи %s посимвольно', (id, expected) => {
-    expect(getFastingDuaContent(id)).toEqual(expected)
+    const content = getFastingDuaContent(id)
+    expect(content).toContain(expected.arabic)
+    expect(content).toContain(expected.transcription)
+    expect(content).toContain(expected.translation)
+    expect(content).toMatch(/^# Дуа (?:сухура|ифтара)\r?\n/)
+    expect(content.indexOf('## Арабский текст')).toBeLessThan(content.indexOf('## Транскрипция'))
+    expect(content.indexOf('## Транскрипция')).toBeLessThan(content.indexOf('## Перевод'))
   })
 })

@@ -11,6 +11,8 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
   await page.getByRole('button', { name: 'Назад', exact: true }).click()
   await expectSchedule(page)
   await expect(page.getByRole('button', { name: 'Пост' })).toBeVisible()
+  await expect(page.getByRole('progressbar')).toBeVisible()
+  await expect(page.getByRole('timer')).toBeVisible()
 
   await page.evaluate(async () => navigator.serviceWorker.ready)
   await page.reload()
@@ -39,6 +41,7 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.themeTone)).toBe('light')
     await expect.poll(() => suhurArticle.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     await suhurArticle.getByRole('button', { name: 'Назад' }).click()
+    await expect(menu.getByRole('button', { name: 'Дуа сухура' })).toBeFocused()
 
     const iftar = menu.getByRole('button', { name: 'Дуа ифтара' })
     await iftar.focus()
@@ -50,6 +53,7 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
     await expect(menu).toBeVisible()
     await menu.getByRole('button', { name: 'Назад' }).click()
     await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Пост' })).toBeFocused()
   } finally {
     await context.setOffline(false)
   }

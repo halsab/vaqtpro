@@ -37,6 +37,8 @@ describe('карточка поста', () => {
     const card = screen.getByRole('button', { name: 'Пост' })
     card.focus()
     expect(card).toHaveFocus()
+    expect(screen.getByRole('timer')).toBeVisible()
+    expect(screen.getByRole('progressbar')).toBeVisible()
     fireEvent.click(card)
     expect(onOpen).toHaveBeenCalledOnce()
   })
@@ -44,6 +46,7 @@ describe('карточка поста', () => {
   it('updates accessible fasting progress as live time passes', () => {
     renderCard('2026-03-10T01:00:00Z', [day('2026-03-09'), day('2026-03-10', '04:04'), day('2026-03-11')])
     expect(screen.getByRole('timer')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Пост' })).not.toBeInTheDocument()
     const progress = screen.getByRole('progressbar')
     const initialProgress = progress.getAttribute('aria-valuenow')
 

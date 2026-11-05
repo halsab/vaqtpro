@@ -8,12 +8,14 @@ import { FastingScreen } from './FastingScreen'
 
 const titles = { suhur: 'Дуа сухура', iftar: 'Дуа ифтара' } as const
 
-it('shows exactly the two standard navigation rows and opens the selected dua', async () => {
+it('shows the title and exactly two standard navigation rows', async () => {
   const user = userEvent.setup()
   const onOpenDua = vi.fn()
   render(<FastingScreen onBack={() => {}} onOpenDua={onOpenDua} />)
 
-  expect(screen.getByRole('region', { name: 'Пост' })).toBeInTheDocument()
+  const region = screen.getByRole('region', { name: 'Пост' })
+  expect(region).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Пост', level: 1 })).toBeVisible()
   expect(screen.getAllByRole('button')).toHaveLength(3)
   await user.click(screen.getByRole('button', { name: titles.suhur }))
   expect(onOpenDua).toHaveBeenCalledWith('suhur')
@@ -21,21 +23,23 @@ it('shows exactly the two standard navigation rows and opens the selected dua', 
   expect(onOpenDua).toHaveBeenCalledWith('iftar')
 })
 
-it.each(FASTING_DUA_IDS)('renders %s in article order with Arabic RTL', id => {
+it.each(FASTING_DUA_IDS)('renders %s via shared Markdown article in order with Arabic RTL', async id => {
   render(<FastingDuaScreen duaId={id} onBack={() => {}} />)
-  const content = getFastingDuaContent(id)
-  const article = document.querySelector('.ramadan-dhikr-article')
-  expect(article).toBeInTheDocument()
-  if (!article) throw new Error('Fasting dua article was not rendered')
-  const headings = [...article.querySelectorAll('h1, h2')].map(heading => heading.textContent)
-  expect(headings).toEqual([titles[id], 'Арабский текст', 'Транскрипция', 'Перевод'])
-  const arabic = article.querySelector('.ramadan-dhikr-arabic')
-  expect(arabic?.textContent).toBe(content.arabic)
-  expect(arabic).toHaveAttribute('dir', 'rtl')
-  expect(arabic).toHaveAttribute('lang', 'ar')
-  expect(article.querySelectorAll('p')[1]?.textContent).toBe(content.transcription)
-  expect(article.querySelectorAll('p')[2]?.textContent).toBe(content.translation)
-  expect(document.querySelector('.screen-content')?.scrollWidth).toBeLessThanOrEqual(document.querySelector('.screen-content')?.clientWidth ?? 0)
+  const heading = await screen.findByRole('heading', { name: titles[id], level: 1 })
+  const article = heading.closest('.markdown-article')
+  expect(article).not.toBeNull()
+  if (!article) throw new Error('Fasting dua Markdown article was not rendered')
+  expect([...article.querySelectorAll('h1, h2')].map(item => item.textContent))
+    .toEqual([titles[id], 'Арабский текст', 'Транскрипция', 'Перевод'])
+
+  const sections = getFastingDuaContent(id).split(/^## [^\r\n]+\r?\n/gmu).slice(1).map(section => section.trim())
+  const [arabic, transcription, translation] = sections
+  const arabicParagraph = article.querySelector('.markdown-article-arabic')
+  expect(arabicParagraph).toHaveTextContent(arabic)
+  expect(arabicParagraph).toHaveAttribute('dir', 'rtl')
+  expect(arabicParagraph).toHaveAttribute('lang', 'ar')
+  expect(article.querySelectorAll('p')[1]?.textContent).toBe(transcription)
+  expect(article.querySelectorAll('p')[2]?.textContent).toBe(translation)
 })
 
 it('keeps the article Back button keyboard accessible', async () => {

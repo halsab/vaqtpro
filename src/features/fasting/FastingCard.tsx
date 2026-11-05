@@ -92,7 +92,7 @@ export function FastingCard({ events, preferences, selectedDate, today, timeZone
   const [firstEndpoint, secondEndpoint] = endpoints
   const endpointsDescription = t('fastingEndpointsDescription', { first: describe(firstEndpoint), second: describe(secondEndpoint) })
 
-  return <button className="fasting-card" type="button" aria-label={t('fastingTitle')} onClick={onOpen}>
+  return <div className="fasting-card">
     <span className="fasting-card-heading">
       <span>{t('fastingTitle')}</span>
       {duration ? <span className="fasting-duration">{duration}</span> : null}
@@ -110,5 +110,7 @@ export function FastingCard({ events, preferences, selectedDate, today, timeZone
     <span className="fasting-endpoints" role="group" aria-label={endpointsDescription}>
       {endpoints.map(endpoint => <FastingEndpoint key={`${endpoint.prefix}:${endpoint.time}`} {...endpoint} />)}
     </span>
-  </button>
+    {onOpen ? <button id="home-fasting" className="fasting-card-action" type="button"
+      aria-label={t('fastingTitle')} onClick={onOpen} /> : null}
+  </div>
 }

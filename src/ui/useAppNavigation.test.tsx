@@ -77,7 +77,7 @@ function FastingNavigationExample() {
     <button id="fasting-card" onClick={() => navigation.open('fasting')}>Пост</button>
   </>
   if (navigation.screen === 'fasting') return <>
-    <button onClick={() => navigation.open({ screen: 'fasting-dua', fastingDuaId: 'suhur' })}>Дуа сухура</button>
+    <button id="fasting-dua-suhur" onClick={() => navigation.open({ screen: 'fasting-dua', fastingDuaId: 'suhur' })}>Дуа сухура</button>
     <button onClick={navigation.back}>Назад</button>
   </>
   return <><p>{navigation.fastingDuaId}</p><button onClick={navigation.back}>Назад</button></>
@@ -106,9 +106,10 @@ describe('навигация экранов', () => {
     expect(screen.getByText('suhur')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Назад' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Дуа сухура' })).toBeVisible())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Дуа сухура' })).toHaveFocus())
     await user.click(screen.getByRole('button', { name: 'Назад' }))
-    await waitFor(() => expect(screen.getByText('home value: 1')).toBeVisible())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Пост' })).toHaveFocus())
+    expect(screen.getByText('home value: 1')).toBeVisible()
   })
 
   it('отменяет подготовленную навигацию, если пользователь выбрал другой экран', async () => {
