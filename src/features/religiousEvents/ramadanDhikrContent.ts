@@ -30,13 +30,10 @@ export function getRamadanDhikrContent(id: RamadanDhikrId): RamadanDhikrContent 
   if (index < 0 || decade === undefined) throw new Error(`Missing Ramadan dhikr section: ${id}`)
 
   const parts = decade.split(/^### [^\r\n]+\r?\n/gm).slice(1).map(part => part.trim())
-  if (parts.length !== 3 || parts.some(part => part.length === 0)) {
+  const [arabic, transcription, translation] = parts
+  if (parts.length !== 3 || !arabic || !transcription || !translation) {
     throw new Error(`Invalid Ramadan dhikr structure: ${id}`)
   }
 
-  return {
-    arabic: parts[0]!,
-    transcription: parts[1]!,
-    translation: parts[2]!,
-  }
+  return { arabic, transcription, translation }
 }
