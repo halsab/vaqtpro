@@ -11,7 +11,7 @@ export async function loadOfflineCitySeed(): Promise<Result<CityDataset, DataFai
     void clearLegacyCatalogStorage().catch(() => undefined)
     const response = await fetch(SEED_URL, { cache: 'no-store' })
     if (!response.ok) {
-      const isOffline = !navigator.onLine
+      const isOffline = (navigator as unknown as { onLine?: unknown }).onLine === false
       return failure({ kind: 'data', reason: isOffline ? 'offline' : 'unavailable' })
     }
     const data = await response.json() as unknown
