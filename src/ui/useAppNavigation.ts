@@ -6,9 +6,7 @@ import { runNavigationTransition } from './navigationTransition'
 const SCREENS = ['home', 'date', 'monthly-schedule', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event', 'fasting', 'fasting-dua', 'qibla'] as const
 export type AppScreen = typeof SCREENS[number]
 interface Entry { screen: AppScreen; returnFocus: string | null; religiousEventId?: ReligiousEventId; fastingDuaId?: FastingDuaId; scrollTop?: number }
-type NavigationTarget = Exclude<AppScreen, 'religious-event' | 'fasting-dua'>
-  | { screen: 'religious-event'; religiousEventId: ReligiousEventId }
-  | { screen: 'fasting-dua'; fastingDuaId: FastingDuaId }
+type NavigationTarget = AppScreen | { screen: 'religious-event'; religiousEventId: ReligiousEventId } | { screen: 'fasting-dua'; fastingDuaId: FastingDuaId }
 const HOME: Entry[] = [{ screen: 'home', returnFocus: null }]
 
 function readEntries(value: unknown, session: string): Entry[] | null {
@@ -79,7 +77,7 @@ export function useAppNavigation() {
   }, [entries])
 
   const open = useCallback((target: NavigationTarget, returnFocusOverride?: string | null) => {
-    if (traversing.current) return
+    if (traversing.current || target === 'religious-event' || target === 'fasting-dua') return
     intentGeneration.current += 1
     const screen = typeof target === 'string' ? target : target.screen
     if (current.current.at(-1)?.screen === screen) return

@@ -34,6 +34,7 @@ it.each(FASTING_DUA_IDS)('renders %s via shared Markdown article in order with A
 
   const sections = getFastingDuaContent(id).split(/^## [^\r\n]+\r?\n/gmu).slice(1).map(section => section.trim())
   const [arabic, transcription, translation] = sections
+  if (!arabic || !transcription || !translation) throw new Error('Incomplete Markdown fixture')
   const arabicParagraph = article.querySelector('.markdown-article-arabic')
   expect(arabicParagraph).toHaveTextContent(arabic)
   expect(arabicParagraph).toHaveAttribute('dir', 'rtl')
