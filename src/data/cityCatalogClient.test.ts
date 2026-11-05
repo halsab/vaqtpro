@@ -275,6 +275,20 @@ describe('online place search', () => {
     })
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
+  it.each([
+    [10, 'authorization'], [18, 'quota'], [19, 'quota'], [20, 'quota'], [22, 'service'],
+  ] as const)('reports GeoNames status %i in offline fallback', async (code, warning) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ status: { value: code, message: 'Provider error' } }), { status: 200 }),
+    )
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    await expect(service.search('Киров')).resolves.toMatchObject({
+      ok: true, value: { status: 'offline-seed', providerWarning: warning, cities: [{ id: 1 }] },
+    })
+    expect(fetcher).toHaveBeenCalledOnce()
+  })
+
   it('does not call GeoNames without an explicitly configured username', async () => {
     const fetcher = vi.fn<typeof fetch>()
     const service = createCityCatalogService({ fetcher, geonamesUsername: '', loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })

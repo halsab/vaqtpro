@@ -87,6 +87,14 @@ function isLimited(value: unknown, startRow: number): boolean {
   return total !== null ? total > startRow + rows : rows >= MAX_RESULTS
 }
 
+function providerWarning(value: unknown): 'quota' | 'authorization' | 'service' | null {
+  if (!object(value) || !object(value.status)) return null
+  const code = numberValue(value.status.value)
+  if (code === 18 || code === 19 || code === 20) return 'quota'
+  if (code === 10) return 'authorization'
+  return 'service'
+}
+
 export function parseGeoNamesResults(value: unknown): City[] {
   if (!object(value) || !Array.isArray(value.geonames)) {
     throw new Error('Невалидный ответ GeoNames')
@@ -161,12 +169,13 @@ export function createCityCatalogService(dependencies: {
     return { cities, status: 'offline-seed' }
   }
 
-  const offlineFallback = async (query: string, revision: number, startRow = 0): Promise<Result<CitySearchResult, DataFailure>> => {
+  const offlineFallback = async (query: string, revision: number, startRow = 0,
+    warning?: 'quota' | 'authorization' | 'service'): Promise<Result<CitySearchResult, DataFailure>> => {
     if (startRow > 0) return failure({ kind: 'data', reason: 'unavailable' })
     const loaded = await load()
     if (!loaded.ok) return loaded
     return revision === searchRevision
-      ? success(offlineResult(query))
+      ? success({ ...offlineResult(query), ...(warning ? { providerWarning: warning } : {}) })
       : failure({ kind: 'data', reason: 'superseded' })
   }
 
@@ -204,8 +213,11 @@ export function createCityCatalogService(dependencies: {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const response = await fetcher(url, { cache: 'no-store', signal: controller.signal })
-      if (!response.ok) return await offlineFallback(normalizedQuery, revision, startRow)
+      if (!response.ok) return await offlineFallback(normalizedQuery, revision, startRow,
+        response.status === 429 ? 'quota' : response.status === 401 || response.status === 403 ? 'authorization' : 'service')
       const raw: unknown = await response.json()
+      const warning = providerWarning(raw)
+      if (warning) return await offlineFallback(normalizedQuery, revision, startRow, warning)
       let cities = parseGeoNamesResults(raw)
       let limited = isLimited(raw, startRow)
       let received = Array.isArray((raw as { geonames?: unknown }).geonames)
@@ -215,8 +227,11 @@ export function createCityCatalogService(dependencies: {
       if (!cities.length && transliterated && startRow === 0) {
         const fallbackUrl = makeUrl(transliterated)
         const fallbackResponse = await fetcher(fallbackUrl, { cache: 'no-store', signal: controller.signal })
-        if (!fallbackResponse.ok) return await offlineFallback(normalizedQuery, revision, startRow)
+        if (!fallbackResponse.ok) return await offlineFallback(normalizedQuery, revision, startRow,
+          fallbackResponse.status === 429 ? 'quota' : fallbackResponse.status === 401 || fallbackResponse.status === 403 ? 'authorization' : 'service')
         const retryRaw: unknown = await fallbackResponse.json()
+        const retryWarning = providerWarning(retryRaw)
+        if (retryWarning) return await offlineFallback(normalizedQuery, revision, startRow, retryWarning)
         cities = parseGeoNamesResults(retryRaw)
         limited = isLimited(retryRaw, startRow)
         received = Array.isArray((retryRaw as { geonames?: unknown }).geonames)

@@ -6,6 +6,7 @@ export interface CitySearchResult {
   cities: City[]
   status: 'complete' | 'limited' | 'offline-seed'
   nextOffset?: number
+  providerWarning?: 'quota' | 'authorization' | 'service'
 }
 
 export interface CityCatalogService {

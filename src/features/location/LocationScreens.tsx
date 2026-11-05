@@ -162,6 +162,9 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
   }
   const status = query && query.length < 2 ? t('cityEnterMore')
     : pending ? t('citySearching')
+    : query && ready?.data?.providerWarning === 'quota' ? t('cityGeoNamesQuota')
+    : query && ready?.data?.providerWarning === 'authorization' ? t('cityGeoNamesAuth')
+    : query && ready?.data?.providerWarning === 'service' ? t('cityGeoNamesService')
     : query && ready?.failed ? t('citySearchFailed')
       : query && ready?.data?.status === 'offline-seed' ? t('cityOfflineSeed')
         : query && ready?.data?.status === 'limited' ? t('citySearchLimited')
