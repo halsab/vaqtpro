@@ -319,6 +319,41 @@ describe('Qibla orientation browser adapters', () => {
     }
   })
 
+  it.each([true, false])('keeps a granted source recoverable when focus stays stale after a real background return (grant before return=%s)', async grantBeforeReturn => {
+    let resolvePermission: ((value: 'granted' | 'denied') => void) | undefined
+    const requestPermission = vi.fn(() => new Promise<'granted' | 'denied'>(resolve => { resolvePermission = resolve }))
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    const added = vi.spyOn(window, 'addEventListener')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      const pendingEnable = session.enableFromGesture()
+      window.dispatchEvent(new Event('blur'))
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      if (grantBeforeReturn) {
+        resolvePermission?.('granted')
+        await pendingEnable
+        expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(0)
+      }
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      if (!grantBeforeReturn) {
+        expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(0)
+        resolvePermission?.('granted')
+        await pendingEnable
+      }
+      dispatchWebKitHeading(35)
+      expect(reports.at(-1)).toBe('live-unverified')
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
+      expect(requestPermission).toHaveBeenCalledOnce()
+    } finally {
+      session.stop()
+    }
+  })
+
   it('stops on blur and reacquires once on focus even if hasFocus remains false', async () => {
     vi.stubGlobal('AbsoluteOrientationSensor', undefined)
     vi.stubGlobal('DeviceOrientationEvent', class extends Event {})

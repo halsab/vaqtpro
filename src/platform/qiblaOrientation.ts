@@ -193,6 +193,7 @@ export function createOrientationSession(
   let focusLost = false
   // Only actual hide/pagehide events establish a background transition; hasFocus() can be stale on mobile.
   let backgroundSuspended = false
+  let foregroundReturnDuringPermission = false
   let permissionGranted = false
   let permissionNeedsRecheck = false
   let permissionInFlight = false
@@ -328,6 +329,7 @@ export function createOrientationSession(
     permissionNeedsRecheck = false
     permissionDialogBlurred = false
     permissionForegroundReturnPending = false
+    foregroundReturnDuringPermission = false
     forgetOrientationGrant(target)
     clearActiveSource()
     clearMotionEvidence()
@@ -338,6 +340,7 @@ export function createOrientationSession(
     if (!backgroundSuspended || doc.visibilityState === 'hidden') return
     // A genuine background -> visible/page-show transition is stronger evidence than a stale hasFocus().
     backgroundSuspended = false
+    if (permissionInFlight) foregroundReturnDuringPermission = true
     focusLost = false
     permissionDialogBlurred = false
     permissionForegroundReturnPending = false
@@ -715,6 +718,7 @@ export function createOrientationSession(
         const generation = ++activationGeneration
         enabled = false
         permissionInFlight = true
+        foregroundReturnDuringPermission = false
         permissionFocusGeneration = focusEventGeneration
         clearActiveSource()
         clearMotionEvidence()
@@ -731,7 +735,8 @@ export function createOrientationSession(
           permissionNeedsRecheck = false
           diagnose({ cause: 'permission-granted' })
           restorePermissionDialogForeground()
-          if (!documentHasFocus() && permissionFocusGeneration === focusEventGeneration) {
+          if (!documentHasFocus() && permissionFocusGeneration === focusEventGeneration
+            && !foregroundReturnDuringPermission) {
             focusLost = true
             permissionForegroundReturnPending = true
             diagnose({ cause: 'focus-unavailable', status: 'degraded' })
@@ -760,6 +765,7 @@ export function createOrientationSession(
       permissionDialogBlurred = false
       permissionForegroundReturnPending = false
       backgroundSuspended = false
+      foregroundReturnDuringPermission = false
       clearActiveSource()
       clearMotionEvidence()
       doc.removeEventListener('visibilitychange', onVisibility)

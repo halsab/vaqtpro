@@ -380,6 +380,7 @@ test('a remembered grant resumes on a visible route re-entry despite stale false
   await expect(page.getByRole('region', { name: 'Главная' })).toBeVisible()
   await page.evaluate(() => { (window as Window & { __qiblaHasFocus: boolean }).__qiblaHasFocus = false })
   await page.locator('#home-qibla').click()
+  await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Включить компас' })).toHaveCount(0)
   await sendHeading(26)
   await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
