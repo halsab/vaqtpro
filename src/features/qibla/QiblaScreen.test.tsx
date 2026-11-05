@@ -195,7 +195,7 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-dial')).toBeNull()
   })
 
-  it('waits for confirmed focus before automatically resuming a remembered grant', async () => {
+  it('automatically resumes a remembered grant despite stale false hasFocus on a visible screen', async () => {
     const firstVisit = render(<QiblaScreen place={place} onBack={() => {}} />)
     await activateCompass()
     dispatchHeading(25, 1000)
@@ -204,16 +204,10 @@ describe('QiblaScreen orientation presentation', () => {
     firstVisit.unmount()
 
     requestPermission.mockClear()
-    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
     render(<QiblaScreen place={place} onBack={() => {}} />)
     expect(screen.queryByRole('button', { name: 'Включить компас' })).toBeNull()
     dispatchHeading(25, 2000)
-    flushFrame()
-    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
-
-    hasFocus.mockReturnValue(true)
-    act(() => { window.dispatchEvent(new Event('pageshow')) })
-    dispatchHeading(25, 2001)
     flushFrame()
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
     expect(requestPermission).not.toHaveBeenCalled()

@@ -343,3 +343,46 @@ test('a platform without an orientation source stays unsupported without retry',
   await expect(page.getByRole('button', { name: 'Попробовать снова' })).toHaveCount(0)
   await expect(page.locator('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
 })
+
+test('a remembered grant resumes on a visible route re-entry despite stale false hasFocus', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    type TestWindow = Window & { __qiblaHasFocus: boolean; __qiblaPermissionRequests: number }
+    const testWindow = window as TestWindow
+    testWindow.__qiblaHasFocus = true
+    testWindow.__qiblaPermissionRequests = 0
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => testWindow.__qiblaHasFocus })
+    const requestPermission = () => {
+      testWindow.__qiblaPermissionRequests += 1
+      return Promise.resolve('granted' as const)
+    }
+    Object.defineProperty(window, 'DeviceOrientationEvent', {
+      configurable: true,
+      value: Object.assign(class extends Event {}, { requestPermission }),
+    })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  const sendHeading = async (heading: number) => page.evaluate(value => {
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false,
+      webkitCompassHeading: value, webkitCompassAccuracy: 5,
+    }))
+  }, heading)
+  await sendHeading(25)
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(page.getByRole('region', { name: 'Главная' })).toBeVisible()
+  await page.evaluate(() => { (window as Window & { __qiblaHasFocus: boolean }).__qiblaHasFocus = false })
+  await page.locator('#home-qibla').click()
+  await expect(page.getByRole('button', { name: 'Включить компас' })).toHaveCount(0)
+  await sendHeading(26)
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __qiblaPermissionRequests: number }).__qiblaPermissionRequests)).toBe(1)
+})

@@ -189,8 +189,10 @@ export function createOrientationSession(
   const doc = target.document
   let enabled = false
   let stopped = false
-  // После blur одной видимости недостаточно; источник ждёт focus, подтверждённый hasFocus(), или явный жест пользователя.
+  // Явный blur при видимом экране требует focus или жеста; настоящий возврат из фона подтверждает lifecycle.
   let focusLost = false
+  // Only actual hide/pagehide events establish a background transition; hasFocus() can be stale on mobile.
+  let backgroundSuspended = false
   let permissionGranted = false
   let permissionNeedsRecheck = false
   let permissionInFlight = false
@@ -331,6 +333,14 @@ export function createOrientationSession(
     clearMotionEvidence()
     diagnose({ cause, status })
     emit(status)
+  }
+  const reconcileBackgroundReturn = () => {
+    if (!backgroundSuspended || doc.visibilityState === 'hidden') return
+    // A genuine background -> visible/page-show transition is stronger evidence than a stale hasFocus().
+    backgroundSuspended = false
+    focusLost = false
+    permissionDialogBlurred = false
+    permissionForegroundReturnPending = false
   }
   const restorePermissionDialogForeground = () => {
     if (!permissionDialogBlurred && !permissionForegroundReturnPending) return
@@ -584,10 +594,11 @@ export function createOrientationSession(
   }
   const onVisibility = () => {
     if (doc.visibilityState === 'hidden') {
-      focusLost = true
+      backgroundSuspended = true
       diagnose({ cause: 'visibility-hidden', ...(enabled ? { status: 'degraded' as const } : {}) })
       suspend()
     } else {
+      reconcileBackgroundReturn()
       restorePermissionDialogForeground()
       if (!permissionDialogBlurred && !permissionForegroundReturnPending && focusLost && documentHasFocus()) focusLost = false
       diagnose({ cause: 'visibility-restored' })
@@ -595,11 +606,12 @@ export function createOrientationSession(
     }
   }
   const onPageHide = () => {
-    focusLost = true
+    backgroundSuspended = true
     diagnose({ cause: 'page-hidden', ...(enabled ? { status: 'degraded' as const } : {}) })
     suspend()
   }
   const onPageShow = () => {
+    reconcileBackgroundReturn()
     restorePermissionDialogForeground()
     if (!permissionDialogBlurred && !permissionForegroundReturnPending && focusLost && documentHasFocus()) focusLost = false
     diagnose({ cause: 'page-restored' })
@@ -676,13 +688,13 @@ export function createOrientationSession(
       if (stopped || enabled || permissionInFlight || !hasRememberedOrientationGrant(target)) return
       if (!target.isSecureContext) { emit('security'); return }
       enabled = true
-      if (doc.visibilityState === 'hidden') { diagnose({ cause: 'visibility-hidden', status: 'degraded' }); emit('degraded'); return }
-      if (!documentHasFocus()) {
-        focusLost = true
-        diagnose({ cause: 'focus-unavailable', status: 'degraded' })
+      if (doc.visibilityState === 'hidden') {
+        backgroundSuspended = true
+        diagnose({ cause: 'visibility-hidden', status: 'degraded' })
         emit('degraded')
         return
       }
+      // There was no blur in this session: a stale hasFocus() must not defeat remembered access.
       startSource()
     },
     async enableFromGesture() {
@@ -747,6 +759,7 @@ export function createOrientationSession(
       permissionInFlight = false
       permissionDialogBlurred = false
       permissionForegroundReturnPending = false
+      backgroundSuspended = false
       clearActiveSource()
       clearMotionEvidence()
       doc.removeEventListener('visibilitychange', onVisibility)

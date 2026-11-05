@@ -98,27 +98,20 @@ describe('Qibla orientation browser adapters', () => {
     session.stop()
   })
 
-  it('waits to resume a remembered grant until a visible screen confirms focus', () => {
-    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+  it('automatically resumes remembered access on a visible screen when hasFocus stays falsely negative', () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
     const added = vi.spyOn(window, 'addEventListener')
     window.sessionStorage.setItem('vaqtpro.qibla.orientation-granted.v1', '1')
     const reports: string[] = []
     const session = createOrientationSession(window, status => reports.push(status))
-    session.resumeFromRememberedGrant()
-    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
-      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 25, webkitCompassAccuracy: 5,
-    }))
-    expect(reports.at(-1)).toBe('degraded')
-    expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(0)
-
-    hasFocus.mockReturnValue(true)
-    window.dispatchEvent(new Event('pageshow'))
-    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
-      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 26, webkitCompassAccuracy: 5,
-    }))
-    expect(reports.at(-1)).toBe('live-unverified')
-    expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
-    session.stop()
+    try {
+      session.resumeFromRememberedGrant()
+      dispatchWebKitHeading(25)
+      expect(reports.at(-1)).toBe('live-unverified')
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
+    } finally {
+      session.stop()
+    }
   })
 
   it('restores a remembered grant after a hidden screen becomes visible without prompting', () => {
@@ -138,6 +131,60 @@ describe('Qibla orientation browser adapters', () => {
       }))
       expect(reports.at(-1)).toBe('live-unverified')
       expect(requestPermission).not.toHaveBeenCalled()
+    } finally {
+      session.stop()
+    }
+  })
+
+  it('restores a blurred session after a real background transition despite stale hasFocus', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    vi.stubGlobal('DeviceOrientationEvent', class extends Event {})
+    const added = vi.spyOn(window, 'addEventListener')
+    const removed = vi.spyOn(window, 'removeEventListener')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      await session.enableFromGesture()
+      dispatchWebKitHeading(15)
+      expect(reports.at(-1)).toBe('live-unverified')
+      window.dispatchEvent(new Event('blur'))
+      expect(reports.at(-1)).toBe('degraded')
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      dispatchWebKitHeading(18)
+      expect(reports.at(-1)).toBe('degraded')
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
+      document.dispatchEvent(new Event('visibilitychange'))
+      dispatchWebKitHeading(20)
+      expect(reports.at(-1)).toBe('live-unverified')
+      window.dispatchEvent(new Event('pageshow'))
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(2)
+      expect(removed.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
+    } finally {
+      session.stop()
+    }
+  })
+
+  it('restores after BFCache pagehide/pageshow without a new focus event or duplicate source', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    vi.stubGlobal('DeviceOrientationEvent', class extends Event {})
+    const added = vi.spyOn(window, 'addEventListener')
+    const removed = vi.spyOn(window, 'removeEventListener')
+    const reports: string[] = []
+    const session = createOrientationSession(window, status => reports.push(status))
+    try {
+      await session.enableFromGesture()
+      dispatchWebKitHeading(11)
+      window.dispatchEvent(new Event('blur'))
+      window.dispatchEvent(new Event('pagehide'))
+      window.dispatchEvent(new Event('pageshow'))
+      dispatchWebKitHeading(12)
+      expect(reports.at(-1)).toBe('live-unverified')
+      window.dispatchEvent(new Event('pageshow'))
+      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(2)
+      expect(removed.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(1)
     } finally {
       session.stop()
     }
