@@ -54,6 +54,7 @@ describe('QiblaScreen orientation presentation', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    window.history.replaceState({}, '', '/')
   })
 
   function dispatchHeading(heading: number, time: number, options: { accuracy?: number | null; beta?: number | null; gamma?: number | null } = {}) {
@@ -93,6 +94,70 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-cardinal')).toBeInTheDocument()
   })
 
+  it('records initial screen entry as session start rather than a lifecycle resume', () => {
+    window.history.replaceState({}, '', '/?qiblaDiagnostics=1')
+    const view = render(<QiblaScreen place={place} onBack={() => {}} />)
+    const events = window.__qiblaCompassTrace?.().map(entry => entry.event) ?? []
+    expect(events).toContain('session-start')
+    expect(events).not.toContain('resume')
+    view.unmount()
+    expect(window.__qiblaCompassTrace).toBeUndefined()
+  })
+
+  it.each([true, false])('keeps generic Euler orientation (absolute=%s) unverified and offers recovery', async absolute => {
+    vi.useFakeTimers()
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    act(() => {
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 270, beta: 0, gamma: 0, absolute,
+      }))
+    })
+    expect(screen.getByRole('status')).toHaveTextContent(/Подключаем компас/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+    expect(screen.getByRole('status')).toHaveTextContent(/Компас не ответил/)
+    const retry = screen.getByRole('button', { name: 'Попробовать снова' })
+    expect(retry).toBeVisible()
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+    fireEvent.click(retry)
+    await act(async () => { await Promise.resolve() })
+    expect(requestPermission).toHaveBeenCalledTimes(2)
+    dispatchHeading(43, sampleTime + 1)
+    flushFrame()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  })
+
+  it('shows a non-retryable unsupported state when no orientation API exists', async () => {
+    vi.stubGlobal('DeviceOrientationEvent', undefined)
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+
+    expect(screen.getByRole('status')).toHaveTextContent(/Живой компас недоступен/)
+    expect(screen.queryByRole('button', { name: 'Попробовать снова' })).toBeNull()
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  })
+
+  it('offers retry after a recoverable startup timeout and rechecks permission on the next tap', async () => {
+    vi.useFakeTimers()
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+
+    expect(screen.getByRole('status')).toHaveTextContent(/не ответил|недоступен/i)
+    const retry = screen.getByRole('button', { name: 'Попробовать снова' })
+    expect(retry).toBeVisible()
+    fireEvent.click(retry)
+    await act(async () => { await Promise.resolve() })
+    expect(requestPermission).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('status')).toHaveTextContent(/Подключаем компас/)
+  })
+
   it('survives StrictMode reinitialization and coalesces fast sensor events into one dial frame without visible instructions', async () => {
     const user = userEvent.setup()
     let commits = 0
@@ -130,7 +195,7 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-dial')).toBeNull()
   })
 
-  it('automatically resumes after a successful sensor reading without showing the enable button again', async () => {
+  it('automatically resumes a remembered grant despite stale false hasFocus on a visible screen', async () => {
     const firstVisit = render(<QiblaScreen place={place} onBack={() => {}} />)
     await activateCompass()
     dispatchHeading(25, 1000)
@@ -139,6 +204,7 @@ describe('QiblaScreen orientation presentation', () => {
     firstVisit.unmount()
 
     requestPermission.mockClear()
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false)
     render(<QiblaScreen place={place} onBack={() => {}} />)
     expect(screen.queryByRole('button', { name: 'Включить компас' })).toBeNull()
     dispatchHeading(25, 2000)
@@ -477,7 +543,7 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
   })
 
-  it('drops a live pointer while sensor lifecycle restarts after resume', async () => {
+  it('keeps an active source when duplicate pageshow events arrive', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(Date.UTC(2029, 11, 31, 23, 59, 59, 500))
     render(<QiblaScreen place={place} onBack={() => {}} />)
@@ -488,9 +554,11 @@ describe('QiblaScreen orientation presentation', () => {
     expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
     expect(screen.getByText('Точность: Хорошая', { selector: '.qibla-accuracy' })).toBeVisible()
     act(() => { window.dispatchEvent(new Event('pageshow')) })
-    expect(screen.getByRole('status')).toHaveTextContent(/Подключаем компас/)
-    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
-    expect(screen.getByText('Точность: Неизвестна', { selector: '.qibla-accuracy' })).toBeVisible()
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    act(() => { window.dispatchEvent(new Event('pageshow')) })
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(document.querySelector('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+    expect(screen.getByText('Точность: Хорошая', { selector: '.qibla-accuracy' })).toBeVisible()
   })
 
   it('keeps signed clockwise accessibility guidance without visible turn text', () => {

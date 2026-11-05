@@ -434,9 +434,10 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
         limitedReacquisition.current = false
       }
       processReadingRef.current(reading)
-    })
+    }, event => trace.record({ event: 'adapter', ...event }))
     session.current = orientationSession
     trace.record({ event: 'status', status: 'idle' })
+    trace.record({ event: 'session-start' })
     orientationSession.resumeFromRememberedGrant()
 
     return () => {

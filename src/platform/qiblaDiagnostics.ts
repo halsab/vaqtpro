@@ -1,7 +1,10 @@
+import type { OrientationDiagnosticCause } from './qiblaOrientation'
+
 export interface QiblaTraceEntry {
   elapsedMs: number
-  event: 'status' | 'reading' | 'place-change' | 'model-change' | 'retry' | 'resume' | 'source-change'
+  event: 'session-start' | 'status' | 'reading' | 'place-change' | 'model-change' | 'retry' | 'resume' | 'source-change' | 'adapter'
   status?: string
+  cause?: OrientationDiagnosticCause
   source?: string
   magneticHeadingDegrees?: number
   acceptedHeadingDegrees?: number
@@ -29,7 +32,7 @@ declare global {
 const TRACE_LIMIT = 240
 
 export function qiblaDiagnosticsRequested(target: Window): boolean {
-  if (!import.meta.env.DEV) return false
+  if (!import.meta.env.DEV && import.meta.env.MODE !== 'qa') return false
   try { return new URLSearchParams(target.location.search).get('qiblaDiagnostics') === '1' }
   catch { return false }
 }

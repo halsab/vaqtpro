@@ -170,3 +170,226 @@ test('orientation permission starts only on user action and WebKit magnetic read
   expect(performanceSample.dispatchDurationMs).toBeLessThan(50)
   expect(performanceSample.nextFrameLatencyMs).toBeLessThan(34)
 })
+
+test('permission grant restores the visible compass after dialog blur without waiting for focus', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    type PermissionWindow = Window & {
+      __qiblaPermissionRequests: number
+      __qiblaHasFocus: boolean
+      __qiblaResolvePermission?: (value: 'granted' | 'denied') => void
+    }
+    const testWindow = window as PermissionWindow
+    testWindow.__qiblaPermissionRequests = 0
+    testWindow.__qiblaHasFocus = true
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => testWindow.__qiblaHasFocus })
+    const requestPermission = () => {
+      testWindow.__qiblaPermissionRequests += 1
+      return new Promise<'granted' | 'denied'>(resolve => { testWindow.__qiblaResolvePermission = resolve })
+    }
+    Object.defineProperty(window, 'DeviceOrientationEvent', {
+      configurable: true,
+      value: Object.assign(class extends Event {}, { requestPermission }),
+    })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { __qiblaPermissionRequests: number }).__qiblaPermissionRequests)).toBe(1)
+
+  await page.evaluate(() => {
+    (window as Window & { __qiblaHasFocus: boolean }).__qiblaHasFocus = false
+    window.dispatchEvent(new Event('blur'))
+  })
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+    alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 20, webkitCompassAccuracy: 5,
+  })))
+  await expect(page.locator('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+  await page.evaluate(() => (window as Window & { __qiblaResolvePermission?: (value: 'granted' | 'denied') => void })
+    .__qiblaResolvePermission?.('granted'))
+  await expect.poll(() => page.evaluate(() => {
+    const testWindow = window as Window & { __qiblaPermissionRequests: number }
+    return testWindow.__qiblaPermissionRequests
+  })).toBe(1)
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+    alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 21, webkitCompassAccuracy: 5,
+  })))
+  await expect(page.locator('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  await page.evaluate(() => {
+    (window as Window & { __qiblaHasFocus: boolean }).__qiblaHasFocus = true
+    window.dispatchEvent(new Event('pageshow'))
+  })
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+    alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 22, webkitCompassAccuracy: 5,
+  })))
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+})
+
+test('a delayed verified heading follows early generic Euler samples without an unverified reading', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    const requestPermission = () => Promise.resolve('granted' as const)
+    Object.defineProperty(window, 'DeviceOrientationEvent', {
+      configurable: true,
+      value: Object.assign(class extends Event {}, { requestPermission }),
+    })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  // Keep both samples within the initial acquisition window, even under heavily loaded CI workers.
+  // The exact four-second boundary is covered separately with deterministic fake-timer unit tests.
+  const pointerWasLiveForUnverifiedSample = await page.evaluate(async () => {
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 270, beta: 0, gamma: 0, absolute: false,
+    }))
+    const wasLive = document.querySelector('.qibla-pointer')?.getAttribute('data-visible') === 'true'
+    await new Promise<void>(resolve => setTimeout(resolve, 350))
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 75, webkitCompassAccuracy: 5,
+    }))
+    return wasLive
+  })
+  expect(pointerWasLiveForUnverifiedSample).toBe(false)
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+})
+
+test('generic Euler-only acquisition offers explicit recovery after timeout', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    type PermissionWindow = Window & { __qiblaPermissionRequests: number }
+    const testWindow = window as PermissionWindow
+    testWindow.__qiblaPermissionRequests = 0
+    const requestPermission = () => {
+      testWindow.__qiblaPermissionRequests += 1
+      return Promise.resolve('granted' as const)
+    }
+    Object.defineProperty(window, 'DeviceOrientationEvent', {
+      configurable: true,
+      value: Object.assign(class extends Event {}, { requestPermission }),
+    })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+    alpha: 270, beta: 0, gamma: 0, absolute: true,
+  })))
+  await page.waitForTimeout(4200)
+  await expect(page.getByRole('status')).toHaveText(/Компас не ответил/)
+  const retry = page.getByRole('button', { name: 'Попробовать снова' })
+  await expect(retry).toBeVisible()
+  await retry.click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { __qiblaPermissionRequests: number }).__qiblaPermissionRequests)).toBe(2)
+  await page.evaluate(() => window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+    alpha: 0, beta: 0, gamma: 0, absolute: false, webkitCompassHeading: 76, webkitCompassAccuracy: 5,
+  })))
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+})
+
+test('a silent Generic Sensor without a WebKit fallback offers a useful retry', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'DeviceOrientationEvent', { configurable: true, value: undefined })
+    type TestWindow = Window & { __qiblaSensorStarts: number }
+    const testWindow = window as TestWindow
+    testWindow.__qiblaSensorStarts = 0
+    class SilentAbsoluteOrientationSensor {
+      quaternion = null
+      onreading: (() => void) | null = null
+      onerror: ((event: Event & { error?: { name?: string } }) => void) | null = null
+      start() { testWindow.__qiblaSensorStarts += 1 }
+      stop() {}
+    }
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: SilentAbsoluteOrientationSensor })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  await page.waitForTimeout(4200)
+  await expect(page.getByRole('status')).toHaveText(/Компас не ответил/)
+  const retry = page.getByRole('button', { name: 'Попробовать снова' })
+  await expect(retry).toBeVisible()
+  await expect(page.locator('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  await retry.click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { __qiblaSensorStarts: number }).__qiblaSensorStarts)).toBe(2)
+})
+
+test('a platform without an orientation source stays unsupported without retry', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    Object.defineProperty(window, 'DeviceOrientationEvent', { configurable: true, value: undefined })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  await expect(page.getByRole('status')).toHaveText(/Живой компас недоступен/)
+  await expect(page.getByRole('button', { name: 'Попробовать снова' })).toHaveCount(0)
+  await expect(page.locator('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+})
+
+test('a remembered grant resumes on a visible route re-entry despite stale false hasFocus', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
+    Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, value: 5 })
+    Object.defineProperty(window, 'AbsoluteOrientationSensor', { configurable: true, value: undefined })
+    type TestWindow = Window & { __qiblaHasFocus: boolean; __qiblaPermissionRequests: number }
+    const testWindow = window as TestWindow
+    testWindow.__qiblaHasFocus = true
+    testWindow.__qiblaPermissionRequests = 0
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => testWindow.__qiblaHasFocus })
+    const requestPermission = () => {
+      testWindow.__qiblaPermissionRequests += 1
+      return Promise.resolve('granted' as const)
+    }
+    Object.defineProperty(window, 'DeviceOrientationEvent', {
+      configurable: true,
+      value: Object.assign(class extends Event {}, { requestPermission }),
+    })
+  })
+  await page.goto('./')
+  await choosePlace(page)
+  await page.locator('#home-qibla').click()
+  await page.getByRole('button', { name: 'Включить компас' }).click()
+  const sendHeading = async (heading: number) => page.evaluate(value => {
+    window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+      alpha: 0, beta: 0, gamma: 0, absolute: false,
+      webkitCompassHeading: value, webkitCompassAccuracy: 5,
+    }))
+  }, heading)
+  await sendHeading(25)
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  await page.getByRole('button', { name: 'Назад' }).click()
+  await expect(page.getByRole('region', { name: 'Главная' })).toBeVisible()
+  await page.evaluate(() => { (window as Window & { __qiblaHasFocus: boolean }).__qiblaHasFocus = false })
+  await page.locator('#home-qibla').click()
+  await expect(page.getByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Включить компас' })).toHaveCount(0)
+  await sendHeading(26)
+  await expect(page.locator('.qibla-pointer')).toHaveAttribute('data-visible', 'true')
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __qiblaPermissionRequests: number }).__qiblaPermissionRequests)).toBe(1)
+})
