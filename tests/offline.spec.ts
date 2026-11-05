@@ -58,9 +58,16 @@ test('сохранённое расписание и поиск города р�
     await page.locator('#home-date').click()
     await page.getByRole('button', { name: 'Праздники и события' }).click()
     await expect(page.locator('.religious-event-list-row').first()).toBeVisible()
-    await page.locator('.religious-event-list-row').first().click()
+    await page.getByRole('button', { name: /Начало Рамадана/ }).click()
     await expect(page.locator('.markdown-article h1')).toBeVisible()
     await expect(page.getByRole('region').filter({ has: page.locator('.markdown-article') })).toBeVisible()
+    for (const title of ['Зикр первых 10 дней', 'Зикр вторых 10 дней', 'Зикр последних 10 дней']) {
+      await page.getByRole('button', { name: title }).click()
+      const dhikr = page.getByRole('region', { name: title })
+      await expect(dhikr.locator('.ramadan-dhikr-arabic[dir="rtl"][lang="ar"]')).toBeVisible()
+      await expect(dhikr.getByRole('heading', { name: 'Перевод' })).toBeVisible()
+      if (title !== 'Зикр последних 10 дней') await page.getByRole('button', { name: 'Назад' }).click()
+    }
   } finally {
     await context.setOffline(false)
   }

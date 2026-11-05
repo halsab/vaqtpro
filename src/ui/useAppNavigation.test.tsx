@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { DateScreen } from '../features/calendar/DateScreen'
 import { DEFAULT_CALENDAR_PREFERENCES } from '../domain/calendar'
 import { ReligiousEventsScreen } from '../features/religiousEvents/ReligiousEventsScreen'
+import { ReligiousEventScreen } from '../features/religiousEvents/ReligiousEventScreen'
+import { RamadanDhikrScreen } from '../features/religiousEvents/RamadanDhikrScreen'
 import { useAppNavigation } from './useAppNavigation'
 
 function NavigationExample() {
@@ -55,6 +57,16 @@ function ReligiousNavigationExample() {
   return navigation.screen === 'home'
     ? <button id="religious-event-banner" onClick={() => navigation.open({ screen: 'religious-event', religiousEventId: 'arafa' })}>День Арафа</button>
     : <><p>{navigation.religiousEventId}</p><button onClick={navigation.back}>Назад</button></>
+}
+
+function RamadanDhikrNavigationExample() {
+  const navigation = useAppNavigation()
+  if (navigation.screen === 'home') return <button id="ramadan-banner" onClick={() => navigation.open({ screen: 'religious-event', religiousEventId: 'ramadan' })}>Рамадан</button>
+  if (navigation.screen === 'religious-event' && navigation.religiousEventId) return <ReligiousEventScreen
+    eventId={navigation.religiousEventId} onBack={navigation.back}
+    onOpenRamadanDhikr={ramadanDhikrId => navigation.open({ screen: 'ramadan-dhikr', ramadanDhikrId })} />
+  if (navigation.screen === 'ramadan-dhikr' && navigation.ramadanDhikrId) return <RamadanDhikrScreen dhikrId={navigation.ramadanDhikrId} onBack={navigation.back} />
+  return null
 }
 
 function NestedReligiousNavigationExample() {
@@ -172,6 +184,45 @@ describe('навигация экранов', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'День Арафа' })).toHaveFocus())
     act(() => { window.history.forward() })
     await waitFor(() => expect(screen.getByText('arafa')).toBeVisible())
+  })
+
+  it('сохраняет Ramadan article → dhikr identity в Back/Forward и возвращает фокус выбранной декаде', async () => {
+    const user = userEvent.setup()
+    render(<RamadanDhikrNavigationExample />)
+    await user.click(screen.getByRole('button', { name: 'Рамадан' }))
+    const selected = screen.getByRole('button', { name: 'Зикр вторых 10 дней' })
+    await user.click(selected)
+    expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible()
+
+    await user.click(screen.getByRole('button', { name: 'Назад' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Зикр вторых 10 дней' })).toHaveFocus())
+    act(() => { window.history.forward() })
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible())
+  })
+
+  it('rejects malformed Ramadan dhikr history IDs instead of rendering an invalid screen', async () => {
+    const user = userEvent.setup()
+    render(<RamadanDhikrNavigationExample />)
+    await user.click(screen.getByRole('button', { name: 'Рамадан' }))
+    await user.click(screen.getByRole('button', { name: 'Зикр первых 10 дней' }))
+
+    const currentState = window.history.state as {
+      salahNavigation: { session: string; entries: Array<Record<string, unknown>> }
+    }
+    const lastEntry = currentState.salahNavigation.entries.at(-1)
+    if (!lastEntry) throw new Error('Missing Ramadan dhikr navigation entry')
+    const malformedState = {
+      salahNavigation: {
+        ...currentState.salahNavigation,
+        entries: [
+          ...currentState.salahNavigation.entries.slice(0, -1),
+          { ...lastEntry, ramadanDhikrId: { toString: () => 'first' } },
+        ],
+      },
+    }
+
+    act(() => { window.dispatchEvent(new PopStateEvent('popstate', { state: malformedState })) })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Рамадан' })).toBeVisible())
   })
 
   it.each(['Сегодня', 'Месяц'])('отложенный автофокус не перехватывает фокус после действия «%s»', action => {

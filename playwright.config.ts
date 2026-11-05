@@ -29,6 +29,7 @@ export default defineConfig({
         '**/analytics.spec.ts',
         '**/location-selection.spec.ts',
         '**/navigation-transition.spec.ts',
+        '**/ramadan-dhikr.spec.ts',
         '**/deferred-loading.spec.ts',
         '**/security.spec.ts',
         '**/prayer-source-upgrade.spec.ts',
@@ -51,7 +52,7 @@ export default defineConfig({
       name: 'mobile-safari-portrait',
       // Экспортные E2E сняты по запросу владельца: Playwright не проверяет системный picker/share sheet и качество файлов на устройствах.
       // Спиннер, автозапуск picker, повторный тап, отправку файлов и внешний вид владелец проверяет вручную.
-      testMatch: ['**/mobile.spec.ts'],
+      testMatch: ['**/mobile.spec.ts', '**/ramadan-dhikr.spec.ts', '**/fasting-duas.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },
     {
