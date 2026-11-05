@@ -23,7 +23,7 @@ it('shows the title and exactly two standard navigation rows', async () => {
   expect(onOpenDua).toHaveBeenCalledWith('iftar')
 })
 
-it.each(FASTING_DUA_IDS)('renders %s via shared Markdown article in order with Arabic RTL', async id => {
+it.each(FASTING_DUA_IDS)('renders %s via shared recitation article in order with Arabic RTL', async id => {
   render(<FastingDuaScreen duaId={id} onBack={() => {}} />)
   const heading = await screen.findByRole('heading', { name: titles[id], level: 1 })
   const article = heading.closest('.markdown-article')
@@ -32,10 +32,8 @@ it.each(FASTING_DUA_IDS)('renders %s via shared Markdown article in order with A
   expect([...article.querySelectorAll('h1, h2')].map(item => item.textContent))
     .toEqual([titles[id], 'Арабский текст', 'Транскрипция', 'Перевод'])
 
-  const sections = getFastingDuaContent(id).split(/^## [^\r\n]+\r?\n/gmu).slice(1).map(section => section.trim())
-  const [arabic, transcription, translation] = sections
-  if (!arabic || !transcription || !translation) throw new Error('Incomplete Markdown fixture')
-  const arabicParagraph = article.querySelector('.markdown-article-arabic')
+  const { arabic, transcription, translation } = getFastingDuaContent(id)
+  const arabicParagraph = article.querySelector('.recitation-arabic')
   expect(arabicParagraph).toHaveTextContent(arabic)
   expect(arabicParagraph).toHaveAttribute('dir', 'rtl')
   expect(arabicParagraph).toHaveAttribute('lang', 'ar')

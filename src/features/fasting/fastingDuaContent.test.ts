@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { FASTING_DUA_IDS, FASTING_DUA_TITLE_KEYS, getFastingDuaContent } from './fastingDuaContent'
+import suhur from '../../content/religious-events/dua-suhur.md?raw'
+import iftar from '../../content/religious-events/dua-iftar.md?raw'
 
 describe('локальные дуа поста', () => {
   it('содержит ровно две статьи в порядке сухур → ифтар', () => {
@@ -20,8 +22,9 @@ describe('локальные дуа поста', () => {
       translation: '«О Аллах, ради Тебя я постился, в Тебя уверовал, на Тебя положился и Твоими дарами разговелся. О Всепрощающий, прости мои прежние и последующие прегрешения».',
     }],
   ] as const)('сохраняет текст статьи %s посимвольно', (id, expected) => {
-    const content = getFastingDuaContent(id)
+    const content = id === 'suhur' ? suhur : iftar
     const title = id === 'suhur' ? 'Дуа сухура' : 'Дуа ифтара'
+    expect(getFastingDuaContent(id)).toEqual(expected)
     expect(content.trim()).toBe(`# ${title}
 
 ## Арабский текст
