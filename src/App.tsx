@@ -43,6 +43,7 @@ import { compactPlaceLabel } from './domain/countryLabels'
 import { useCityCatalog } from './features/location/useCityCatalog'
 import { ScheduleContent } from './features/schedule/ScheduleContent'
 import { ReligiousEventsScreen } from './features/religiousEvents/ReligiousEventsScreen'
+import { RamadanDhikrScreen } from './features/religiousEvents/RamadanDhikrScreen'
 import { usePrayerSchedules } from './features/schedule/usePrayerSchedules'
 import { activateFastScheduleContext, currentFastScheduleGeneration, invalidateFastScheduleSnapshot,
   readFastScheduleSnapshot, writeFastScheduleSnapshot } from './features/schedule/fastScheduleSnapshot'
@@ -773,6 +774,7 @@ export function App({
     || navigation.screen === 'source-info'
     || navigation.screen === 'religious-events'
     || navigation.screen === 'religious-event'
+    || navigation.screen === 'ramadan-dhikr'
     || navigation.screen === 'qibla'
     || navigation.screen === 'date'
     || navigation.screen === 'monthly-schedule'
@@ -886,8 +888,11 @@ export function App({
         : <Screen label={t('scheduleInfo')} top={<BackButton onClick={backScreen} />}><p className="screen-copy">{place ? t('scheduleForDate') : t('noSchedulePlace')}</p></Screen>
         : null}
       {navigation.screen === 'religious-event' && navigation.religiousEventId
-        ? LoadedReligiousEventScreen ? <LoadedReligiousEventScreen eventId={navigation.religiousEventId} onBack={backScreen} /> : null
+        ? LoadedReligiousEventScreen ? <LoadedReligiousEventScreen eventId={navigation.religiousEventId} onBack={backScreen}
+            onOpenRamadanDhikr={dhikrId => openImmediately({ screen: 'ramadan-dhikr', ramadanDhikrId: dhikrId })} /> : null
         : null}
+      {navigation.screen === 'ramadan-dhikr' && navigation.ramadanDhikrId
+        ? <RamadanDhikrScreen dhikrId={navigation.ramadanDhikrId} onBack={backScreen} /> : null}
       {settingsDialogOpen && SettingsScreens ? <SettingsScreens screen={navigation.screen} preferences={preferences} onChange={updatePreferences}
         fastingModeEnabled={fastingModeEnabled} onFastingModeChange={updateFastingMode}
         themeFamily={themeFamily} onThemeFamilyChange={updateThemeFamily}
