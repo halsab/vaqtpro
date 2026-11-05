@@ -12,7 +12,7 @@ interface IndexedDBFactoryLike {
 }
 
 export function clearLegacyCatalogStorage(): Promise<void> {
-  const factory = (globalThis as typeof globalThis & { indexedDB?: IndexedDBFactoryLike }).indexedDB
+  const factory = Reflect.get(globalThis, 'indexedDB') as IndexedDBFactoryLike | undefined
   if (!factory) return Promise.resolve()
   cleanup ??= new Promise(resolve => {
     const request = factory.deleteDatabase(databaseName)

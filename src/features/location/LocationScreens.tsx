@@ -137,12 +137,14 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
   }, [query, onSearchCities, locale, retry])
   const localities = useMemo(() => query ? locations.filter(item => item.name.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru'))) : [], [locations, query])
   const ready = completion?.query === query ? completion : null
-  const pending = Boolean(query && !ready)
+  const pending = Boolean(query.length >= 2 && !ready)
   const cities = ready?.data?.cities ?? []
   const retrySearch = () => { setCompletion(null); setRetry(value => value + 1); onLoadCities(true) }
-  const status = pending ? t('citySearching')
+  const status = query && query.length < 2 ? t('cityEnterMore')
+    : pending ? t('citySearching')
     : query && ready?.failed ? t('citySearchFailed')
       : query && ready?.data?.status === 'offline-seed' ? t('cityOfflineSeed')
+        : query && ready?.data?.status === 'limited' ? t('citySearchLimited')
         : query && ready && !cities.length && !localities.length ? t('cityNotFound')
           : !query && catalogStatus === 'offline' ? t('citySearchNeedsInternet')
             : !query && catalogStatus === 'error' ? t('cityLoadFailed')
@@ -151,7 +153,7 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
     || (!query && ['offline', 'error'].includes(catalogStatus))
   return <Screen label={t('searchCity')} top={<BackButton onClick={onBack} label={t('cancel')} />}>
     <input className="text-field" data-screen-focus type="search" aria-label={t('searchPlaceLabel')} placeholder={t('locationSearch')} value={text}
-      onChange={event => { setText(event.target.value); if (event.target.value.trim() !== query) setCompletion(null) }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
+      onChange={event => { onCancelSearch?.(); setText(event.target.value); if (event.target.value.trim() !== query) setCompletion(null) }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
     <ul className="city-results" aria-label={t('searchResults')} aria-busy={pending}>
       {localities.map(item => <li key={item.id}><ActionRow className="city-result" title={item.name}
         secondary={<span className="note">{t('tatarstanLocalityResult')}</span>} onClick={() => onSelectLocality(item.id)} />

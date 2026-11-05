@@ -4,7 +4,7 @@ import type { Result } from '../domain/result'
 
 export interface CitySearchResult {
   cities: City[]
-  status: 'complete' | 'offline-seed'
+  status: 'complete' | 'limited' | 'offline-seed'
 }
 
 export interface CityCatalogService {

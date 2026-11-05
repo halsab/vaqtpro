@@ -1,4 +1,4 @@
-import { findNearestCity, isCityFeatureCode, searchCities, validNearestQuery, type City, type CityDataset, type CityFeatureCode } from '../domain/cities'
+import { findNearestCity, getCountryName, isCityFeatureCode, normalizeCitySearch, searchCities, validNearestQuery, type City, type CityDataset, type CityFeatureCode } from '../domain/cities'
 import type { DataFailure } from '../domain/errors'
 import { isValidTimeZone } from '../domain/locationTime'
 import { failure, success, type Result } from '../domain/result'
@@ -45,7 +45,7 @@ function transliterateLatinQuery(query: string): string | null {
       result += match[1]
       index += match[0].length
     } else {
-      result += normalized[index]
+      result += normalized.charAt(index)
       index += 1
     }
   }
@@ -75,6 +75,13 @@ function isGeoNamesResult(value: unknown): value is GeoNamesResult {
     && population !== null && Number.isSafeInteger(population) && population >= 0
     && object(value.timezone) && typeof value.timezone.timeZoneId === 'string' && isValidTimeZone(value.timezone.timeZoneId)
     && isCityFeatureCode(value.fcode)
+}
+
+function isLimited(value: unknown): boolean {
+  if (!object(value)) return false
+  const total = numberValue(value.totalResultsCount)
+  return (total !== null && total > MAX_RESULTS)
+    || (Array.isArray(value.geonames) && value.geonames.length >= MAX_RESULTS)
 }
 
 export function parseGeoNamesResults(value: unknown): City[] {
@@ -111,7 +118,8 @@ export function createCityCatalogService(dependencies: {
   loadOfflineSeed?: () => Promise<Result<CityDataset, DataFailure>>
 } = {}): CityCatalogService {
   const fetcher = dependencies.fetcher ?? fetch
-  const geonamesUsername = dependencies.geonamesUsername ?? import.meta.env.VITE_GEONAMES_USERNAME ?? ''
+  const configuredUsername: unknown = import.meta.env.VITE_GEONAMES_USERNAME
+  const geonamesUsername = dependencies.geonamesUsername ?? (typeof configuredUsername === 'string' ? configuredUsername : '')
   const loadSeed = dependencies.loadOfflineSeed ?? loadOfflineCitySeed
   let seed: CityDataset | null = null
   let seedLoad: Promise<Result<undefined, DataFailure>> | null = null
@@ -159,11 +167,13 @@ export function createCityCatalogService(dependencies: {
 
   const search = async (query: string, language = 'ru'): Promise<Result<CitySearchResult, DataFailure>> => {
     const normalizedQuery = query.trim()
+    const nameQuery = normalizedQuery.split(',')[0]?.trim() ?? ''
+    const contextQuery = normalizedQuery.split(',').slice(1).join(' ').trim()
     const revision = ++searchRevision
     activeSearch?.abort()
     activeSearch = null
-    if (Array.from(normalizedQuery).length < MIN_QUERY_LENGTH) return success({ cities: [], status: 'complete' })
-    if (!geonamesUsername.trim()) return offlineFallback(normalizedQuery, revision)
+    if (Array.from(nameQuery).length < MIN_QUERY_LENGTH) return success({ cities: [], status: 'complete' })
+    if (!geonamesUsername.trim()) return await offlineFallback(normalizedQuery, revision)
     // Подготовка офлайн-резерва не задерживает запрос онлайн-каталога.
     void load()
     const controller = new AbortController()
@@ -181,31 +191,37 @@ export function createCityCatalogService(dependencies: {
       url.searchParams.set('username', geonamesUsername.trim())
       return url
     }
-    const url = makeUrl(normalizedQuery)
-    let timedOut = false
-    const timeout = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, REQUEST_TIMEOUT_MS)
+    const url = makeUrl(nameQuery)
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const response = await fetcher(url, { cache: 'no-store', signal: controller.signal })
-      if (!response.ok) return offlineFallback(normalizedQuery, revision)
-      let cities = parseGeoNamesResults(await response.json() as unknown)
+      if (!response.ok) return await offlineFallback(normalizedQuery, revision)
+      const raw: unknown = await response.json()
+      let cities = parseGeoNamesResults(raw)
+      let limited = isLimited(raw)
       if (revision !== searchRevision) return failure({ kind: 'data', reason: 'superseded' })
-      const transliterated = transliterateLatinQuery(normalizedQuery)
+      const transliterated = transliterateLatinQuery(nameQuery)
       if (!cities.length && transliterated) {
         const fallbackUrl = makeUrl(transliterated)
         const fallbackResponse = await fetcher(fallbackUrl, { cache: 'no-store', signal: controller.signal })
-        if (!fallbackResponse.ok) return offlineFallback(normalizedQuery, revision)
-        cities = parseGeoNamesResults(await fallbackResponse.json() as unknown)
+        if (!fallbackResponse.ok) return await offlineFallback(normalizedQuery, revision)
+        const retryRaw: unknown = await fallbackResponse.json()
+        cities = parseGeoNamesResults(retryRaw)
+        limited = isLimited(retryRaw)
+      }
+      if (contextQuery) {
+        const terms = normalizeCitySearch(contextQuery).split(/\s+/).filter(Boolean)
+        cities = cities.filter(city => {
+          const context = normalizeCitySearch(`${city.admin1Name} ${getCountryName(city.countryCode)}`)
+          return terms.every(term => context.includes(term))
+        })
       }
       return revision === searchRevision
-        ? success({ cities, status: 'complete' })
+        ? success({ cities, status: limited ? 'limited' : 'complete' })
         : failure({ kind: 'data', reason: 'superseded' })
     } catch {
       if (revision !== searchRevision) return failure({ kind: 'data', reason: 'superseded' })
-      if (controller.signal.aborted && !timedOut) return failure({ kind: 'data', reason: 'superseded' })
-      return offlineFallback(normalizedQuery, revision)
+      return await offlineFallback(normalizedQuery, revision)
     } finally {
       clearTimeout(timeout)
       if (activeSearch === controller) activeSearch = null

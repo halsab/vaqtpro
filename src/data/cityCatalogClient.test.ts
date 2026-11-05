@@ -36,7 +36,7 @@ describe('online place search', () => {
     const service = createCityCatalogService({
       fetcher,
       geonamesUsername: 'vaqtpro-test',
-      loadOfflineSeed: async () => success(offlineSeed),
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed),)
     })
 
     await service.load()
@@ -53,7 +53,7 @@ describe('online place search', () => {
       },
     })
     const [url, options] = fetcher.mock.calls[0] ?? []
-    const request = new URL(String(url))
+    const request = new URL(url as URL)
     expect(request.origin + request.pathname).toBe('https://secure.geonames.org/searchJSON')
     expect(request.searchParams.get('name_startsWith')).toBe('Облово')
     expect(request.searchParams.get('maxRows')).toBe('100')
@@ -77,7 +77,7 @@ describe('online place search', () => {
       { geonameId: 3, name: 'Без пояса', lat: 55, lng: 37, countryCode: 'RU', timezone: { timeZoneId: 'UTC+3' }, fcode: 'PPL' },
       { geonameId: 4, name: 'Координаты вне Земли', lat: 95, lng: 37, countryCode: 'RU', timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' },
     ]))
-    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: async () => success(offlineSeed) })
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: () => Promise.resolve(success(offlineSeed) }))
     await service.load()
 
     await expect(service.search('деревня')).resolves.toMatchObject({
@@ -94,21 +94,21 @@ describe('online place search', () => {
         countryCode: 'RU', adminCode1: '73', adminName1: 'Татарстан',
         timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL',
       }]))
-    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: async () => success(offlineSeed) })
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: () => Promise.resolve(success(offlineSeed) }))
 
     await expect(service.search('Urazaevo', 'ru')).resolves.toMatchObject({
       ok: true,
       value: { status: 'complete', cities: [{ id: 478804, name: 'Уразаево', featureCode: 'PPL' }] },
     })
     expect(fetcher).toHaveBeenCalledTimes(2)
-    expect(new URL(String(fetcher.mock.calls[0]?.[0])).searchParams.get('name_startsWith')).toBe('Urazaevo')
-    expect(new URL(String(fetcher.mock.calls[1]?.[0])).searchParams.get('name_startsWith')).toBe('уразаево')
-    expect(new URL(String(fetcher.mock.calls[1]?.[0])).searchParams.get('username')).toBe('vaqtpro-test')
+    expect(new URL(fetcher.mock.calls[0]?.[0] as URL).searchParams.get('name_startsWith')).toBe('Urazaevo')
+    expect(new URL(fetcher.mock.calls[1]?.[0] as URL).searchParams.get('name_startsWith')).toBe('уразаево')
+    expect(new URL(fetcher.mock.calls[1]?.[0] as URL).searchParams.get('username')).toBe('vaqtpro-test')
   })
 
   it('falls back to the compact in-memory offline seed without storing provider results', async () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline'))
-    const loadOfflineSeed = vi.fn(async () => success(offlineSeed))
+    const loadOfflineSeed = vi.fn(() => Promise.resolve(success(offlineSeed)))
     const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed })
     await service.load()
 
@@ -128,7 +128,7 @@ describe('online place search', () => {
     const service = createCityCatalogService({
       fetcher,
       geonamesUsername: 'vaqtpro-test',
-      loadOfflineSeed: async () => failure({ kind: 'data', reason: 'unavailable' }),
+      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' }),)
     })
 
     await expect(service.search('Село')).resolves.toMatchObject({
@@ -147,7 +147,7 @@ describe('online place search', () => {
       const service = createCityCatalogService({
         fetcher,
         geonamesUsername: 'vaqtpro-test',
-        loadOfflineSeed: async () => success(offlineSeed),
+        loadOfflineSeed: () => Promise.resolve(success(offlineSeed),)
       })
       const pending = service.search('Киров')
       await vi.advanceTimersByTimeAsync(12_000)
@@ -163,7 +163,7 @@ describe('online place search', () => {
 
   it('resolves a nearby GPS label from the offline seed and never sends coordinates to the geocoder', async () => {
     const fetcher = vi.fn<typeof fetch>()
-    const service = createCityCatalogService({ fetcher, loadOfflineSeed: async () => success(offlineSeed) })
+    const service = createCityCatalogService({ fetcher, loadOfflineSeed: () => Promise.resolve(success(offlineSeed) }))
 
     await expect(service.findNearest(58.6, 49.6, 25)).resolves.toMatchObject({
       ok: true,
@@ -176,7 +176,7 @@ describe('online place search', () => {
     const service = createCityCatalogService({
       fetcher: vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline')),
       geonamesUsername: 'vaqtpro-test',
-      loadOfflineSeed: async () => failure({ kind: 'data', reason: 'unavailable' }),
+      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' }),)
     })
 
     await expect(service.search('Село')).resolves.toEqual(failure({ kind: 'data', reason: 'unavailable' }))
@@ -187,7 +187,7 @@ describe('online place search', () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
       .mockResolvedValueOnce(response([]))
-    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: async () => success(offlineSeed) })
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: () => Promise.resolve(success(offlineSeed) }))
     await service.load()
 
     const oldRequest = service.search('Старое')
@@ -202,7 +202,7 @@ describe('online place search', () => {
   it('aborts a pending request when the input becomes shorter than the minimum query', async () => {
     let resolvePending!: (value: Response) => void
     const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise(resolve => { resolvePending = resolve }))
-    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: async () => success(offlineSeed) })
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test', loadOfflineSeed: () => Promise.resolve(success(offlineSeed) }))
     await service.load()
     const pending = service.search('Село')
     await Promise.resolve()
@@ -211,12 +211,12 @@ describe('online place search', () => {
     resolvePending(response([{ geonameId: 9, name: 'Село', lat: 55, lng: 37, countryCode: 'RU', timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' }]))
 
     await expect(pending).resolves.toMatchObject({ ok: false, error: { reason: 'superseded' } })
-    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ signal: expect.objectContaining({ aborted: true }) })
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
   })
 
   it('does not call GeoNames without an explicitly configured username', async () => {
     const fetcher = vi.fn<typeof fetch>()
-    const service = createCityCatalogService({ fetcher, loadOfflineSeed: async () => success(offlineSeed) })
+    const service = createCityCatalogService({ fetcher, loadOfflineSeed: () => Promise.resolve(success(offlineSeed) }))
 
     await expect(service.search('Киров')).resolves.toMatchObject({
       ok: true,
