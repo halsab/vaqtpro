@@ -630,7 +630,7 @@ describe('Qibla orientation browser adapters', () => {
     }
   })
 
-  it('keeps lifecycle events from starting during revalidation and requires focus confirmation or a retry', async () => {
+  it('blocks lifecycle restarts during revalidation and recovers after a true foreground return', async () => {
     vi.useFakeTimers()
     let resolveRevalidation: ((value: 'granted' | 'denied') => void) | undefined
     const requestPermission = vi.fn()
@@ -668,14 +668,8 @@ describe('Qibla orientation browser adapters', () => {
 
       resolveRevalidation?.('granted')
       await pendingEnable
-      expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(listenerAddsBeforeRevalidation)
-      expect(reports.at(-1)).toBe('degraded')
-      dispatchWebKitHeading(21)
-      expect(reports.at(-1)).toBe('degraded')
-
-      await session.enableFromGesture()
       expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(listenerAddsBeforeRevalidation + 1)
-      dispatchWebKitHeading(22)
+      dispatchWebKitHeading(21)
       expect(reports.at(-1)).toBe('live-unverified')
       expect(requestPermission).toHaveBeenCalledTimes(2)
       expect(added.mock.calls.filter(([type]) => type === 'deviceorientation')).toHaveLength(listenerAddsBeforeRevalidation + 1)
