@@ -181,9 +181,14 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
       {cities.map(city => {
         const sameLabel = cities.some(other => other.id !== city.id && localizedCityLabel(other, false, locale, t) === localizedCityLabel(city, false, locale, t))
         const entityContext = [city.admin2Name, localizedCityRegion(city, t), getCountryLabel(city.countryCode, locale), cityFeatureLabel(city, t)].filter(Boolean).join(', ')
+        const nearby = city.nearbyMajorCity
         return <li key={city.id}><ActionRow className="city-result" aria-label={`${localizedCityLabel(city, sameLabel, locale, t)}, ${cityFeatureLabel(city, t)}`} title={city.name}
           secondary={<span className="note">{entityContext}{sameLabel ? ` · ${city.id}` : ''}</span>}
           onClick={() => onSelectCity(city)} />
+          {nearby ? <ActionRow className="city-result" title={t('cityNearbyMajor', {
+            name: nearby.city.name, distance: Math.round(nearby.distanceKm),
+          })} secondary={<span className="note">{t('cityNearbyMajorHint')}</span>}
+            onClick={() => onSelectCity(nearby.city)} /> : null}
         </li>
       })}
     </ul>

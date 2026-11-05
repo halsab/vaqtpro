@@ -316,6 +316,8 @@ export const RU_MESSAGES = Object.freeze({
   citySearchLimited: 'Показаны не все результаты. Можно загрузить следующие или уточнить название.',
   cityMoreResults: 'Показать ещё',
   cityMoreFailed: 'Не удалось загрузить следующие результаты. Повторите попытку.',
+  cityNearbyMajor: ({ name, distance }: { name: string; distance: number }) => `Рядом крупный город: ${name} (около ${distance} км)`,
+  cityNearbyMajorHint: 'Это близкий город, но административная связь с ним не подтверждена.',
   citySearchFailed: 'Не удалось выполнить поиск',
   cityOfflineSeed: 'Онлайн-поиск недоступен. Показан небольшой офлайн-список мест.',
   cityNotFound: 'Населённое место не найдено',

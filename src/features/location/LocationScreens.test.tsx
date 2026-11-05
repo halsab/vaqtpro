@@ -284,6 +284,17 @@ describe('экраны локации', () => {
     await user.click(screen.getByRole('button', { name: 'Повторить' }))
     expect(onLoadCities).toHaveBeenCalledWith(true)
   })
+  it('renders a nearby major city as a distinct selectable item', async () => {
+    const rural = { ...city, id: 188, name: 'Деревня', population: 18,
+      nearbyMajorCity: { city, distanceKm: 18.3 } }
+    const choose = vi.fn()
+    render(<SearchScreen {...searchProps} onSelectCity={choose}
+      onSearchCities={vi.fn().mockResolvedValue(success({ cities: [rural], status: 'complete' }))} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Деревня' } })
+    const related = await screen.findByRole('button', { name: /Рядом крупный город: Москва/ })
+    await userEvent.click(related)
+    expect(choose).toHaveBeenCalledWith(city)
+  })
   it('показывает тип части населённого места и не выдумывает родительский город', async () => {
     const district = { ...city, id: 2, name: 'Облово', featureCode: 'PPLX' as const }
     render(<SearchScreen {...searchProps} onSearchCities={vi.fn().mockResolvedValue(success({ cities: [district], status: 'complete' }))} />)
