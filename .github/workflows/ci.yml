@@ -34,6 +34,9 @@ jobs:
     container: mcr.microsoft.com/playwright:v1.62.1-noble
     env:
       VITE_APP_VERSION: ${{ inputs.app_version }}
+      # Во время CI используется фиктивное имя; E2E-перехватчик не обращается к API.
+      # Релизный вызов workflow получает публичное имя из repository variable.
+      VITE_GEONAMES_USERNAME: ${{ vars.GEONAMES_USERNAME || 'vaqtpro-e2e' }}
     steps:
       - name: Проверить ветку публикации
         if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
@@ -63,6 +66,16 @@ jobs:
       - name: Проверить выбранный номер сборки
         if: inputs.full_quality_gate
         run: node scripts/releaseVersion.ts
+
+      - name: Проверить настройку GeoNames для production
+        if: inputs.full_quality_gate
+        env:
+          GEONAMES_USERNAME: ${{ vars.GEONAMES_USERNAME }}
+        run: |
+          if [ -z "$GEONAMES_USERNAME" ]; then
+            echo '::error::Добавьте GitHub repository variable GEONAMES_USERNAME с зарегистрированным именем GeoNames.'
+            exit 1
+          fi
 
       - name: Установить зависимости
         run: npm ci

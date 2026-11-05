@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CityCatalogService, CitySearchResult } from '../../data/cityCatalog'
-import type { City } from '../../domain/cities'
+import { cityFeatureKind, type City } from '../../domain/cities'
 import { compactPlaceLabel, getCountryLabel } from '../../domain/countryLabels'
 import type { Place } from '../../domain/place'
 import type { Locality } from '../../domain/types'
@@ -17,6 +17,17 @@ import { isSameRecentPlace } from '../../domain/recentPlaces'
 import { recentManualDisambiguation, recentManualTitle } from './recentPlaceLabels'
 
 const idleGpsState: GpsUiState = { status: 'idle' }
+
+function cityFeatureLabel(city: City, t: Translator): string {
+  switch (cityFeatureKind(city.featureCode ?? null)) {
+    case 'district': return t('cityTypeDistrict')
+    case 'administrative-seat': return t('cityTypeAdministrativeSeat')
+    case 'capital': return t('cityTypeCapital')
+    case 'farm-village': return t('cityTypeFarmVillage')
+    case 'small-locality': return t('cityTypeSmallLocality')
+    case 'settlement': return t('cityTypeSettlement')
+  }
+}
 
 function locationStatus(gpsState: GpsUiState, nameLookupState: NameLookupState, gpsPlace: boolean, locale: SupportedLocale, t: Translator): string | null {
   if (gpsState.status === 'locating') return t('locating')
@@ -96,7 +107,8 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
 interface SearchScreenProps {
   locations: Locality[]
   catalogStatus: CityCatalogStatus
-  onLoadCities: () => void
+  onLoadCities: (retry?: boolean) => void
+  onCancelSearch?: () => void
   onSearchCities: CityCatalogService['search']
   onBack: () => void
   onSelectLocality: (id: string) => void
@@ -105,37 +117,38 @@ interface SearchScreenProps {
 }
 interface SearchCompletion { query: string; data: CitySearchResult | null; failed: boolean }
 
-export function SearchScreen({ locations, catalogStatus, onLoadCities, onSearchCities, onBack, onSelectLocality, onSelectCity, notice }: SearchScreenProps) {
+export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelSearch, onSearchCities, onBack, onSelectLocality, onSelectCity, notice }: SearchScreenProps) {
   const { locale, t } = useLocalization()
   const [text, setText] = useState('')
   const [completion, setCompletion] = useState<SearchCompletion | null>(null)
   const [retry, setRetry] = useState(0)
   const query = text.trim()
   useEffect(() => { onLoadCities() }, [onLoadCities])
+  useEffect(() => () => onCancelSearch?.(), [onCancelSearch])
   useEffect(() => {
-    if (!query || catalogStatus !== 'ready') return
+    if (!query) return
     let active = true
     const timer = setTimeout(() => {
-      void onSearchCities(query).then(result => {
+      void onSearchCities(query, locale).then(result => {
         if (active) setCompletion({ query, data: result.ok ? result.value : null, failed: !result.ok })
       }).catch(() => { if (active) setCompletion({ query, data: null, failed: true }) })
-    }, 200)
+    }, 350)
     return () => { active = false; clearTimeout(timer) }
-  }, [query, catalogStatus, onSearchCities, retry])
+  }, [query, onSearchCities, locale, retry])
   const localities = useMemo(() => query ? locations.filter(item => item.name.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru'))) : [], [locations, query])
   const ready = completion?.query === query ? completion : null
-  const pending = Boolean(query && catalogStatus === 'ready' && !ready)
+  const pending = Boolean(query && !ready)
   const cities = ready?.data?.cities ?? []
-  const retrySearch = () => { setCompletion(null); setRetry(value => value + 1); onLoadCities() }
-  const status = catalogStatus === 'offline' ? t('citySearchNeedsInternet')
-    : catalogStatus === 'error' ? t('cityLoadFailed')
-      : catalogStatus === 'loading' || catalogStatus === 'idle' ? t('cityLoading')
-        : pending ? t('citySearching')
-          : ready?.failed ? t('citySearchFailed')
-            : ready?.data?.status === 'needs-download' ? t('citySearchNeedsDownload')
-              : ready?.data?.status === 'refine' ? t('citySearchRefine')
-              : query && ready && !cities.length && !localities.length ? t('cityNotFound') : null
-  const canRetry = ['offline', 'error'].includes(catalogStatus) || ready?.failed || ready?.data?.status === 'needs-download'
+  const retrySearch = () => { setCompletion(null); setRetry(value => value + 1); onLoadCities(true) }
+  const status = pending ? t('citySearching')
+    : query && ready?.failed ? t('citySearchFailed')
+      : query && ready?.data?.status === 'offline-seed' ? t('cityOfflineSeed')
+        : query && ready && !cities.length && !localities.length ? t('cityNotFound')
+          : !query && catalogStatus === 'offline' ? t('citySearchNeedsInternet')
+            : !query && catalogStatus === 'error' ? t('cityLoadFailed')
+              : !query && (catalogStatus === 'loading' || catalogStatus === 'idle') ? t('cityLoading') : null
+  const canRetry = ready?.failed || ready?.data?.status === 'offline-seed'
+    || (!query && ['offline', 'error'].includes(catalogStatus))
   return <Screen label={t('searchCity')} top={<BackButton onClick={onBack} label={t('cancel')} />}>
     <input className="text-field" data-screen-focus type="search" aria-label={t('searchPlaceLabel')} placeholder={t('locationSearch')} value={text}
       onChange={event => { setText(event.target.value); if (event.target.value.trim() !== query) setCompletion(null) }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
@@ -145,15 +158,15 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onSearchC
       </li>)}
       {cities.map(city => {
         const sameLabel = cities.some(other => other.id !== city.id && localizedCityLabel(other, false, locale, t) === localizedCityLabel(city, false, locale, t))
-        return <li key={city.id}><ActionRow className="city-result" aria-label={localizedCityLabel(city, sameLabel, locale, t)} title={city.name}
-          secondary={<span className="note">{localizedCityRegion(city, t)}, {getCountryLabel(city.countryCode, locale)}{sameLabel ? ` · ${city.id}` : ''}</span>}
+        const entityContext = `${localizedCityRegion(city, t)}, ${getCountryLabel(city.countryCode, locale)}, ${cityFeatureLabel(city, t)}`
+        return <li key={city.id}><ActionRow className="city-result" aria-label={`${localizedCityLabel(city, sameLabel, locale, t)}, ${cityFeatureLabel(city, t)}`} title={city.name}
+          secondary={<span className="note">{entityContext}{sameLabel ? ` · ${city.id}` : ''}</span>}
           onClick={() => onSelectCity(city)} />
         </li>
       })}
     </ul>
     {status ? <p className="note screen-space" role="status">{status}</p> : null}
     {canRetry ? <ActionButton className="screen-space" onClick={retrySearch}>{t('retry')}</ActionButton> : null}
-    {ready?.data?.previousVersion ? <p className="note screen-space">{t('savedCatalog')}</p> : null}
     {notice}
   </Screen>
 }

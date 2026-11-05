@@ -7,15 +7,15 @@ import { restoreRecentPlaces } from '../../domain/recentPlaces'
 import type { CitySearchResult } from '../../data/cityCatalog'
 import { LocationScreen, SearchScreen } from './LocationScreens'
 const location = { id: 'kazan', name: 'Казань', latitude: 55.79, longitude: 49.11 }
-const city = { id: 1, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва', latitude: 55.75, longitude: 37.61, population: 100, timeZone: 'Europe/Moscow' }
-const searchProps = { locations: [location], catalogStatus: 'ready' as const, onLoadCities: vi.fn(), onBack: vi.fn(), onSelectLocality: vi.fn(), onSelectCity: vi.fn(), onSearchCities: vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete', missingPackages: [] })) }
+const city = { id: 1, name: 'Москва', countryCode: 'RU', admin1Code: '48', admin1Name: 'Москва', latitude: 55.75, longitude: 37.61, population: 100, timeZone: 'Europe/Moscow', featureCode: 'PPL' as const }
+const searchProps = { locations: [location], catalogStatus: 'ready' as const, onLoadCities: vi.fn(), onBack: vi.fn(), onSelectLocality: vi.fn(), onSelectCity: vi.fn(), onSearchCities: vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete' })) }
 describe('экраны локации', () => {
   it('объясняет запрос разрешения на первом запуске без запуска GPS', () => {
     const onLocate = vi.fn()
     const { container } = render(<LocationScreen initial place={null} recentPlaces={[]} onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={onLocate}
       bottom={<button>Настройки</button>} />)
-    expect(screen.getByText('Браузер запросит доступ к геопозиции. При необходимости город можно выбрать вручную.')).toBeVisible()
-    expect(screen.getByText('Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
+    expect(screen.getByText('Браузер запросит доступ к геопозиции. При необходимости место можно выбрать вручную.')).toBeVisible()
+    expect(screen.getByText('Выберите место или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
     expect(screen.getByText('VaqtPro')).toBeVisible()
     expect(container.querySelector('img')).toHaveAttribute('src', '/icons/light/icon.svg')
@@ -80,19 +80,19 @@ describe('экраны локации', () => {
     expect(screen.getByRole('status')).toHaveTextContent(message)
   })
   it.each([
-    ['denied', 'Доступ к геопозиции запрещён. Разрешите доступ в настройках браузера или выберите город вручную.'],
-    ['unsupported', 'Этот браузер не поддерживает геопозицию. Выберите город вручную.'],
-    ['timeout', 'Не удалось определить местоположение вовремя. Попробуйте ещё раз или выберите город вручную.'],
+    ['denied', 'Доступ к геопозиции запрещён. Разрешите доступ в настройках браузера или выберите место вручную.'],
+    ['unsupported', 'Этот браузер не поддерживает геопозицию. Выберите место вручную.'],
+    ['timeout', 'Не удалось определить местоположение вовремя. Попробуйте ещё раз или выберите место вручную.'],
     ['unavailable', 'Устройство не смогло определить геопозицию. Проверьте службы геолокации и попробуйте снова.'],
   ] as const)('показывает конкретную GPS error %s и сохраняет ручной поиск', (reason, message) => {
     render(<LocationScreen place={null} recentPlaces={[]} gpsState={{ status: 'error', reason }} onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
     expect(screen.getByRole('alert')).toHaveTextContent(message)
-    expect(screen.getByRole('button', { name: 'Найти город' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Найти место' })).toBeEnabled()
   })
   it('сокращает страну в поиске, сохраняя полное доступное название', async () => {
     render(<SearchScreen {...searchProps} />)
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
-    const result = await screen.findByRole('button', { name: 'Москва, Москва, Россия' })
+    const result = await screen.findByRole('button', { name: /Москва, Москва, Россия, Населённое место/ })
     expect(result).toHaveTextContent('Москва, РФ')
   })
   it('сокращает старые подписи текущего и недавнего места без изменения данных', () => {
@@ -104,7 +104,7 @@ describe('экраны локации', () => {
     expect(place.name).toBe('Москва, Москва, Россия')
   })
   it('не теряет результаты при пробеле после уже найденного названия', async () => {
-    const onSearchCities = vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete', missingPackages: [] }))
+    const onSearchCities = vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete' }))
     render(<SearchScreen {...searchProps} onSearchCities={onSearchCities} />)
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
     await screen.findByRole('button', { name: /Москва/ })
@@ -249,23 +249,55 @@ describe('экраны локации', () => {
   })
   it('не показывает запоздалый ответ предыдущего запроса', async () => {
     let resolve!: (value: ReturnType<typeof success<CitySearchResult>>) => void
-    const onSearchCities = vi.fn().mockImplementationOnce(() => new Promise(r => { resolve = r })).mockResolvedValue(success({ cities: [], status: 'complete', missingPackages: [] }))
+    const onSearchCities = vi.fn().mockImplementationOnce(() => new Promise(r => { resolve = r })).mockResolvedValue(success({ cities: [], status: 'complete' }))
     render(<SearchScreen {...searchProps} onSearchCities={onSearchCities} />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Моск' } })
-    await waitFor(() => expect(onSearchCities).toHaveBeenCalledWith('Моск'))
+    await waitFor(() => expect(onSearchCities).toHaveBeenCalledWith('Моск', 'ru'))
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Лондон' } })
-    await act(async () => { resolve(success({ cities: [city], status: 'complete', missingPackages: [] })); await Promise.resolve() })
+    await act(async () => { resolve(success({ cities: [city], status: 'complete' })); await Promise.resolve() })
     expect(screen.queryByRole('button', { name: /Москва/ })).not.toBeInTheDocument()
-    expect(await screen.findByText('Город не найден')).toBeVisible()
+    expect(await screen.findByText('Населённое место не найдено')).toBeVisible()
   })
-  it('показывает найденный город с регионом без брендинга провайдера при офлайн-каталоге', async () => {
-    render(<SearchScreen {...searchProps} catalogStatus="offline" />)
+  it('запускает онлайн-поиск, пока компактный офлайн-каталог недоступен', async () => {
+    const onSearchCities = vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete' }))
+    render(<SearchScreen {...searchProps} catalogStatus="offline" onSearchCities={onSearchCities} />)
     await userEvent.type(screen.getByRole('searchbox'), 'Каз')
+    await waitFor(() => expect(onSearchCities).toHaveBeenCalledWith('Каз', 'ru'))
     expect(screen.getByRole('button', { name: /Казань.*Татарстан/ })).toBeEnabled()
-    expect(screen.getByText('Для поиска городов нужен интернет')).toBeVisible()
+    expect(screen.queryByText('Подключитесь к интернету, чтобы загрузить офлайн-список мест')).not.toBeInTheDocument()
+  })
+  it('запускает онлайн-поиск, пока компактный офлайн-каталог загружается', async () => {
+    const onSearchCities = vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete' }))
+    render(<SearchScreen {...searchProps} catalogStatus="loading" onSearchCities={onSearchCities} />)
+    await userEvent.type(screen.getByRole('searchbox'), 'Каз')
+    await waitFor(() => expect(onSearchCities).toHaveBeenCalledWith('Каз', 'ru'))
+    expect(await screen.findByRole('button', { name: /Казань.*Татарстан/ })).toBeVisible()
+  })
+  it('объясняет ограниченное покрытие компактного офлайн-каталога', async () => {
+    const search = vi.fn().mockResolvedValue(success({ cities: [city], status: 'offline-seed' }))
+    const onLoadCities = vi.fn()
+    const user = userEvent.setup()
+    render(<SearchScreen {...searchProps} onLoadCities={onLoadCities} onSearchCities={search} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Москва' } })
+    expect(await screen.findByText('Онлайн-поиск недоступен. Показан небольшой офлайн-список мест.')).toBeVisible()
+    expect(screen.getByRole('button', { name: /Москва/ })).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Повторить' }))
+    expect(onLoadCities).toHaveBeenCalledWith(true)
+  })
+  it('показывает тип части населённого места и не выдумывает родительский город', async () => {
+    const district = { ...city, id: 2, name: 'Облово', featureCode: 'PPLX' as const }
+    render(<SearchScreen {...searchProps} onSearchCities={vi.fn().mockResolvedValue(success({ cities: [district], status: 'complete' }))} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Облово' } })
+    expect(await screen.findByRole('button', { name: /Облово, Москва, Россия, Часть населённого места/ })).toBeVisible()
+  })
+  it('отменяет активный поиск при закрытии экрана поиска', () => {
+    const onCancelSearch = vi.fn()
+    const view = render(<SearchScreen {...searchProps} onCancelSearch={onCancelSearch} />)
+    view.unmount()
+    expect(onCancelSearch).toHaveBeenCalledOnce()
   })
   it.each(['offline', 'unavailable', 'invalid'] as const)('обрабатывает ошибку %s и повторяет поиск', async reason => {
-    const search = vi.fn().mockResolvedValueOnce(failure({ kind: 'data', reason })).mockResolvedValue(success({ cities: [city], status: 'complete', missingPackages: [] }))
+    const search = vi.fn().mockResolvedValueOnce(failure({ kind: 'data', reason })).mockResolvedValue(success({ cities: [city], status: 'complete' }))
     render(<SearchScreen {...searchProps} onSearchCities={search} />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Москва' } })
     expect(await screen.findByText('Не удалось выполнить поиск')).toBeVisible()
@@ -277,27 +309,27 @@ describe('экраны локации', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Москва' } })
     expect(await screen.findByText('Не удалось выполнить поиск')).toBeVisible()
   })
-  it('различает одинаковые города и повторяет неполный поиск', async () => {
+  it('различает одинаковые места и повторяет поиск после офлайн-совпадений', async () => {
     const cities = [1, 2].map(id => ({ ...city, id, name: 'Киров', admin1Name: 'Кировская область' }))
-    const search = vi.fn().mockResolvedValueOnce(success({ cities, status: 'needs-download', missingPackages: ['RU-1'] })).mockResolvedValue(success({ cities, status: 'complete', missingPackages: [] }))
+    const search = vi.fn().mockResolvedValueOnce(success({ cities, status: 'offline-seed' })).mockResolvedValue(success({ cities, status: 'complete' }))
     render(<SearchScreen {...searchProps} onSearchCities={search} />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Киров' } })
-    expect(await screen.findByText('Для полного поиска нужен интернет')).toBeVisible()
+    expect(await screen.findByText('Онлайн-поиск недоступен. Показан небольшой офлайн-список мест.')).toBeVisible()
     expect(screen.getByRole('button', { name: /Киров.*GeoNames 1/ })).toHaveTextContent('Кировская область')
     expect(screen.getByRole('button', { name: /Киров.*GeoNames 2/ })).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
     await waitFor(() => expect(search).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.queryByText('Для полного поиска нужен интернет')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('Онлайн-поиск недоступен. Показан небольшой офлайн-список мест.')).not.toBeInTheDocument())
   })
   it('оформляет триггер поиска как field-like, а гео-действие полноширинным', () => {
     render(<LocationScreen initial place={null} recentPlaces={[]} onSelectRecent={vi.fn()} onBack={vi.fn()} onSearch={vi.fn()} onLocate={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'Найти город' })).toHaveClass('pill--field')
+    expect(screen.getByRole('button', { name: 'Найти место' })).toHaveClass('pill--field')
     expect(screen.getByRole('button', { name: 'По геопозиции' })).toHaveClass('pill--primary')
   })
   it('выравнивает результаты поиска как двухстрочные строки слева', async () => {
     render(<SearchScreen {...searchProps} />)
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
-    const result = await screen.findByRole('button', { name: 'Москва, Москва, Россия' })
+    const result = await screen.findByRole('button', { name: /Москва, Москва, Россия, Населённое место/ })
     expect(result).toHaveClass('pill-row', 'pill-row--stacked')
   })
 

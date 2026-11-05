@@ -17,7 +17,6 @@ export default defineConfig({
       include: [
         'src/**/*.{ts,tsx}',
         'scripts/releaseVersion.ts',
-        'scripts/parseGeoNamesCities.ts',
         'scripts/checkActionPins.ts',
         'scripts/checkBuildArtifacts.ts'
       ],

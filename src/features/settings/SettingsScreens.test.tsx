@@ -50,6 +50,9 @@ describe('новые настройки', () => {
     expect(privacy).toHaveTextContent('Постоянная история перемещений и поисковых запросов не ведётся')
     expect(privacy).toHaveTextContent('GitHub Pages')
     expect(privacy).toHaveTextContent('Cloudflare Web Analytics')
+    expect(privacy).toHaveTextContent('IP-адрес и текст запроса')
+    expect(privacy).toHaveTextContent('Сырые GPS-координаты, точность и время фиксации не отправляются')
+    expect(screen.getByRole('link', { name: 'GeoNames Web Services' })).toBeVisible()
     expect(privacy).toHaveTextContent('win32.hs@gmail.com')
     expect(privacy).toHaveTextContent('Дата вступления в силу: 26 октября 2026 года.')
     expect(screen.queryByRole('link', { name: 'Конфиденциальность' })).not.toBeInTheDocument()
@@ -60,7 +63,7 @@ describe('новые настройки', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Источники и лицензии' })).toBeVisible()
     const sources = screen.getByRole('heading', { level: 2, name: 'Источники и лицензии' }).nextElementSibling
     expect(sources?.tagName).toBe('UL')
-    expect(within(sources as HTMLElement).getAllByRole('listitem')).toHaveLength(4)
+    expect(within(sources as HTMLElement).getAllByRole('listitem')).toHaveLength(5)
     expect(within(sources as HTMLElement).getByRole('link', { name: 'SIL Open Font License 1.1' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Все источники и лицензии' })).toBeVisible()
     expect(document.querySelector('details')).toBeNull()

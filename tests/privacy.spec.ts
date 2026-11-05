@@ -13,8 +13,9 @@ test('геопозиция остаётся локальной и не отпр�
   await expectSchedule(page)
   await expect.poll(() => readSavedSetting(page, 'locationChoice'))
     .toMatchObject({ place: { selection: 'gps', latitude, longitude, accuracy: 15 } })
+  expect(requests.some(({ url }) => url.startsWith('https://secure.geonames.org/searchJSON'))).toBe(false)
 
-  await choosePlace(page, 'Казань', /Казань/)
+  await choosePlace(page, 'Облово', /Облово, Тверская Область, Россия/)
   const recentBeforeRecall = await readSavedSetting(page, 'recentPlaces')
   expect(recentBeforeRecall).toEqual(expect.arrayContaining([expect.objectContaining({ selection: 'gps', latitude, longitude, accuracy: 15 })]))
   await page.evaluate(async () => navigator.serviceWorker.ready)
@@ -33,7 +34,19 @@ test('геопозиция остаётся локальной и не отпр�
   }
 
   const appOrigin = new URL(page.url()).origin
-  expect(requests.filter(({ url }) => new URL(url).origin !== appOrigin)).toEqual([])
+  const externalRequests = requests.filter(({ url }) => new URL(url).origin !== appOrigin)
+  expect(externalRequests.map(({ url }) => new URL(url).origin)).toEqual(['https://secure.geonames.org'])
+  const geocodingRequest = new URL(externalRequests[0]?.url ?? 'https://invalid.local')
+  expect([...geocodingRequest.searchParams.entries()].slice(0, -1)).toEqual([
+    ['name_startsWith', 'Облово'],
+    ['maxRows', '100'],
+    ['featureClass', 'P'],
+    ['orderby', 'relevance'],
+    ['lang', 'ru'],
+    ['style', 'FULL'],
+    ['type', 'json'],
+  ])
+  expect(geocodingRequest.searchParams.get('username')).toBeTruthy()
   expect(requests.some(({ url }) => /cloudflareinsights\.com/.test(url))).toBe(false)
   const payloads = requests.map(({ url, body }) => `${url} ${body}`).join('\n')
   for (const coordinate of [latitude, longitude]) {
@@ -47,7 +60,7 @@ test('геопозиция остаётся локальной и не отпр�
 test('список из десяти мест остаётся доступным на узком экране', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 })
   await page.goto('./')
-  await expect(page.getByRole('button', { name: 'Найти город' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Найти место' })).toBeVisible()
   const places = Array.from({ length: 10 }, (_, index) => ({
     id: `locality:history-${index}`,
     selection: 'official',
@@ -77,7 +90,7 @@ test('список из десяти мест остаётся доступны�
     database.close()
   }, places)
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Найти город' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Найти место' })).toBeVisible()
   const recent = page.getByRole('region', { name: 'Недавние места' })
   await expect(recent.getByRole('button', { name: /^Место / })).toHaveCount(10)
   const lastPlace = recent.getByRole('button', { name: 'Место 9' })

@@ -20,6 +20,7 @@ const records: CompactCityRecord[] = [
     'Europe/Istanbul',
     'Стамбул',
     'турция',
+    'PPL',
   ],
   [
     524901,
@@ -33,6 +34,7 @@ const records: CompactCityRecord[] = [
     'Europe/Moscow',
     'Москва',
     'россия',
+    'PPL',
   ],
   [
     323786,
@@ -46,6 +48,7 @@ const records: CompactCityRecord[] = [
     'Europe/Istanbul',
     'Стамбул',
     'турция',
+    'PPL',
   ],
   [
     551487,
@@ -59,6 +62,7 @@ const records: CompactCityRecord[] = [
     'Europe/Moscow',
     'Москва',
     'россия',
+    'PPL',
   ],
 ]
 
@@ -85,6 +89,7 @@ describe('findNearestCity', () => {
       longitude: 37.6156,
       population: 10_381_222,
       timeZone: 'Europe/Moscow',
+      featureCode: 'PPL',
     })
   })
 
@@ -106,6 +111,7 @@ describe('searchCities', () => {
         longitude: 28.9497,
         population: 15_701_602,
         timeZone: 'Europe/Istanbul',
+        featureCode: 'PPL',
       },
     ])
     expect(searchCities(dataset, 'Istanbul').map(({ id }) => id)).toEqual([

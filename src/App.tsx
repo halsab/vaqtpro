@@ -881,6 +881,7 @@ export function App({
         onBack={closeLocationDialog} onSearch={() => { cancelInteractiveGps(); flushSync(() => openScreen('search')); document.querySelector<HTMLInputElement>('input[type="search"]')?.focus() }} onLocate={locateAutomatically}
         onAcceptGps={acceptGps} gpsState={gpsState} nameLookupState={nameLookupState} currentTime={currentTime} notice={persistenceNotice} /> : null}
       {navigation.screen === 'search' ? <SearchScreen locations={locations} catalogStatus={cityCatalogStatus} onLoadCities={loadCities}
+        {...(services.cities.cancelSearch ? { onCancelSearch: services.cities.cancelSearch } : {})}
         onSearchCities={services.cities.search} onBack={backScreen} onSelectCity={selectPresetCity} onSelectLocality={selectLocality} notice={persistenceNotice} /> : null}
       {navigation.screen === 'source-info' ? schedule && context
         ? SourceInfo ? <SourceInfo open onClose={backScreen} context={context} schedule={schedule} placeLabel={sourcePlaceLabel}

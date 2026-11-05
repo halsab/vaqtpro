@@ -18,7 +18,7 @@ const coarseFix = { latitude: 55.79, longitude: 49.12, accuracy: 1200, timestamp
 const goodCoarseFix = { ...coarseFix, accuracy: 500 }
 const preciseFix = { ...coarseFix, latitude: 55.8, accuracy: 10, timestamp: 200 }
 const poorPreciseFix = { ...coarseFix, latitude: 55.791, accuracy: 1100, timestamp: 200 }
-const city: City = { id: 1, name: 'Berlin', countryCode: 'DE', admin1Code: '16', admin1Name: 'Berlin', latitude: 52.52, longitude: 13.4, population: 1, timeZone: 'Europe/Berlin' }
+const city: City = { id: 1, name: 'Berlin', countryCode: 'DE', admin1Code: '16', admin1Name: 'Berlin', latitude: 52.52, longitude: 13.4, population: 1, timeZone: 'Europe/Berlin', featureCode: 'PPL' }
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>(r => { resolve = r })

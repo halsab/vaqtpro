@@ -19,9 +19,9 @@ test('Mobile Safari first-launch screen remains usable at 320px, landscape and l
   await page.evaluate(() => { document.documentElement.style.fontSize = '200%' })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.setViewportSize({ width: 844, height: 390 })
-  await expect(page.getByRole('button', { name: 'Найти город' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Найти место' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
-  await page.getByRole('button', { name: 'Найти город' }).click()
+  await page.getByRole('button', { name: 'Найти место' }).click()
   await expect(page.getByRole('searchbox')).toBeFocused()
 })
 

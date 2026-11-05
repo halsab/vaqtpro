@@ -14,12 +14,12 @@ describe('place identity and timezone', () => {
     expect(place.name).toBe('')
     expect(homePlaceLabel(place)).toBe('55.5000, 49.5000')
   })
-  it('uses a short locality name on home and keeps coordinates as the GPS fallback', () => {
+  it('keeps GPS home labels coordinate-based when a nearby city is known', () => {
     const named = withNearbyCity(gps(), { id: 1, name: 'Казань', countryCode: 'RU', admin1Code: '73', admin1Name: 'Татарстан', latitude: 55.5, longitude: 49.5, population: 1, timeZone: 'Europe/Moscow' })
-    expect(homePlaceLabel(named)).toBe('Казань')
+    expect(homePlaceLabel(named)).toBe('55.5000, 49.5000')
     expect(homePlaceLabel(null)).toBe('Местоположение не определено')
   })
-  it('keeps embedded commas in actual selected city names on home and after GPS enrichment', () => {
+  it('keeps embedded commas in selected city names and GPS labels tied to their coordinates', () => {
     const name = 'Сан, Хосе'
     const city = { id: 101, name, countryCode: 'RU', admin1Code: '73', admin1Name: 'Район, Восток',
       latitude: 55.5, longitude: 49.5, population: 1, timeZone: 'Europe/Moscow' }
@@ -28,13 +28,13 @@ describe('place identity and timezone', () => {
     expect(manual.cityName).toBe(name)
     expect(namedGps.nearbyCity?.cityName).toBe(name)
     expect(homePlaceLabel(manual)).toBe(name)
-    expect(homePlaceLabel(namedGps)).toBe(name)
+    expect(homePlaceLabel(namedGps)).toBe('55.5000, 49.5000')
     expect(homePlaceLabel(placeFromChoice({
       mode: 'calculated', source: 'manual', coordinates: manual, place: manual,
     }, []))).toBe(name)
     expect(homePlaceLabel(placeFromChoice({
       mode: 'calculated', source: 'automatic', coordinates: namedGps, place: namedGps,
-    }, []))).toBe(name)
+    }, []))).toBe('55.5000, 49.5000')
   })
   it('uses the current device timezone after GPS refinement, including inside official coverage', () => {
     const refined = refineGpsPlace(gps(), { ...position, accuracy: 10, timestamp: 200 }, 'Asia/Tokyo', geometry)
@@ -86,6 +86,14 @@ describe('place identity and timezone', () => {
     const choice = { mode: 'calculated' as const, source: 'manual' as const, coordinates: city, place: city }
     expect(placeFromChoice(choice, [])?.region?.code).toBe('RU-TA')
     expect(placeFromChoice({ ...choice, place: { ...city, region: { code: 'RU.undefined', name: '' } } }, [])?.region).toBeNull()
+  })
+  it('preserves verified Tatarstan identity from the online geocoder admin1 ID', () => {
+    const place = createCityPlace({
+      id: 551487, name: 'Казань', countryCode: 'RU', admin1Code: '', admin1Id: 484048,
+      admin1Name: 'Татарстан', latitude: 55.79, longitude: 49.12, population: 1,
+      timeZone: 'Europe/Moscow', featureCode: 'PPLA',
+    }, 300)
+    expect(place).toMatchObject({ region: { code: 'RU-TA', name: 'Татарстан' }, coverage: 'inside' })
   })
   it('refreshes automatic places only after 30 minutes and rejects future timestamps', () => {
     expect(isFreshGpsPlace(gps(), 100 + 29 * 60_000)).toBe(true)
