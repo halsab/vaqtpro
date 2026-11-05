@@ -2,15 +2,17 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 
-import { getRamadanDhikrContent, RAMADAN_DHIKR_IDS, RAMADAN_DHIKR_TITLES } from './ramadanDhikrContent'
+import { translate } from '../../localization/messages'
+import { getRamadanDhikrContent, RAMADAN_DHIKR_IDS, RAMADAN_DHIKR_TITLE_KEYS } from './ramadanDhikrContent'
 import { RamadanDhikrScreen } from './RamadanDhikrScreen'
 
 it.each(RAMADAN_DHIKR_IDS)('renders the %s dhikr with Arabic set to RTL', id => {
   render(<RamadanDhikrScreen dhikrId={id} onBack={() => {}} />)
   const content = getRamadanDhikrContent(id)
+  const title = translate('ru', RAMADAN_DHIKR_TITLE_KEYS[id])
 
-  expect(screen.getByRole('region', { name: RAMADAN_DHIKR_TITLES[id] })).toBeInTheDocument()
-  expect(screen.getByRole('heading', { name: RAMADAN_DHIKR_TITLES[id], level: 1 })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: title })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: title, level: 1 })).toBeInTheDocument()
   const arabic = document.querySelector('.ramadan-dhikr-arabic')
   expect(arabic?.textContent).toBe(content.arabic)
   if (!arabic) throw new Error('Arabic text was not rendered')

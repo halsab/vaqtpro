@@ -5,7 +5,7 @@ import { getReligiousEventContent } from './religiousEventContent'
 import { useLocalization } from '../../localization'
 import { localizedEventTitle } from '../../localization/religiousEvents'
 import { ActionRow } from '../../ui/controls'
-import { RAMADAN_DHIKR_IDS, RAMADAN_DHIKR_TITLES, type RamadanDhikrId } from './ramadanDhikrContent'
+import { RAMADAN_DHIKR_IDS, RAMADAN_DHIKR_TITLE_KEYS, type RamadanDhikrId } from './ramadanDhikrContent'
 
 export function ReligiousEventScreen({ eventId, onBack, onOpenRamadanDhikr }: {
   eventId: ReligiousEventId
@@ -25,8 +25,7 @@ export function ReligiousEventScreen({ eventId, onBack, onOpenRamadanDhikr }: {
           {RAMADAN_DHIKR_IDS.map(id => <ActionRow
             key={id}
             id={`ramadan-dhikr-${id}`}
-            title={RAMADAN_DHIKR_TITLES[id]}
-            aria-label={RAMADAN_DHIKR_TITLES[id]}
+            title={t(RAMADAN_DHIKR_TITLE_KEYS[id])}
             onClick={() => onOpenRamadanDhikr(id)}
           />)}
         </div>
