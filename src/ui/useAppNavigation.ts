@@ -2,11 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { isReligiousEventId, type ReligiousEventId } from '../domain/religiousEvents'
 import { runNavigationTransition } from './navigationTransition'
 import type { RamadanDhikrId } from '../features/religiousEvents/ramadanDhikrContent'
+import type { FastingDuaId } from '../features/fasting/fastingDuaContent'
 
-const SCREENS = ['home', 'date', 'monthly-schedule', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event', 'ramadan-dhikr', 'qibla'] as const
+const SCREENS = ['home', 'date', 'monthly-schedule', 'location', 'search', 'settings', 'source', 'source-choice', 'profiles', 'parameters', 'source-info', 'methodology', 'privacy', 'reset', 'about', 'share', 'religious-events', 'religious-event', 'ramadan-dhikr', 'fasting', 'fasting-dua', 'qibla'] as const
 export type AppScreen = typeof SCREENS[number]
-interface Entry { screen: AppScreen; returnFocus: string | null; religiousEventId?: ReligiousEventId; ramadanDhikrId?: RamadanDhikrId; scrollTop?: number }
-type NavigationTarget = AppScreen | { screen: 'religious-event'; religiousEventId: ReligiousEventId } | { screen: 'ramadan-dhikr'; ramadanDhikrId: RamadanDhikrId }
+interface Entry { screen: AppScreen; returnFocus: string | null; religiousEventId?: ReligiousEventId; ramadanDhikrId?: RamadanDhikrId; fastingDuaId?: FastingDuaId; scrollTop?: number }
+type NavigationTarget = AppScreen | { screen: 'religious-event'; religiousEventId: ReligiousEventId } | { screen: 'ramadan-dhikr'; ramadanDhikrId: RamadanDhikrId } | { screen: 'fasting-dua'; fastingDuaId: FastingDuaId }
 const HOME: Entry[] = [{ screen: 'home', returnFocus: null }]
 
 function readEntries(value: unknown, session: string): Entry[] | null {
@@ -19,7 +20,8 @@ function readEntries(value: unknown, session: string): Entry[] | null {
     && 'returnFocus' in entry && (entry.returnFocus === null || typeof entry.returnFocus === 'string')
     && (!('scrollTop' in entry) || typeof entry.scrollTop === 'number')
     && (entry.screen !== 'religious-event' || ('religiousEventId' in entry && isReligiousEventId(entry.religiousEventId)))
-    && (entry.screen !== 'ramadan-dhikr' || ('ramadanDhikrId' in entry && typeof entry.ramadanDhikrId === 'string' && ['first', 'second', 'last'].includes(entry.ramadanDhikrId))))
+    && (entry.screen !== 'ramadan-dhikr' || ('ramadanDhikrId' in entry && typeof entry.ramadanDhikrId === 'string' && ['first', 'second', 'last'].includes(entry.ramadanDhikrId)))
+    && (entry.screen !== 'fasting-dua' || ('fastingDuaId' in entry && (entry.fastingDuaId === 'suhur' || entry.fastingDuaId === 'iftar'))))
   return entries.length > 0 && entries.every(valid) ? entries : null
 }
 
@@ -77,7 +79,7 @@ export function useAppNavigation() {
   }, [entries])
 
   const open = useCallback((target: NavigationTarget, returnFocusOverride?: string | null) => {
-    if (traversing.current) return
+    if (traversing.current || target === 'religious-event' || target === 'ramadan-dhikr' || target === 'fasting-dua') return
     intentGeneration.current += 1
     const screen = typeof target === 'string' ? target : target.screen
     if (current.current.at(-1)?.screen === screen) return
@@ -96,7 +98,8 @@ export function useAppNavigation() {
       returnFocus: trigger,
       ...(typeof target === 'string' ? {} : target.screen === 'religious-event'
         ? { religiousEventId: target.religiousEventId }
-        : { ramadanDhikrId: target.ramadanDhikrId }),
+        : target.screen === 'ramadan-dhikr'
+          ? { ramadanDhikrId: target.ramadanDhikrId } : { fastingDuaId: target.fastingDuaId }),
     }]
     runNavigationTransition(() => {
       window.history.replaceState({ salahNavigation: { session, entries: currentEntries } }, '')
@@ -151,5 +154,6 @@ export function useAppNavigation() {
   const active = entries.at(-1) ?? { screen: 'home', returnFocus: null }
   return { screen: active.screen, religiousEventId: active.screen === 'religious-event' ? active.religiousEventId ?? null : null,
     ramadanDhikrId: active.screen === 'ramadan-dhikr' ? active.ramadanDhikrId ?? null : null,
+    fastingDuaId: active.screen === 'fasting-dua' ? active.fastingDuaId ?? null : null,
     open, openPrepared, back, home }
 }

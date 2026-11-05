@@ -132,6 +132,8 @@ export const RU_MESSAGES = Object.freeze({
   relativeTomorrow: 'завтра',
   fastingMode: 'Режим поста',
   fastingTitle: 'Пост',
+  fastingDuaSuhur: 'Дуа сухура',
+  fastingDuaIftar: 'Дуа ифтара',
   fastingUntilEnd: 'До конца поста',
   fastingUntilStart: 'До начала поста',
   fastingStart: 'Начало',

@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildFastingScheduleEvents } from '../../domain/fasting'
 import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
@@ -27,9 +27,26 @@ function renderCard(initialTime: string, schedules = [day('2026-03-09'), day('20
 afterEach(() => vi.useRealTimers())
 
 describe('карточка поста', () => {
+  it('opens from the keyboard-accessible card action', () => {
+    const onOpen = vi.fn()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-10T01:00:00Z'))
+    render(<FastingCard events={buildFastingScheduleEvents([day('2026-03-09'), day('2026-03-10'), day('2026-03-11')], 'Europe/Moscow')}
+      preferences={{ manualEnabled: true }} selectedDate="2026-03-10" today="2026-03-10" timeZone="Europe/Moscow"
+      correction={0} hijriSupported now={() => new Date()} onOpen={onOpen} />)
+    const card = screen.getByRole('button', { name: 'Пост' })
+    card.focus()
+    expect(card).toHaveFocus()
+    expect(screen.getByRole('timer')).toBeVisible()
+    expect(screen.getByRole('progressbar')).toBeVisible()
+    fireEvent.click(card)
+    expect(onOpen).toHaveBeenCalledOnce()
+  })
+
   it('updates accessible fasting progress as live time passes', () => {
     renderCard('2026-03-10T01:00:00Z', [day('2026-03-09'), day('2026-03-10', '04:04'), day('2026-03-11')])
     expect(screen.getByRole('timer')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Пост' })).not.toBeInTheDocument()
     const progress = screen.getByRole('progressbar')
     const initialProgress = progress.getAttribute('aria-valuenow')
 
