@@ -12,7 +12,7 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
   await expectSchedule(page)
   await expect(page.getByRole('button', { name: 'Пост' })).toBeVisible()
   await expect(page.getByRole('progressbar')).toBeVisible()
-  await expect(page.getByRole('timer')).toBeVisible()
+  await expect(page.locator('.fasting-card').getByRole('timer')).toBeVisible()
 
   await page.evaluate(async () => navigator.serviceWorker.ready)
   await page.reload()

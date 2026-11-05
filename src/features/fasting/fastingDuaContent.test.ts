@@ -21,11 +21,19 @@ describe('локальные дуа поста', () => {
     }],
   ] as const)('сохраняет текст статьи %s посимвольно', (id, expected) => {
     const content = getFastingDuaContent(id)
-    expect(content).toContain(expected.arabic)
-    expect(content).toContain(expected.transcription)
-    expect(content).toContain(expected.translation)
-    expect(content).toMatch(/^# Дуа (?:сухура|ифтара)\r?\n/)
-    expect(content.indexOf('## Арабский текст')).toBeLessThan(content.indexOf('## Транскрипция'))
-    expect(content.indexOf('## Транскрипция')).toBeLessThan(content.indexOf('## Перевод'))
+    const title = id === 'suhur' ? 'Дуа сухура' : 'Дуа ифтара'
+    expect(content.trim()).toBe(`# ${title}
+
+## Арабский текст
+
+${expected.arabic}
+
+## Транскрипция
+
+${expected.transcription}
+
+## Перевод
+
+${expected.translation}`)
   })
 })
