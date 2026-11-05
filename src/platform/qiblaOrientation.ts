@@ -194,6 +194,8 @@ export function createOrientationSession(
   let permissionGranted = false
   let permissionNeedsRecheck = false
   let permissionInFlight = false
+  let activationGeneration = 0
+  let sourceGeneration = 0
   let lastStatus: OrientationStatus = 'idle'
   let activeSource: 'absolute' | 'webkit' | null = null
   let fallbackAttempted = false
@@ -209,6 +211,7 @@ export function createOrientationSession(
   let motionSegments: MotionSegment[] = []
   let hasCurrentReading = false
   let sourceHadValidReading = false
+  const isCurrentActivation = (generation: number) => !stopped && generation === activationGeneration
   const screenOrientation = (target.screen as unknown as { orientation?: ScreenOrientation }).orientation
   const emit: OrientationHandler = (status, reading) => {
     if (stopped) return
@@ -230,6 +233,7 @@ export function createOrientationSession(
     probeTimer = 0
   }
   const clearActiveSource = () => {
+    sourceGeneration += 1
     cancelProbe()
     clearMotionEvidence()
     latestWebKit = null
@@ -255,8 +259,9 @@ export function createOrientationSession(
   }
   const startMotionEvidence = () => {
     if (motionHandler) return
+    const generation = sourceGeneration
     motionHandler = event => {
-      if (stopped || !enabled) return
+      if (stopped || !enabled || permissionInFlight || generation !== sourceGeneration) return
       const motion = event as MotionEventLike
       const rate = motion.rotationRate
       const intervalMs = motion.interval
@@ -302,11 +307,24 @@ export function createOrientationSession(
     if (name === 'SecurityError') return 'security'
     return null
   }
+  const failActivation = (status: OrientationStatus, cause: 'permission-denied' | 'permission-error' | 'source-error') => {
+    activationGeneration += 1
+    enabled = false
+    permissionInFlight = false
+    permissionGranted = false
+    permissionNeedsRecheck = false
+    forgetOrientationGrant(target)
+    clearActiveSource()
+    clearMotionEvidence()
+    diagnose({ cause, status })
+    emit(status)
+  }
   const startProbe = (source: 'absolute' | 'webkit') => {
     cancelProbe()
+    const generation = sourceGeneration
     probeTimer = target.setTimeout(() => {
       probeTimer = 0
-      if (stopped || activeSource !== source) return
+      if (stopped || permissionInFlight || generation !== sourceGeneration || activeSource !== source) return
       diagnose({ cause: 'source-timeout', source: source === 'absolute' ? 'absolute-orientation-sensor' : 'webkit-compass', status: 'timeout' })
       clearActiveSource()
       if (source === 'absolute') tryWebKitFallback()
@@ -318,6 +336,7 @@ export function createOrientationSession(
     if (!sourceHadValidReading && !probeTimer) startProbe(source)
   }
   const startWebKitSource = () => {
+    if (permissionInFlight) return
     if (typeof win.DeviceOrientationEvent !== 'function') {
       clearMotionEvidence()
       diagnose({ cause: 'source-unsupported', status: 'unsupported' })
@@ -325,13 +344,14 @@ export function createOrientationSession(
       return
     }
     activeSource = 'webkit'
+    const generation = sourceGeneration
     diagnose({ cause: 'source-start', source: 'webkit-compass' })
     startMotionEvidence()
     latestWebKit = null
     hasCurrentReading = false
     sourceHadValidReading = false
     eventHandler = event => {
-      if (stopped || activeSource !== 'webkit') return
+      if (stopped || permissionInFlight || generation !== sourceGeneration || activeSource !== 'webkit') return
       const orientation = event as OrientationEventLike
       if (typeof orientation.webkitCompassHeading === 'number') {
         const rawHeading = orientation.webkitCompassHeading
@@ -425,9 +445,10 @@ export function createOrientationSession(
     startWebKitSource()
   }
   const startSource = (force = false) => {
-    if (!enabled || stopped) return
+    if (!enabled || stopped || permissionInFlight) return
     if (doc.visibilityState === 'hidden') {
       diagnose({ cause: 'visibility-hidden', status: 'degraded' })
+      emit('degraded')
       return
     }
     if (focusLost) {
@@ -447,10 +468,11 @@ export function createOrientationSession(
       sensor = new win.AbsoluteOrientationSensor({ referenceFrame: 'device' })
       const currentSensor = sensor
       activeSource = 'absolute'
+      const generation = sourceGeneration
       diagnose({ cause: 'source-start', source: 'absolute-orientation-sensor' })
       sourceHadValidReading = false
       currentSensor.onreading = () => {
-        if (stopped || activeSource !== 'absolute' || sensor !== currentSensor) return
+        if (stopped || permissionInFlight || generation !== sourceGeneration || activeSource !== 'absolute' || sensor !== currentSensor) return
         if (!currentSensor.quaternion) {
           hasCurrentReading = false
           probeUntilFirstReading('absolute')
@@ -494,13 +516,12 @@ export function createOrientationSession(
         })
       }
       currentSensor.onerror = event => {
-        if (stopped || sensor !== currentSensor) return
+        if (stopped || permissionInFlight || generation !== sourceGeneration || sensor !== currentSensor) return
         const status = classifySensorError(event.error?.name)
         clearActiveSource()
         diagnose({ cause: 'source-error', source: 'absolute-orientation-sensor', status: status ?? 'degraded' })
         if (status) {
-          if (status === 'restricted') { permissionGranted = false; forgetOrientationGrant(target) }
-          emit(status)
+          failActivation(status, 'source-error')
         }
         else tryWebKitFallback()
       }
@@ -513,8 +534,7 @@ export function createOrientationSession(
       const status = classifySensorError(name)
       diagnose({ cause: 'source-error', source: 'absolute-orientation-sensor', status: status ?? 'degraded' })
       if (status) {
-        if (status === 'restricted') { permissionGranted = false; forgetOrientationGrant(target) }
-        emit(status)
+        failActivation(status, 'source-error')
       }
       else tryWebKitFallback()
     }
@@ -605,7 +625,7 @@ export function createOrientationSession(
 
   return {
     resumeFromRememberedGrant() {
-      if (stopped || enabled || !hasRememberedOrientationGrant(target)) return
+      if (stopped || enabled || permissionInFlight || !hasRememberedOrientationGrant(target)) return
       if (!target.isSecureContext) { emit('security'); return }
       enabled = true
       if (doc.visibilityState === 'hidden') { diagnose({ cause: 'visibility-hidden', status: 'degraded' }); emit('degraded'); return }
@@ -619,44 +639,46 @@ export function createOrientationSession(
       const canRestart = ['degraded', 'suspect', 'calibrating', 'tilt', 'tilt-unknown', 'timeout', 'null-reading', 'frame-unavailable'].includes(lastStatus)
       if (enabled && (activeSource !== null || probeTimer !== 0) && !canRestart) return
       const shouldRecheckPermission = permissionNeedsRecheck || ['restricted', 'denied', 'timeout'].includes(lastStatus)
-      permissionInFlight = true
-      emit('acquiring')
       const requestPermission = win.DeviceOrientationEvent?.requestPermission
       if (requestPermission && (!permissionGranted || shouldRecheckPermission)) {
+        const generation = ++activationGeneration
+        enabled = false
+        permissionInFlight = true
+        clearActiveSource()
+        clearMotionEvidence()
+        emit('acquiring')
         diagnose({ cause: 'permission-requested' })
         try {
           const permission = await requestPermission.call(win.DeviceOrientationEvent, true)
+          if (!isCurrentActivation(generation)) return
           if (permission !== 'granted') {
-            permissionGranted = false
-            permissionNeedsRecheck = false
-            forgetOrientationGrant(target)
-            diagnose({ cause: 'permission-denied', status: 'denied' })
-            emit('denied')
+            failActivation('denied', 'permission-denied')
             return
           }
           permissionGranted = true
           permissionNeedsRecheck = false
           diagnose({ cause: 'permission-granted' })
         } catch (error) {
+          if (!isCurrentActivation(generation)) return
           const name = error instanceof DOMException ? error.name : undefined
-          permissionGranted = false
-          permissionNeedsRecheck = false
-          forgetOrientationGrant(target)
           const status = name === 'SecurityError' ? 'security' : name === 'NotAllowedError' ? 'restricted' : 'denied'
-          diagnose({ cause: 'permission-error', status })
-          emit(status)
+          failActivation(status, 'permission-error')
           return
         } finally {
-          permissionInFlight = false
+          if (generation === activationGeneration) permissionInFlight = false
         }
-      } else permissionInFlight = false
+        if (!isCurrentActivation(generation)) return
+      }
+      emit('acquiring')
       enabled = true
       startSource(true)
     },
     stop() {
       if (stopped) return
       stopped = true
+      activationGeneration += 1
       enabled = false
+      permissionInFlight = false
       clearActiveSource()
       clearMotionEvidence()
       doc.removeEventListener('visibilitychange', onVisibility)

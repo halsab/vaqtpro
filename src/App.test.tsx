@@ -209,6 +209,31 @@ describe('VaqtPro', () => {
     expect(await screen.findByRole('button', { name: 'Настройки' })).toBeVisible()
   })
 
+  it('releases compass listeners on navigation away and recreates one source on repeated entry', async () => {
+    const requestPermission = vi.fn().mockResolvedValue('granted')
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true })
+    Object.defineProperty(window, 'orientation', { configurable: true, writable: true, value: 0 })
+    Object.defineProperty(window, 'screen', { configurable: true, value: { orientation: { angle: 0, addEventListener() {}, removeEventListener() {} } } })
+    vi.stubGlobal('AbsoluteOrientationSensor', undefined)
+    vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
+    const added = vi.spyOn(window, 'addEventListener')
+    const removed = vi.spyOn(window, 'removeEventListener')
+    render(<App services={createServices()} />)
+
+    for (let visit = 0; visit < 2; visit += 1) {
+      await userEvent.click(await screen.findByRole('button', { name: 'Компас киблы' }))
+      expect(await screen.findByRole('region', { name: 'Направление на киблу' })).toBeVisible()
+      await userEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+      await waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(visit + 1))
+      const headingListeners = () => added.mock.calls.filter(([type]) => type === 'deviceorientation').length
+      const removedHeadingListeners = () => removed.mock.calls.filter(([type]) => type === 'deviceorientation').length
+      await waitFor(() => expect(headingListeners() - removedHeadingListeners()).toBe(1))
+      await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
+      expect(await screen.findByRole('region', { name: 'Главная' })).toBeVisible()
+      expect(headingListeners()).toBe(removedHeadingListeners())
+    }
+  })
+
   it('does not render a directional needle when the accepted location uncertainty reaches the Kaaba', async () => {
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue('iPhone')
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (iPhone)')

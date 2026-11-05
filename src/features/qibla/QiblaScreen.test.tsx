@@ -54,6 +54,7 @@ describe('QiblaScreen orientation presentation', () => {
     vi.useRealTimers()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    window.history.replaceState({}, '', '/')
   })
 
   function dispatchHeading(heading: number, time: number, options: { accuracy?: number | null; beta?: number | null; gamma?: number | null } = {}) {
@@ -91,6 +92,16 @@ describe('QiblaScreen orientation presentation', () => {
     expect(screen.queryByText(/Живое направление доступно/)).toBeNull()
     expect(document.querySelector('.qibla-forward-marker')).toBeInTheDocument()
     expect(document.querySelector('.qibla-cardinal')).toBeInTheDocument()
+  })
+
+  it('records initial screen entry as session start rather than a lifecycle resume', () => {
+    window.history.replaceState({}, '', '/?qiblaDiagnostics=1')
+    const view = render(<QiblaScreen place={place} onBack={() => {}} />)
+    const events = window.__qiblaCompassTrace?.().map(entry => entry.event) ?? []
+    expect(events).toContain('session-start')
+    expect(events).not.toContain('resume')
+    view.unmount()
+    expect(window.__qiblaCompassTrace).toBeUndefined()
   })
 
   it('survives StrictMode reinitialization and coalesces fast sensor events into one dial frame without visible instructions', async () => {

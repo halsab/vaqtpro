@@ -5,6 +5,7 @@ import { createQiblaDiagnosticTrace, qiblaDiagnosticsRequested } from './qiblaDi
 describe('Qibla diagnostics', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllEnvs()
     delete window.__qiblaCompassTrace
     window.history.replaceState({}, '', '/')
   })
@@ -13,6 +14,16 @@ describe('Qibla diagnostics', () => {
     expect(qiblaDiagnosticsRequested(window)).toBe(false)
     window.history.replaceState({}, '', '/?qiblaDiagnostics=1')
     expect(qiblaDiagnosticsRequested(window)).toBe(import.meta.env.DEV)
+  })
+
+  it('allows the explicit query flag in a private QA build and never in a normal production build', () => {
+    window.history.replaceState({}, '', '/?qiblaDiagnostics=1')
+    vi.stubEnv('MODE', 'qa')
+    vi.stubEnv('DEV', false)
+    expect(qiblaDiagnosticsRequested(window)).toBe(true)
+
+    vi.stubEnv('MODE', 'production')
+    expect(qiblaDiagnosticsRequested(window)).toBe(false)
   })
 
   it('keeps a bounded in-memory trace, exposes no coordinates, and clears it on close', () => {
