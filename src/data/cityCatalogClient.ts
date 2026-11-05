@@ -161,7 +161,8 @@ export function createCityCatalogService(dependencies: {
     return { cities, status: 'offline-seed' }
   }
 
-  const offlineFallback = async (query: string, revision: number): Promise<Result<CitySearchResult, DataFailure>> => {
+  const offlineFallback = async (query: string, revision: number, startRow = 0): Promise<Result<CitySearchResult, DataFailure>> => {
+    if (startRow > 0) return failure({ kind: 'data', reason: 'unavailable' })
     const loaded = await load()
     if (!loaded.ok) return loaded
     return revision === searchRevision
@@ -180,7 +181,7 @@ export function createCityCatalogService(dependencies: {
     activeSearch?.abort()
     activeSearch = null
     if (Array.from(nameQuery).length < MIN_QUERY_LENGTH) return success({ cities: [], status: 'complete' })
-    if (!geonamesUsername.trim()) return await offlineFallback(normalizedQuery, revision)
+    if (!geonamesUsername.trim()) return await offlineFallback(normalizedQuery, revision, startRow)
     // Подготовка офлайн-резерва не задерживает запрос онлайн-каталога.
     void load()
     const controller = new AbortController()
@@ -203,7 +204,7 @@ export function createCityCatalogService(dependencies: {
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
       const response = await fetcher(url, { cache: 'no-store', signal: controller.signal })
-      if (!response.ok) return await offlineFallback(normalizedQuery, revision)
+      if (!response.ok) return await offlineFallback(normalizedQuery, revision, startRow)
       const raw: unknown = await response.json()
       let cities = parseGeoNamesResults(raw)
       let limited = isLimited(raw, startRow)
@@ -214,7 +215,7 @@ export function createCityCatalogService(dependencies: {
       if (!cities.length && transliterated && startRow === 0) {
         const fallbackUrl = makeUrl(transliterated)
         const fallbackResponse = await fetcher(fallbackUrl, { cache: 'no-store', signal: controller.signal })
-        if (!fallbackResponse.ok) return await offlineFallback(normalizedQuery, revision)
+        if (!fallbackResponse.ok) return await offlineFallback(normalizedQuery, revision, startRow)
         const retryRaw: unknown = await fallbackResponse.json()
         cities = parseGeoNamesResults(retryRaw)
         limited = isLimited(retryRaw, startRow)
@@ -245,7 +246,7 @@ export function createCityCatalogService(dependencies: {
         : failure({ kind: 'data', reason: 'superseded' })
     } catch {
       if (revision !== searchRevision) return failure({ kind: 'data', reason: 'superseded' })
-      return await offlineFallback(normalizedQuery, revision)
+      return await offlineFallback(normalizedQuery, revision, startRow)
     } finally {
       clearTimeout(timeout)
       if (activeSearch === controller) activeSearch = null

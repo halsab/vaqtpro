@@ -259,6 +259,22 @@ describe('online place search', () => {
     })
   })
 
+  it('preserves initial online results when the next page fails instead of mixing offline fallback', async () => {
+    const row = { geonameId: 211, name: 'Село', lat: 55, lng: 37, countryCode: 'RU',
+      timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' }
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ totalResultsCount: 3, geonames: [row] })))
+      .mockRejectedValueOnce(new TypeError('No network'))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    await expect(service.search('Село')).resolves.toMatchObject({
+      ok: true, value: { status: 'limited', nextOffset: 1, cities: [{ id: 211 }] },
+    })
+    await expect(service.search('Село', 'ru', 1)).resolves.toMatchObject({
+      ok: false, error: { reason: 'unavailable' },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
   it('does not call GeoNames without an explicitly configured username', async () => {
     const fetcher = vi.fn<typeof fetch>()
     const service = createCityCatalogService({ fetcher, geonamesUsername: '', loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
