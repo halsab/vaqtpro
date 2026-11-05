@@ -228,9 +228,10 @@ export function createCityCatalogService(dependencies: {
           return terms.every(term => context.includes(term))
         })
       }
-      if (seed) cities = cities.map(city => {
+      const currentSeed = seed
+      if (currentSeed) cities = cities.map(city => {
         if (city.population > 50_000 && city.featureCode !== 'PPLX') return city
-        const matchingRegion = seed.cities.filter(row => row[3] === city.countryCode && row[0] !== city.id
+        const matchingRegion = currentSeed.cities.filter(row => row[3] === city.countryCode && row[0] !== city.id
           && (!city.admin1Code || !row[4] || row[4] === city.admin1Code))
         const major = findNearestCity(city.latitude, city.longitude, matchingRegion, 80)
         if (!major || cities.some(other => other.id === major.id)) return city
