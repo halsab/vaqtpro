@@ -19,7 +19,7 @@ function readEntries(value: unknown, session: string): Entry[] | null {
     && 'returnFocus' in entry && (entry.returnFocus === null || typeof entry.returnFocus === 'string')
     && (!('scrollTop' in entry) || typeof entry.scrollTop === 'number')
     && (entry.screen !== 'religious-event' || ('religiousEventId' in entry && isReligiousEventId(entry.religiousEventId)))
-    && (entry.screen !== 'ramadan-dhikr' || ('ramadanDhikrId' in entry && ['first', 'second', 'last'].includes(String(entry.ramadanDhikrId)))))
+    && (entry.screen !== 'ramadan-dhikr' || ('ramadanDhikrId' in entry && typeof entry.ramadanDhikrId === 'string' && ['first', 'second', 'last'].includes(entry.ramadanDhikrId))))
   return entries.length > 0 && entries.every(valid) ? entries : null
 }
 

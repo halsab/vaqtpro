@@ -169,6 +169,31 @@ describe('навигация экранов', () => {
     await waitFor(() => expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible())
   })
 
+  it('rejects malformed Ramadan dhikr history IDs instead of rendering an invalid screen', async () => {
+    const user = userEvent.setup()
+    render(<RamadanDhikrNavigationExample />)
+    await user.click(screen.getByRole('button', { name: 'Рамадан' }))
+    await user.click(screen.getByRole('button', { name: 'Зикр первых 10 дней' }))
+
+    const currentState = window.history.state as {
+      salahNavigation: { session: string; entries: Array<Record<string, unknown>> }
+    }
+    const lastEntry = currentState.salahNavigation.entries.at(-1)
+    if (!lastEntry) throw new Error('Missing Ramadan dhikr navigation entry')
+    const malformedState = {
+      salahNavigation: {
+        ...currentState.salahNavigation,
+        entries: [
+          ...currentState.salahNavigation.entries.slice(0, -1),
+          { ...lastEntry, ramadanDhikrId: { toString: () => 'first' } },
+        ],
+      },
+    }
+
+    act(() => window.dispatchEvent(new PopStateEvent('popstate', { state: malformedState })))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Рамадан' })).toBeVisible())
+  })
+
   it.each(['Сегодня', 'Месяц'])('отложенный автофокус не перехватывает фокус после действия «%s»', action => {
     const paint = controlFrames()
     render(<CalendarNavigationExample />)
