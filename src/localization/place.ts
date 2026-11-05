@@ -10,6 +10,7 @@ export function localizedCityRegion(city: City, t: Translator): string {
 
 export function localizedCityLabel(city: City, disambiguate: boolean, locale: SupportedLocale, t: Translator): string {
   const country = new Intl.DisplayNames([locale], { type: 'region' }).of(city.countryCode) ?? city.countryCode
-  const label = `${city.name}, ${localizedCityRegion(city, t)}, ${country}`
+  const context = [city.admin2Name?.trim(), localizedCityRegion(city, t)].filter(Boolean).join(', ')
+  const label = `${city.name}, ${context}, ${country}`
   return disambiguate ? `${label} · GeoNames ${city.id}` : label
 }

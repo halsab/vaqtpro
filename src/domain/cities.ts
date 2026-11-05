@@ -108,7 +108,8 @@ export function formatCityRegion(city: City): string {
 }
 
 export function formatCityLabel(city: City, disambiguate = false): string {
-  const label = `${city.name}, ${formatCityRegion(city)}, ${getCountryName(city.countryCode)}`
+  const context = [city.admin2Name?.trim(), formatCityRegion(city)].filter(Boolean).join(', ')
+  const label = `${city.name}, ${context}, ${getCountryName(city.countryCode)}`
   return disambiguate ? `${label} · GeoNames ${city.id}` : label
 }
 

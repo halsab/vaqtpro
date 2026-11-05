@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   findNearestCity,
+  formatCityLabel,
   searchCities,
   type CityDataset,
   type CompactCityRecord,
@@ -123,4 +124,13 @@ describe('searchCities', () => {
     ])
   })
 
+})
+
+it('includes the district in persistent place context for rural results', () => {
+  const place = {
+    id: 77, name: 'Облово', countryCode: 'RU', admin1Code: '69',
+    admin1Name: 'Тверская область', admin2Name: 'Торжокский район',
+    latitude: 57, longitude: 34, population: 25, timeZone: 'Europe/Moscow',
+  }
+  expect(formatCityLabel(place)).toBe('Облово, Торжокский район, Тверская область, Россия')
 })
