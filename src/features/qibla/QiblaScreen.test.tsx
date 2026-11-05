@@ -104,6 +104,41 @@ describe('QiblaScreen orientation presentation', () => {
     expect(window.__qiblaCompassTrace).toBeUndefined()
   })
 
+  it.each([true, false])('does not offer retry for generic Euler orientation (absolute=%s)', async absolute => {
+    vi.useFakeTimers()
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    act(() => {
+      window.dispatchEvent(Object.assign(new Event('deviceorientation'), {
+        alpha: 270, beta: 0, gamma: 0, absolute,
+      }))
+    })
+    expect(screen.getByRole('status')).toHaveTextContent(/Подключаем компас/)
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+    expect(screen.getByRole('status')).toHaveTextContent(/Живой компас недоступен/)
+    expect(screen.queryByRole('button', { name: 'Попробовать снова' })).toBeNull()
+    expect(document.querySelector('.qibla-pointer')).not.toHaveAttribute('data-visible', 'true')
+  })
+
+  it('offers retry after a recoverable startup timeout and rechecks permission on the next tap', async () => {
+    vi.useFakeTimers()
+    render(<QiblaScreen place={place} onBack={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Включить компас' }))
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+
+    expect(screen.getByRole('status')).toHaveTextContent(/не ответил|недоступен/i)
+    const retry = screen.getByRole('button', { name: 'Попробовать снова' })
+    expect(retry).toBeVisible()
+    fireEvent.click(retry)
+    await act(async () => { await Promise.resolve() })
+    expect(requestPermission).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('status')).toHaveTextContent(/Подключаем компас/)
+  })
+
   it('survives StrictMode reinitialization and coalesces fast sensor events into one dial frame without visible instructions', async () => {
     const user = userEvent.setup()
     let commits = 0
