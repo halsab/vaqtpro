@@ -1,4 +1,5 @@
 import { findNearestCity, getCountryName, isCityFeatureCode, normalizeCitySearch, searchCities, validNearestQuery, type City, type CityDataset, type CityFeatureCode } from '../domain/cities'
+import { haversineDistanceKm } from '../domain/location'
 import type { DataFailure } from '../domain/errors'
 import { isValidTimeZone } from '../domain/locationTime'
 import { failure, success, type Result } from '../domain/result'
@@ -227,6 +228,16 @@ export function createCityCatalogService(dependencies: {
           return terms.every(term => context.includes(term))
         })
       }
+      if (seed) cities = cities.map(city => {
+        if (city.population > 50_000 && city.featureCode !== 'PPLX') return city
+        const matchingRegion = seed.cities.filter(row => row[3] === city.countryCode && row[0] !== city.id
+          && (!city.admin1Code || !row[4] || row[4] === city.admin1Code))
+        const major = findNearestCity(city.latitude, city.longitude, matchingRegion, 80)
+        if (!major || cities.some(other => other.id === major.id)) return city
+        return { ...city, nearbyMajorCity: {
+          city: major, distanceKm: haversineDistanceKm(city.latitude, city.longitude, major.latitude, major.longitude),
+        } }
+      })
       return revision === searchRevision
         ? success({ cities, status: limited ? 'limited' : 'complete',
           ...(limited && received > 0 ? { nextOffset: startRow + received } : {}) })

@@ -13,6 +13,7 @@ export interface City {
   timeZone: string
   featureCode?: CityFeatureCode | null
   admin2Name?: string
+  nearbyMajorCity?: { city: City; distanceKm: number }
 }
 
 export const CITY_FEATURE_CODES = [

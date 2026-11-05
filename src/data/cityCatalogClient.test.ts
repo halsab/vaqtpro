@@ -245,6 +245,20 @@ describe('online place search', () => {
     await expect(service.search('Облово', 'ru', -1)).resolves.toMatchObject({ ok: false, error: { reason: 'invalid' } })
   })
 
+  it('offers a separate major-city alternative from the local seed with geographic proximity only', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([{
+      geonameId: 100, name: 'Малая деревня', lat: 58.61, lng: 49.61,
+      countryCode: 'RU', adminCode1: '43', adminName1: 'Кировская область',
+      timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL', population: 100,
+    }]))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    await service.load()
+    await expect(service.search('Малая')).resolves.toMatchObject({
+      ok: true, value: { cities: [{ id: 100, nearbyMajorCity: { city: { id: 1 } } }] },
+    })
+  })
+
   it('does not call GeoNames without an explicitly configured username', async () => {
     const fetcher = vi.fn<typeof fetch>()
     const service = createCityCatalogService({ fetcher, geonamesUsername: '', loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
