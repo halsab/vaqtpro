@@ -20,6 +20,7 @@ test('Ramadan dhikr pages support narrow layout, keyboard navigation and browser
   await page.keyboard.press('Enter')
   const firstPage = page.getByRole('region', { name: 'Зикр первых 10 дней' })
   await expect(firstPage).toBeVisible()
+  await expect(page.locator('.app-screen')).toHaveCount(1)
   await expect(firstPage.getByRole('heading', { name: 'Зикр первых 10 дней', level: 1 })).toBeVisible()
   await expect(firstPage.locator('.ramadan-dhikr-arabic')).toHaveAttribute('dir', 'rtl')
   await expect(firstPage.locator('.ramadan-dhikr-arabic')).toHaveAttribute('lang', 'ar')

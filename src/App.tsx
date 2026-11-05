@@ -774,6 +774,7 @@ export function App({
     || navigation.screen === 'source-info'
     || navigation.screen === 'religious-events'
     || navigation.screen === 'religious-event'
+    || navigation.screen === 'ramadan-dhikr'
     || navigation.screen === 'qibla'
     || navigation.screen === 'date'
     || navigation.screen === 'monthly-schedule'
