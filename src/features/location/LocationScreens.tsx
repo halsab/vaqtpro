@@ -176,7 +176,17 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
     || (!query && ['offline', 'error'].includes(catalogStatus))
   return <Screen label={t('searchCity')} top={<BackButton onClick={onBack} label={t('cancel')} />}>
     <input className="text-field" data-screen-focus type="search" aria-label={t('searchPlaceLabel')} placeholder={t('locationSearch')} value={text}
-      onChange={event => { onCancelSearch?.(); pageRevision.current += 1; setMoreFailed(false); setLoadingMore(false); setText(event.target.value); if (event.target.value.trim() !== query) setCompletion(null) }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
+      onChange={event => {
+        const nextText = event.target.value
+        if (nextText.trim() !== query) {
+          onCancelSearch?.()
+          pageRevision.current += 1
+          setMoreFailed(false)
+          setLoadingMore(false)
+          setCompletion(null)
+        }
+        setText(nextText)
+      }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
     <ul className="city-results" aria-label={t('searchResults')} aria-busy={pending || loadingMore}>
       {localities.map(item => <li key={item.id}><ActionRow className="city-result" title={item.name}
         secondary={<span className="note">{t('tatarstanLocalityResult')}</span>} onClick={() => onSelectLocality(item.id)} />

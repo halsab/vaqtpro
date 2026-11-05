@@ -103,6 +103,20 @@ describe('экраны локации', () => {
     expect(screen.getByRole('button', { name: 'Киров' })).toBeVisible()
     expect(place.name).toBe('Москва, Москва, Россия')
   })
+  it('does not cancel an inflight search when a trailing space is entered', async () => {
+    let resolve!: (value: ReturnType<typeof success<CitySearchResult>>) => void
+    const onCancelSearch = vi.fn()
+    const onSearchCities = vi.fn().mockImplementation(() => new Promise(r => { resolve = r }))
+    render(<SearchScreen {...searchProps} onCancelSearch={onCancelSearch} onSearchCities={onSearchCities} />)
+    const input = screen.getByRole('searchbox')
+    fireEvent.change(input, { target: { value: 'Москва' } })
+    await waitFor(() => expect(onSearchCities).toHaveBeenCalledOnce())
+    expect(onCancelSearch).toHaveBeenCalledOnce()
+    fireEvent.change(input, { target: { value: 'Москва ' } })
+    expect(onCancelSearch).toHaveBeenCalledOnce()
+    await act(async () => { resolve(success({ cities: [city], status: 'complete' })) })
+    expect(await screen.findByRole('button', { name: /Москва, Москва/ })).toBeVisible()
+  })
   it('не теряет результаты при пробеле после уже найденного названия', async () => {
     const onSearchCities = vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete' }))
     render(<SearchScreen {...searchProps} onSearchCities={onSearchCities} />)
