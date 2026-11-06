@@ -280,6 +280,17 @@ describe('экраны локации', () => {
     expect(screen.getByRole('button', { name: /Казань.*Татарстан/ })).toBeEnabled()
     expect(screen.queryByText('Подключитесь к интернету, чтобы загрузить офлайн-список мест')).not.toBeInTheDocument()
   })
+  it('keeps a known Tatarstan locality available while GeoNames is still pending', async () => {
+    const onSelectLocality = vi.fn()
+    const onlineSearch = vi.fn().mockImplementation(() => new Promise(() => undefined))
+    render(<SearchScreen {...searchProps} onSelectLocality={onSelectLocality} onSearchCities={onlineSearch} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Казань' } })
+    const row = screen.getByRole('button', { name: 'Казань Татарстан', exact: true })
+    expect(row).toBeVisible()
+    expect(row.closest('ul')).toHaveAttribute('aria-busy', 'false')
+    await userEvent.click(row)
+    expect(onSelectLocality).toHaveBeenCalledWith('kazan')
+  })
   it('запускает онлайн-поиск, пока компактный офлайн-каталог загружается', async () => {
     const onSearchCities = vi.fn().mockResolvedValue(success({ cities: [city], status: 'complete' }))
     render(<SearchScreen {...searchProps} catalogStatus="loading" onSearchCities={onSearchCities} />)

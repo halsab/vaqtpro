@@ -1,4 +1,21 @@
-import { expect, test as base } from '@playwright/test'
+import { expect, test as base, type BrowserContext } from '@playwright/test'
+
+export async function installGeoNamesFixture(context: BrowserContext, isOffline: () => boolean = () => false): Promise<void> {
+  await context.route('https://secure.geonames.org/searchJSON**', async route => {
+    if (isOffline()) {
+      await route.abort('internetdisconnected')
+      return
+    }
+    const query = new URL(route.request().url()).searchParams.get('name_startsWith')?.trim().toLocaleLowerCase('ru-RU') ?? ''
+    const geonames = ONLINE_PLACE_FIXTURES.filter(place => place.name.toLocaleLowerCase('ru-RU').startsWith(query))
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ geonames }),
+    })
+  })
+}
 
 export const FIXED_BROWSER_TIME = new Date('2026-09-04T09:30:00.000Z')
 
@@ -13,20 +30,7 @@ export const test = base.extend<{ deterministicClock: true }>({
       await setOffline(value)
       offline = value
     }
-    await context.route('https://secure.geonames.org/searchJSON**', async route => {
-      if (offline) {
-        await route.abort('internetdisconnected')
-        return
-      }
-      const query = new URL(route.request().url()).searchParams.get('name_startsWith')?.trim().toLocaleLowerCase('ru-RU') ?? ''
-      const geonames = ONLINE_PLACE_FIXTURES.filter(place => place.name.toLocaleLowerCase('ru-RU').startsWith(query))
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify({ geonames }),
-      })
-    })
+    await installGeoNamesFixture(context, () => offline)
     try {
       await use(true)
     } finally {

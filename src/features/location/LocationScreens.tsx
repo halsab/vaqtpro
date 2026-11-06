@@ -187,8 +187,9 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
         }
         setText(nextText)
       }} autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="search" />
-    <ul className="city-results" aria-label={t('searchResults')} aria-busy={pending || loadingMore}>
+    <ul className="city-results" aria-label={t('searchResults')} aria-busy={(pending && localities.length === 0) || loadingMore}>
       {localities.map(item => <li key={item.id}><ActionRow className="city-result" title={item.name}
+        aria-label={`${item.name} ${t('tatarstanLocalityResult')}`}
         secondary={<span className="note">{t('tatarstanLocalityResult')}</span>} onClick={() => onSelectLocality(item.id)} />
       </li>)}
       {cities.map(city => {
