@@ -282,7 +282,7 @@ describe('экраны локации', () => {
   })
   it('keeps a known Tatarstan locality available while GeoNames is still pending', async () => {
     const onSelectLocality = vi.fn()
-    const onlineSearch = vi.fn().mockImplementation(() => new Promise(() => undefined))
+    const onlineSearch = vi.fn().mockImplementation(() => new Promise<{ ok: true; value: CitySearchResult }>(() => undefined))
     render(<SearchScreen {...searchProps} onSelectLocality={onSelectLocality} onSearchCities={onlineSearch} />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Казань' } })
     const row = screen.getByRole('button', { name: 'Казань Татарстан', exact: true })
