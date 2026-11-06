@@ -76,7 +76,7 @@ function createServices(overrides: Partial<TestAppServices> = {}): TestAppServic
     cities: {
       load: vi.fn().mockResolvedValue(success(undefined)),
       search: vi.fn().mockImplementation((query: string) =>
-        Promise.resolve(success({cities:searchCities(cityDataset, query),status:'complete',missingPackages:[]})),
+        Promise.resolve(success({cities:searchCities(cityDataset, query),status:'complete'})),
       ),
       findNearest: vi.fn().mockResolvedValue(success(null)),
     },
@@ -161,7 +161,7 @@ describe('VaqtPro', () => {
     const services = createServices({ initialize: vi.fn(() => initialization.promise) })
     render(<App services={services} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
     await userEvent.click(await screen.findByRole('button', { name: /Москва/ }))
     expect(await screen.findByRole('timer')).toBeVisible()
@@ -469,7 +469,7 @@ describe('VaqtPro', () => {
     const services = createServices()
     render(<App services={services} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Казань' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
     await userEvent.click(await screen.findByRole('button', { name: /Москва/ }))
     expect(await screen.findByRole('region', { name: 'Главная' })).toBeVisible()
@@ -563,7 +563,7 @@ describe('VaqtPro', () => {
     })
     render(<App services={services} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
     await userEvent.click(await screen.findByRole('button', { name: /Москва/ }))
     expect(await screen.findByRole('button', { name: 'Москва' })).toBeVisible()
@@ -618,7 +618,7 @@ describe('VaqtPro', () => {
       saveSettings,
     })
     const first = render(<App services={services} />)
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     await userEvent.type(screen.getByRole('searchbox'), 'Москва')
     await userEvent.click(await screen.findByRole('button', { name: /Москва/ }))
     await waitFor(() => expect(saveSettings).toHaveBeenCalledOnce())
@@ -985,7 +985,7 @@ describe('VaqtPro', () => {
     expect(screen.queryByRole('timer')).not.toBeInTheDocument()
     expect(services.getPosition).not.toHaveBeenCalled()
     expect(services.refresh).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     await userEvent.click(screen.getByRole('button', { name: 'Отмена' }))
     expect(screen.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'По геопозиции' }))
@@ -1001,36 +1001,36 @@ describe('VaqtPro', () => {
     await userEvent.keyboard('{Enter}')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Казань' })).toHaveFocus())
     await userEvent.click(screen.getByRole('button', { name: 'Казань' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     expect(screen.getByRole('searchbox')).toHaveFocus()
     await userEvent.click(screen.getByRole('button', { name: 'Отмена' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Найти город' })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Найти место' })).toHaveFocus())
     expect(screen.getAllByRole('region', { name: 'Локация' })).toHaveLength(1)
     expect(screen.queryByRole('region', { name: 'Главная' })).not.toBeInTheDocument()
   })
 
-  it('не загружает каталог до поиска и показывает ожидание', async () => {
+  it('загружает только компактный офлайн-список при открытии поиска', async () => {
     const loading = deferred<Awaited<ReturnType<AppServices['cities']['load']>>>()
     const services = createServices(); services.cities.load = vi.fn(() => loading.promise)
     render(<App services={services} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Казань' }))
     expect(services.cities.load).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
-    expect(screen.getByText('Загружаем города…')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
+    expect(screen.getByText('Загружаем небольшой офлайн-список…')).toBeVisible()
     expect(screen.getByRole('searchbox')).toBeEnabled()
     await act(async () => { loading.resolve(success(undefined)); await loading.promise })
-    expect(screen.queryByText('Загружаем города…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Загружаем небольшой офлайн-список…')).not.toBeInTheDocument()
   })
 
   it.each([
-    ['offline', 'Для поиска городов нужен интернет'],
-    ['unavailable', 'Не удалось загрузить города'],
+    ['offline', 'Подключитесь к интернету, чтобы загрузить офлайн-список мест'],
+    ['unavailable', 'Не удалось загрузить офлайн-список мест'],
   ] as const)('показывает ошибку %s только после открытия поиска и позволяет повторить', async (reason, message) => {
     const services = createServices(); services.cities.load = vi.fn().mockResolvedValueOnce(failure({ kind: 'data', reason })).mockResolvedValue(success(undefined))
     render(<App services={services} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Казань' }))
     expect(screen.queryByText(message)).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     expect(await screen.findByText(message)).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Повторить' }))
     await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument())
@@ -1044,7 +1044,7 @@ describe('VaqtPro', () => {
     await chooseCity('Стамбул', /Стамбул, Стамбул, Турция/)
     await expectSchedule()
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(7)
-    await chooseCity('Казань', 'Казань, Татарстан, Россия', /Стамбул/)
+    await chooseCity('Казань', /Казань, Татарстан, Россия, Населённое место/, /Стамбул/)
     await expectSchedule()
     expect(within(screen.getByRole('list')).getAllByRole('listitem')).toHaveLength(7)
     expect(services.cities.load).toHaveBeenCalledTimes(1)
@@ -1175,7 +1175,7 @@ describe('VaqtPro', () => {
         .every(([patch]) => patch.recentPlaces === undefined)).toBe(true)
       const loaded = await loadPrayerRepositoryOptionalSettings()
       await act(async () => { optional.resolve(loaded); await optional.promise })
-      await chooseCity('Москва', /Москва/, 'Стамбул')
+      await chooseCity('Москва', /Москва/, '41.0300, 28.9500')
       await userEvent.click(screen.getByRole('button', { name: 'Москва' }))
       await userEvent.click(within(screen.getByRole('region', { name: 'Недавние места' })).getByRole('button', { name: 'Стамбул · GPS, 41.0300, 28.9500' }))
       expect(services.getPosition).toHaveBeenCalledTimes(2)
@@ -1228,12 +1228,12 @@ describe('VaqtPro', () => {
     expect(await screen.findByText('41.0100, 28.9500')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
-    expect(await screen.findByRole('region', { name: 'Поиск города' })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
+    expect(await screen.findByRole('region', { name: 'Поиск места' })).toBeVisible()
     const writesAfterNavigation = saveSettings.mock.calls.length
     await act(async () => { precise.resolve(success({ latitude: 41.011, longitude: 28.951, accuracy: 10, timestamp: 200 })); await Promise.resolve() })
 
-    expect(screen.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+    expect(screen.getByRole('region', { name: 'Поиск места' })).toBeVisible()
     expect(screen.queryByRole('region', { name: 'Главная' })).not.toBeInTheDocument()
     expect(saveSettings.mock.calls).toHaveLength(writesAfterNavigation)
     expect(saveSettings.mock.calls.flatMap(([patch]) => patch.recentPlaces ?? []).some(place => place.selection === 'gps')).toBe(false)
@@ -1253,7 +1253,7 @@ describe('VaqtPro', () => {
     await userEvent.click(screen.getByRole('button', { name: 'По геопозиции' }))
     await act(async () => { coarse.resolve(success({ latitude: 41.01, longitude: 28.95, accuracy: 2400, timestamp: 100 })); await Promise.resolve() })
     await screen.findByText('41.0100, 28.9500')
-    await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
     const search = await screen.findByRole('searchbox')
     await userEvent.type(search, 'Москва')
     const writesAtSearch = saveSettings.mock.calls.length
@@ -1731,7 +1731,7 @@ async function backHomeFromSource() {
 }
 async function chooseCity(query: string, result: string | RegExp, current: string | RegExp = 'Казань') {
   await userEvent.click(screen.getByRole('button', { name: current }))
-  await userEvent.click(screen.getByRole('button', { name: 'Найти город' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Найти место' }))
   await userEvent.type(screen.getByRole('searchbox'), query)
   await userEvent.click(await screen.findByRole('button', { name: result }))
   await screen.findByRole('region', { name: 'Главная' })

@@ -5,11 +5,37 @@ export interface City {
   name: string
   countryCode: string
   admin1Code: string
+  admin1Id?: number
   admin1Name: string
   latitude: number
   longitude: number
   population: number
   timeZone: string
+  featureCode?: CityFeatureCode | null
+  admin2Name?: string
+  nearbyMajorCity?: { city: City; distanceKm: number }
+}
+
+export const CITY_FEATURE_CODES = [
+  'PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC', 'PPLCD',
+  'PPLF', 'PPLG', 'PPLL', 'PPLR', 'PPLS', 'PPLX', 'STLMT',
+] as const
+export type CityFeatureCode = typeof CITY_FEATURE_CODES[number]
+
+export function isCityFeatureCode(value: unknown): value is CityFeatureCode {
+  return typeof value === 'string' && CITY_FEATURE_CODES.includes(value as CityFeatureCode)
+}
+
+export type CityFeatureKind = 'settlement' | 'district' | 'administrative-seat' | 'capital' | 'farm-village' | 'small-locality'
+
+export function cityFeatureKind(code: CityFeatureCode | null): CityFeatureKind {
+  if (!code) return 'settlement'
+  if (code === 'PPLX') return 'district'
+  if (code === 'PPLA' || code === 'PPLA2' || code === 'PPLA3' || code === 'PPLA4' || code === 'PPLA5' || code === 'PPLCD' || code === 'PPLG') return 'administrative-seat'
+  if (code === 'PPLC') return 'capital'
+  if (code === 'PPLF') return 'farm-village'
+  if (code === 'PPLL') return 'small-locality'
+  return 'settlement'
 }
 
 export type CompactCityRecord = [
@@ -24,6 +50,7 @@ export type CompactCityRecord = [
   timeZone: string,
   admin1Name: string,
   normalizedContext: string,
+  featureCode?: CityFeatureCode,
 ]
 
 export interface CityDatasetSource {
@@ -70,6 +97,7 @@ export function materializeCity(record: CompactCityRecord): City {
     longitude: record[6],
     population: record[7],
     timeZone: record[8],
+    featureCode: record[11] ?? null,
   }
 }
 
@@ -80,7 +108,8 @@ export function formatCityRegion(city: City): string {
 }
 
 export function formatCityLabel(city: City, disambiguate = false): string {
-  const label = `${city.name}, ${formatCityRegion(city)}, ${getCountryName(city.countryCode)}`
+  const context = [city.admin2Name?.trim(), formatCityRegion(city)].filter(Boolean).join(', ')
+  const label = `${city.name}, ${context}, ${getCountryName(city.countryCode)}`
   return disambiguate ? `${label} · GeoNames ${city.id}` : label
 }
 

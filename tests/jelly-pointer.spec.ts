@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 test('mobile WebKit ignores a delayed synthetic click after an outside release', async ({ page }) => {
   await page.goto('./')
-  const searchButton = page.getByRole('button', { name: 'Найти город' })
+  const searchButton = page.getByRole('button', { name: 'Найти место' })
   await expect(searchButton).toBeVisible()
 
   await page.evaluate(async () => {
@@ -20,14 +20,14 @@ test('mobile WebKit ignores a delayed synthetic click after an outside release',
     }))
   })
 
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toHaveCount(0)
   await searchButton.click()
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toBeVisible()
 })
 
 test('mobile WebKit ignores synthetic clicks after cancellation and lost capture', async ({ page }) => {
   await page.goto('./')
-  const searchButton = page.getByRole('button', { name: 'Найти город' })
+  const searchButton = page.getByRole('button', { name: 'Найти место' })
   await expect(searchButton).toBeVisible()
 
   await page.evaluate(async () => {
@@ -48,7 +48,7 @@ test('mobile WebKit ignores synthetic clicks after cancellation and lost capture
     button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }))
   })
 
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toHaveCount(0)
   await searchButton.click()
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toBeVisible()
 })

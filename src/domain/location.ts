@@ -2,12 +2,14 @@ import type { Locality } from './types'
 
 const EARTH_RADIUS_KM = 6_371
 const TATARSTAN_GEONAMES_ADMIN1_CODE = '73'
+const TATARSTAN_GEONAMES_ADMIN1_ID = 484_048
 
 export type LocationRegionEvidence =
   | {
       readonly source: 'geonames'
       readonly countryCode?: string
       readonly admin1Code?: string
+      readonly admin1Id?: number
     }
 
 function toRadians(degrees: number): number {
@@ -57,5 +59,6 @@ export function findNearestLocation(
 
 export function isConfirmedTatarstan(evidence: LocationRegionEvidence): boolean {
   return evidence.countryCode === 'RU'
-    && evidence.admin1Code === TATARSTAN_GEONAMES_ADMIN1_CODE
+    && (evidence.admin1Code === TATARSTAN_GEONAMES_ADMIN1_CODE
+      || evidence.admin1Id === TATARSTAN_GEONAMES_ADMIN1_ID)
 }

@@ -4,8 +4,7 @@ import { gzipSync } from 'node:zlib'
 import { join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { validateCityIndex, parseCityShard } from '../src/domain/citySchema'
-import { createSearchFilter, type CityIndex } from '../src/domain/cityIndex'
+import { parseOfflineCitySeed } from '../src/domain/citySchema'
 
 export interface BuildArtifact {
   path: string
@@ -38,10 +37,11 @@ const REQUIRED_ARTIFACTS: ReadonlyArray<{
   { name: 'shareQr', matches: (path) => path === 'share-qr.svg' },
   { name: 'mainJavaScript', matches: (path) => /^assets\/index-[^/]+\.js$/.test(path) },
   { name: 'mainCss', matches: (path) => /^assets\/index-[^/]+\.css$/.test(path) },
-  { name: 'cityIndex', matches: (path) => path === 'data/cities/index.json' },
+  { name: 'offlineCitySeed', matches: (path) => path === 'data/cities/offline-seed.json' },
   { name: 'robots', matches: (path) => path === 'robots.txt' },
   { name: 'sitemap', matches: (path) => path === 'sitemap.xml' },
 ]
+const MAX_OFFLINE_CITY_SEED_BYTES = 3 * 1024 * 1024
 
 // Хеш фиксирует SVG-код, сгенерированный для официальной ссылки приложения.
 const VAQTPRO_SHARE_QR_SHA256 = '3becf6afdf685b1737b83cd049eca14e233500fdef7a8c283416ecfe0046fa03'
@@ -52,10 +52,7 @@ const SIZE_METRIC_LABELS = [
   ['totalCss', 'Total CSS'],
 ] as const satisfies ReadonlyArray<readonly [keyof BuildSizeReport, string]>
 
-export function validateBuildArtifacts(
-  artifacts: readonly BuildArtifact[],
-  catalog?: Pick<CityIndex, 'version' | 'shards'>,
-): string[] {
+export function validateBuildArtifacts(artifacts: readonly BuildArtifact[]): string[] {
   const errors: string[] = []
 
   for (const { name, matches } of REQUIRED_ARTIFACTS) {
@@ -83,22 +80,14 @@ export function validateBuildArtifacts(
   if (artifacts.some((artifact) => artifact.path === 'data/cities-current.json')) {
     errors.push('cities: старый монолит недопустим')
   }
-
-  const expectedCityArtifacts = new Set([
-    'data/cities/index.json',
-    ...(catalog?.shards.map((shard) => `data/cities/${catalog.version}/${shard.id}.json`) ?? []),
-  ])
   for (const artifact of cityArtifacts) {
-    if (!expectedCityArtifacts.has(artifact.path)) {
+    if (artifact.path !== 'data/cities/offline-seed.json') {
       errors.push(`cities: лишний artifact ${artifact.path}`)
     }
+    if (artifact.path === 'data/cities/offline-seed.json' && artifact.size > MAX_OFFLINE_CITY_SEED_BYTES) {
+      errors.push(`cities: офлайн-набор превышает ${MAX_OFFLINE_CITY_SEED_BYTES} байт`)
+    }
   }
-  for (const path of expectedCityArtifacts) {
-    const count = artifacts.filter((artifact) => artifact.path === path).length
-    if (count === 0) errors.push(`cities: отсутствует ${path}`)
-    if (count > 1) errors.push(`cities: повторный artifact ${path}`)
-  }
-
   return errors
 }
 
@@ -219,43 +208,22 @@ async function collectBuildArtifacts(root: string, directory = root): Promise<Bu
 async function validateCityArtifacts(
   distDirectory: string,
   artifacts: readonly BuildArtifact[],
-): Promise<{ catalog?: CityIndex; errors: string[] }> {
+): Promise<string[]> {
   const errors: string[] = []
-  let catalog: CityIndex | undefined
-
-  if (artifacts.some((artifact) => artifact.path === 'data/cities/index.json')) {
+  const seedArtifact = artifacts.find((artifact) => artifact.path === 'data/cities/offline-seed.json')
+  if (seedArtifact) {
     try {
-      catalog = await validateCityIndex(JSON.parse(
-        await readFile(join(distDirectory, 'data/cities/index.json'), 'utf8'),
-      ) as unknown)
-      const ids = new Set<number>()
-      for (const descriptor of catalog.shards) {
-        const shard = await parseCityShard(
-          await readFile(join(distDirectory, `data/cities/${catalog.version}/${descriptor.id}.json`), 'utf8'),
-          catalog,
-          descriptor,
-        )
-        if (createSearchFilter(shard.cities) !== descriptor.filter) {
-          throw new Error(`Повреждён поисковый индекс ${descriptor.id}`)
-        }
-        for (const city of shard.cities) {
-          if (ids.has(city[0])) throw new Error(`Повторный GeoNames ID ${city[0]}`)
-          ids.add(city[0])
-          const overview = catalog.overview.find((candidate) => candidate[0] === city[0])
-          if (overview && JSON.stringify(overview) !== JSON.stringify(city)) {
-            throw new Error(`Обзор расходится с пакетом для ${city[0]}`)
-          }
-        }
-      }
-      if (catalog.overview.some((city) => !ids.has(city[0]))) {
-        throw new Error('Обзор содержит отсутствующий город')
+      parseOfflineCitySeed(JSON.parse(await readFile(join(distDirectory, 'data/cities/offline-seed.json'), 'utf8')) as unknown)
+      if (seedArtifact.size > MAX_OFFLINE_CITY_SEED_BYTES) throw new Error('Офлайн-набор превышает 3 МиБ')
+      const worker = await readFile(join(distDirectory, 'sw.js'), 'utf8')
+      if (!worker.includes('data/cities/offline-seed.json') || /(?:api|secure)\.geonames\.org|geocoding-api\.open-meteo\.com/.test(worker)) {
+        throw new Error('Service Worker должен кэшировать только компактный офлайн-набор, без ответов API')
       }
     } catch (error) {
       errors.push(`cities: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
-
-  return { catalog, errors }
+  return errors
 }
 
 function isJavaScript(path: string): boolean {
@@ -387,12 +355,11 @@ export async function checkBuildArtifacts(
   options: CheckBuildArtifactsOptions = {},
 ): Promise<void> {
   const artifacts = await collectBuildArtifacts(distDirectory)
-  const city = await validateCityArtifacts(distDirectory, artifacts)
   const errors = [
-    ...validateBuildArtifacts(artifacts, city.catalog),
+    ...validateBuildArtifacts(artifacts),
     ...await validateApplicationIdentity(distDirectory, artifacts),
     ...await validateHomepageCrawlerFiles(distDirectory),
-    ...city.errors,
+    ...await validateCityArtifacts(distDirectory, artifacts),
   ]
 
   if (errors.length > 0) {

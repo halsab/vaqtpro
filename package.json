@@ -6,6 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
+    "prebuild": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
     "dev:lan": "sh scripts/dev-lan.sh",
     "build": "tsc -b && vite build",
     "build:check": "tsx scripts/checkBuildArtifacts.ts",
@@ -21,10 +23,12 @@
     "security:csp": "playwright test tests/security.spec.ts --project=chromium --workers=1",
     "smoke:offline": "playwright test tests/offline.spec.ts --project=chromium",
     "smoke:sw-update": "playwright test tests/sw-update.spec.ts --project=chromium-sw --no-deps --workers=1",
-    "data:update:cities": "tsx scripts/update-city-data.ts",
     "preview": "vite preview",
     "data:build:geography": "tsx scripts/buildLocalGeography.ts",
-    "data:check:geography": "tsx scripts/buildLocalGeography.ts --check"
+    "data:check:geography": "tsx scripts/buildLocalGeography.ts --check",
+    "data:update:offline-cities": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
+    "data:check:offline-cities": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts --check",
+    "geonames:check": "tsx scripts/checkGeoNamesAccount.ts"
   },
   "dependencies": {
     "adhan": "4.4.6",

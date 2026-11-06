@@ -21,15 +21,18 @@ test('сохранённое расписание и поиск города р�
   await page.evaluate(async () => navigator.serviceWorker.ready)
   await page.reload()
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
-  const cachedScheduleData = await page.evaluate(async () => {
+  const cachedUrls = await page.evaluate(async () => {
     const names = await caches.keys()
     const urls = await Promise.all(names.map(async name => {
       const cache = await caches.open(name)
       return (await cache.keys()).map(request => request.url)
     }))
-    return urls.flat().some(url => url.includes('prayer-times-current.json'))
+    return urls.flat()
   })
-  expect(cachedScheduleData).toBe(false)
+  const cachedPaths = cachedUrls.map(url => new URL(url).pathname)
+  expect(cachedPaths.some(path => path.includes('prayer-times-current.json'))).toBe(false)
+  expect(cachedPaths).toContain('/data/cities/offline-seed.json')
+  expect(cachedPaths.some(path => /\/data\/cities\/(?:index\.json|[a-f0-9]{20}\/[^/]+\.json)$/.test(path))).toBe(false)
 
   await context.setOffline(true)
   try {
@@ -38,9 +41,9 @@ test('сохранённое расписание и поиск города р�
     expect(await page.locator('.event-row time').allTextContents()).toEqual(times)
 
     await page.locator('#home-location').click()
-    await page.getByRole('button', { name: 'Найти город' }).click()
+    await page.getByRole('button', { name: 'Найти место' }).click()
     await page.getByRole('searchbox').fill('Москва')
-    await expect(page.getByRole('button', { name: 'Москва, Москва, Россия', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Москва, Москва, Россия/ })).toBeVisible()
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expectSchedule(page, 7)

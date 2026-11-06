@@ -4,14 +4,14 @@ import type { Result } from '../domain/result'
 
 export interface CitySearchResult {
   cities: City[]
-  status: 'complete' | 'needs-download' | 'refine'
-  missingPackages: string[]
-  previousVersion?: boolean
+  status: 'complete' | 'limited' | 'offline-seed'
+  nextOffset?: number
+  providerWarning?: 'quota' | 'authorization' | 'service'
 }
 
 export interface CityCatalogService {
   load: () => Promise<Result<undefined, DataFailure>>
-  search: (query: string) => Promise<Result<CitySearchResult, DataFailure>>
+  search: (query: string, language?: string, startRow?: number) => Promise<Result<CitySearchResult, DataFailure>>
   // Радиус 0–200 км. Город — подсказка названия, не регион или timezone GPS-точки.
   findNearest: (
     latitude: number,
@@ -19,22 +19,6 @@ export interface CityCatalogService {
     maxDistanceKm: number,
     localOnly?: boolean,
   ) => Promise<Result<City | null, DataFailure>>
+  cancelSearch?: () => void
   cancelPending?: () => void
 }
-
-export type CityWorkerCommand =
-  | { type: 'load' }
-  | { type: 'search'; query: string }
-  | {
-      type: 'findNearest'
-      latitude: number
-      longitude: number
-      maxDistanceKm: number
-      localOnly?: boolean
-    }
-
-export type CityWorkerRequest = CityWorkerCommand & { id: number }
-
-export type CityWorkerResponse =
-  | { id: number; ok: true; result: undefined | CitySearchResult | City | null }
-  | { id: number; ok: false; error: DataFailure }

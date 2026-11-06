@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { formatCityLabel, materializeCity, searchCities, findNearestCity, type CompactCityRecord } from './cities'
 
 function record(id: number, name: string, population = 5000, alternatives: string[] = []): CompactCityRecord {
-  return [id, name, [name.toLowerCase(), ...alternatives], 'RU', '33', 58.6, 49.6, population, 'Europe/Moscow', 'Кировская область', 'россия кировская область']
+  return [id, name, [name.toLowerCase(), ...alternatives], 'RU', '33', 58.6, 49.6, population, 'Europe/Moscow', 'Кировская область', 'россия кировская область', 'PPL']
 }
 const source = { name: 'GeoNames', url: 'https://www.geonames.org/', license: 'CC BY 4.0', licenseUrl: 'https://creativecommons.org/licenses/by/4.0/', updatedAt: '2026-09-07' }
 describe('каталог с регионами и ranking', () => {

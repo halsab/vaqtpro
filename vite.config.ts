@@ -37,7 +37,7 @@ const CONTENT_SECURITY_POLICY = [
   "style-src-attr 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self'",
-  "connect-src 'self' https://cloudflareinsights.com",
+  "connect-src 'self' https://cloudflareinsights.com https://secure.geonames.org",
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-src 'none'",
@@ -63,8 +63,6 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: { compress: { passes: 2 }, maxWorkers: 2 },
   },
-  // Worker минифицируется отдельно от основного пакета Terser.
-  worker: { rolldownOptions: { output: { minify: true } } },
   plugins: [
     {
       name: 'production-content-security-policy',
@@ -137,18 +135,9 @@ export default defineConfig({
         ignoreURLParametersMatching: [/^v$/, /^utm_/i, /^fbclid$/i],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,ttf,json}'],
         globIgnores: [
-          '**/data/cities-current.json',
-          '**/data/cities/*/*.json',
           'city-cache-cleanup.js',
         ],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        runtimeCaching: [
-          {
-            urlPattern: /\/data\/cities\/[a-f0-9]{20}\/[A-Z]{2}-[0-9]+\.json$/,
-            // Проверенные пакеты сохраняет Worker в IndexedDB; сырой ответ не кешируем.
-            handler: 'NetworkOnly',
-          },
-        ],
       },
       devOptions: { enabled: false }
     })

@@ -1,4 +1,4 @@
-import { choosePlace, expect, test } from './fixtures'
+import { choosePlace, expect, installGeoNamesFixture, test } from './fixtures'
 import { themePalettes } from '../src/ui/themePalette'
 
 function colorAlpha(color: string): number {
@@ -601,10 +601,14 @@ test('long localized cells, estimated markers, and unavailable values remain cen
 test('civil weekdays stay the same in distant browser timezones', async ({ browser }) => {
   for (const timezone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
     const context = await browser.newContext({ timezoneId: timezone, baseURL: 'http://127.0.0.1:4175' })
-    const page = await context.newPage()
-    await page.clock.setFixedTime(new Date('2026-09-04T09:30:00.000Z'))
-    await openMonth(page)
-    await expect(page.locator('.prayer-month-table tbody th time').first()).toHaveText('01 вт')
-    await context.close()
+    try {
+      await installGeoNamesFixture(context)
+      const page = await context.newPage()
+      await page.clock.setFixedTime(new Date('2026-09-04T09:30:00.000Z'))
+      await openMonth(page)
+      await expect(page.locator('.prayer-month-table tbody th time').first()).toHaveText('01 вт')
+    } finally {
+      await context.close()
+    }
   }
 })

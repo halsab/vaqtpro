@@ -1,4 +1,4 @@
-import { choosePlace, expect, readSavedSetting, test } from './fixtures'
+import { choosePlace, expect, expectSchedule, readSavedSetting, test } from './fixtures'
 
 test('first launch uses the VaqtPro welcome screen without Settings or automatic geolocation', async ({ page }) => {
   await page.addInitScript(() => {
@@ -11,17 +11,40 @@ test('first launch uses the VaqtPro welcome screen without Settings or automatic
   await page.goto('./')
   await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   await expect(page.getByText('VaqtPro')).toBeVisible()
-  await expect(page.getByText('Выберите город или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
+  await expect(page.getByText('Выберите место или разрешите доступ к геопозиции, чтобы увидеть время намаза.')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Настройки' })).toHaveCount(0)
   await expect(page.locator('.initial-location-landscape')).toHaveCount(0)
   await expect(page.locator('.initial-location-brand img')).toHaveAttribute('src', '/icons/light/icon.svg')
   await expect.poll(() => page.evaluate(() => (window as Window & { __geoRequests: number }).__geoRequests)).toBe(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe('seasonal')
   await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('0px')
-  await page.getByRole('button', { name: 'Найти город' }).click()
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await page.getByRole('button', { name: 'Найти место' }).click()
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toBeVisible()
   await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderTopLeftRadius)).toBe('38px')
   await expect.poll(() => page.locator('.screen-panel').evaluate(element => getComputedStyle(element).borderBottomLeftRadius)).toBe('0px')
+})
+
+test('online search returns a rural settlement and a separate selectable district', async ({ page }) => {
+  const searchRequests: string[] = []
+  page.on('request', request => {
+    if (request.url().startsWith('https://secure.geonames.org/searchJSON')) searchRequests.push(request.url())
+  })
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Найти место' }).click()
+  await page.getByRole('searchbox').fill('Облово')
+
+  const village = page.getByRole('button', { name: /Облово, Алтайский Край, Россия, Населённое место/ })
+  const district = page.getByRole('button', { name: /Облово, Тверская Область, Россия, Часть населённого места/ })
+  await expect(village).toBeVisible()
+  await expect(district).toBeVisible()
+  expect(searchRequests).toHaveLength(1)
+  expect(new URL(searchRequests[0] ?? 'https://invalid.local').searchParams.get('name_startsWith')).toBe('Облово')
+
+  await district.click()
+  await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
+    place: { id: 'geonames:451919', cityId: 451919, latitude: 57.04877, longitude: 34.12661, timeZone: 'Europe/Moscow' },
+  })
+  await expectSchedule(page)
 })
 
 test('prepaints the Seasonal default and an explicitly cached Classic theme before app startup', async ({ page }) => {
@@ -112,7 +135,7 @@ test('prepaints the light Seasonal palette when matchMedia is missing or throws'
 test('keeps initial location keyboard clearance when returning from city search in a constrained viewport', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 480 })
   await page.goto('./')
-  await page.getByRole('button', { name: 'Найти город' }).click()
+  await page.getByRole('button', { name: 'Найти место' }).click()
   await page.getByRole('searchbox').focus()
   await page.locator('.app-layout').evaluate(element => element.style.setProperty('--app-keyboard-inset', '240px'))
   await page.getByRole('button', { name: 'Отмена' }).click()
@@ -176,7 +199,7 @@ test('search cancels delayed unaccepted GPS callbacks', async ({ page }) => {
   })
   await expect(page.getByText('41.0100, 28.9500')).toBeVisible()
 
-  await page.getByRole('button', { name: 'Найти город' }).click()
+  await page.getByRole('button', { name: 'Найти место' }).click()
   const search = page.getByRole('searchbox')
   await search.fill('Москва')
   await page.evaluate(() => {
@@ -188,7 +211,7 @@ test('search cancels delayed unaccepted GPS callbacks', async ({ page }) => {
   })
 
   await expect(search).toHaveValue('Москва')
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Главная', exact: true })).toHaveCount(0)
   await expect.poll(() => readSavedSetting(page, 'locationChoice')).toEqual(confirmed)
   await expect.poll(() => readSavedSetting(page, 'recentPlaces')).not.toEqual(expect.arrayContaining([
@@ -211,7 +234,7 @@ test('denied GPS leaves initial location selection available', async ({ page }) 
   await page.getByRole('button', { name: 'По геопозиции' }).click()
   await expect(page.getByRole('heading', { name: 'Выберите место' })).toBeVisible()
   await expect(page.getByRole('alert')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Найти город' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Найти место' })).toBeVisible()
   await expect(page.getByRole('timer')).toHaveCount(0)
   await expect.poll(() => readSavedSetting(page, 'locationChoice')).toBeUndefined()
 })
@@ -238,8 +261,8 @@ test('opening city search from initial place selection cancels delayed GPS callb
     })
   })
   await expect(page.getByText('41.0100, 28.9500')).toBeVisible()
-  await page.getByRole('button', { name: 'Найти город' }).click()
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await page.getByRole('button', { name: 'Найти место' }).click()
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toBeVisible()
   const savedChoice = await readSavedSetting(page, 'locationChoice')
   const savedHistory = await readSavedSetting(page, 'recentPlaces')
   await page.evaluate(() => {
@@ -249,7 +272,7 @@ test('opening city search from initial place selection cancels delayed GPS callb
       timestamp: Date.now(),
     })
   })
-  await expect(page.getByRole('region', { name: 'Поиск города' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Поиск места' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Главная', exact: true })).toHaveCount(0)
   await expect.poll(() => readSavedSetting(page, 'locationChoice')).toEqual(savedChoice)
   await expect.poll(() => readSavedSetting(page, 'recentPlaces')).toEqual(savedHistory)

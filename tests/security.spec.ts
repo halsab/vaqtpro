@@ -11,7 +11,7 @@ const CSP = [
   "style-src-attr 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self'",
-  "connect-src 'self' https://cloudflareinsights.com",
+  "connect-src 'self' https://cloudflareinsights.com https://secure.geonames.org",
   "worker-src 'self'",
   "manifest-src 'self'",
   "frame-src 'none'",
@@ -58,6 +58,7 @@ test('production CSP allows the app and blocks a third-party connection', async 
     .toHaveAttribute('content', expectedCsp)
   expect(CSP).toContain('script-src \'self\' https://static.cloudflareinsights.com')
   expect(CSP).toContain('connect-src \'self\' https://cloudflareinsights.com')
+  expect(CSP).toContain('https://secure.geonames.org')
   await expect(page.getByRole('button', { name: 'По геопозиции' })).toBeVisible()
 
   const blockedUrl = 'https://example.invalid/csp-probe'

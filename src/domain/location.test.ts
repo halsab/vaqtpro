@@ -35,11 +35,16 @@ describe('findNearestLocation', () => {
 })
 
 describe('isConfirmedTatarstan', () => {
-  it('принимает только код региона 73 из GeoNames для России', () => {
+  it('принимает проверенный код 73 или GeoNames ID Татарстана для России', () => {
     expect(isConfirmedTatarstan({
       source: 'geonames',
       countryCode: 'RU',
       admin1Code: '73',
+    })).toBe(true)
+    expect(isConfirmedTatarstan({
+      source: 'geonames',
+      countryCode: 'RU',
+      admin1Id: 484048,
     })).toBe(true)
     expect(isConfirmedTatarstan({
       source: 'geonames',
@@ -50,6 +55,11 @@ describe('isConfirmedTatarstan', () => {
       source: 'geonames',
       countryCode: 'TR',
       admin1Code: '73',
+    })).toBe(false)
+    expect(isConfirmedTatarstan({
+      source: 'geonames',
+      countryCode: 'TR',
+      admin1Id: 484048,
     })).toBe(false)
   })
 

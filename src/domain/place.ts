@@ -1,4 +1,4 @@
-import { formatCityLabel, type City } from './cities'
+import { formatCityLabel, type City, type CityFeatureCode } from './cities'
 import { haversineDistanceKm, isConfirmedTatarstan } from './location'
 import { resolveGpsGeography, validPosition, type Coverage, type CoverageGeometry } from './localGeography'
 import { MOSCOW_TIME_ZONE, isValidTimeZone } from './locationTime'
@@ -10,6 +10,7 @@ export interface Place extends SavedCoordinates {
   name: string
   /** Unformatted catalog name; never derive it by splitting a display label. */
   cityName?: string
+  featureCode?: CityFeatureCode | null
   region: { code: string; name: string } | null
   coverage: Coverage
   automaticTimeZone: { id: string; source: 'city' | 'device' | 'legacy' }
@@ -48,7 +49,11 @@ export function createCityPlace(city: City, timestamp: number): Place {
   const admin1Code = typeof city.admin1Code === 'string' && /^[A-Z0-9]{1,3}$/.test(city.admin1Code)
     ? city.admin1Code
     : undefined
-  const tatarstan = Boolean(countryCode && isConfirmedTatarstan({ source: 'geonames', countryCode, ...(admin1Code ? { admin1Code } : {}) }))
+  const tatarstan = Boolean(countryCode && isConfirmedTatarstan({
+    source: 'geonames', countryCode,
+    ...(admin1Code ? { admin1Code } : {}),
+    ...(Number.isSafeInteger(city.admin1Id) ? { admin1Id: city.admin1Id } : {}),
+  }))
   const region = tatarstan
     ? TATARSTAN
     : countryCode
@@ -56,7 +61,9 @@ export function createCityPlace(city: City, timestamp: number): Place {
       : null
   return {
     id: `geonames:${city.id}`, selection: 'city', cityId: city.id,
-    name: formatCityLabel(city), cityName: city.name, latitude: city.latitude, longitude: city.longitude,
+    name: formatCityLabel(city), cityName: city.name,
+    ...(city.featureCode ? { featureCode: city.featureCode } : {}),
+    latitude: city.latitude, longitude: city.longitude,
     accuracy: null, timestamp, timeZone: city.timeZone,
     automaticTimeZone: { id: city.timeZone, source: 'city' },
     region,
@@ -165,10 +172,10 @@ export function gpsCountryCode(place: Pick<Place, 'selection'> & Partial<Pick<Pl
 
 export function homePlaceLabel(place: Place | null, unknownLabel = 'Местоположение не определено'): string {
   if (!place || !validPosition(place)) return unknownLabel
-  // Structured names preserve legitimate commas both after direct selection and offline recall.
-  // Legacy unstructured labels remain complete rather than being truncated ambiguously.
-  const structuredName = place.selection === 'gps' ? place.nearbyCity?.cityName : place.cityName
-  const name = (structuredName || place.name.replace(/^Рядом:\s*/u, '')).trim()
+  if (place.selection === 'gps') return `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`
+  // Структурированное имя сохраняет запятые после выбора и офлайн-восстановления.
+  // Старые подписи оставляем целиком, не разбивая их неоднозначно.
+  const name = (place.cityName || place.name.replace(/^Рядом:\s*/u, '')).trim()
   if (name && name !== 'Моё местоположение') return name
   return `${place.latitude.toFixed(4)}, ${place.longitude.toFixed(4)}`
 }
