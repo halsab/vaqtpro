@@ -12,27 +12,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Check public origin and document assets
+      - name: Check DNS, GitHub Pages and alternate origin
         shell: bash
         run: |
-          set -uo pipefail
-          echo "=== DNS ==="
-          getent ahostsv4 vaxt.pro || true
-          getent ahostsv4 halsab.github.io || true
-          echo "=== HTTPS responses ==="
-          for url in https://vaqt.pro/ https://halsab.github.io/vaqtpro/; do
-            echo "PROBING $url"
-            curl --verbose --location --connect-timeout 8 --max-time 25 --output /tmp/vaqtpro-response --dump-header /tmp/vaqtpro-headers --write-out 'HTTP=%{http_code} EFFECTIVE=%{url_effective} DNS=%{time_namelookup} TLS=%{time_appconnect} TOTAL=%{time_total}\n' "$url" 2>&1 | tail -45
-            echo "HEADERS"
-            head -25 /tmp/vaqtpro-headers 2>/dev/null || true
-            echo "HTML HEAD"
-            head -c 900 /tmp/vaqtpro-response 2>/dev/null || true
-            echo
+          set +e
+          echo '=== DNS current answer ==='
+          getent ahostsv4 vaxt.pro
+          getent ahostsv4 halsab.github.io
+          echo '=== DNS NS and SOA ==='
+          if command -v dig >/dev/null; then
+            dig +noall +answer vaxt.pro NS
+            dig +noall +answer vaxt.pro SOA
+            dig +noall +answer vaxt.pro A
+            dig @1.1.1.1 +noall +answer vaxt.pro A
+            dig @8.8.8.8 +noall +answer vaxt.pro A
+          else
+            echo 'dig is unavailable'
+          fi
+          echo '=== Actual public site ==='
+          curl -sSIL --connect-timeout 7 --max-time 13 --write-out 'PUBLIC HTTP=%{http_code} IP=%{remote_ip} URL=%{url_effective} TIME=%{time_total}\n' https://vaqt.pro/
+          echo '=== GitHub Pages hostname without redirect ==='
+          curl -sSI --connect-timeout 7 --max-time 13 --write-out 'GITHUB HTTP=%{http_code} IP=%{remote_ip} LOCATION=%{redirect_url} TIME=%{time_total}\n' https://halsab.github.io/vaqtpro/
+          echo '=== Force route to GitHub Pages with original hostname/SNI ==='
+          for ip in 185.199.108.153 185.199.109.153; do
+            echo "GITHUB_PAGES_IP $ip"
+            curl -sSIL --resolve "vaqt.pro:443:$ip" --connect-timeout 7 --max-time 13 --write-out 'FORCED HTTP=%{http_code} IP=%{remote_ip} URL=%{url_effective} TIME=%{time_total}\n' https://vaqt.pro/
           done
-          echo "=== Public asset responses ==="
-          curl -fLsS --connect-timeout 8 --max-time 25 -o /tmp/vaqtpro-index https://vaqt.pro/ || exit 1
-          grep -oE '(src|href)="/assets/[^\"]+' /tmp/vaqtpro-index | head -10 || true
-          for asset in $(grep -oE '/assets/[^" ]+\.(js|css)' /tmp/vaqtpro-index | head -4); do
-            echo "ASSET $asset"
-            curl -sSIL --connect-timeout 8 --max-time 15 --write-out 'HTTP=%{http_code} TYPE=%{content_type} TOTAL=%{time_total}\n' "https://vaqt.pro$asset" | tail -15
-          done
+          echo '=== Completed ==='
