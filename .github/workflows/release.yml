@@ -48,6 +48,46 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
 
+      - name: Проверить опубликованный сайт перед созданием релиза
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$PAGE_URL" != 'https://vaqt.pro/' ]; then
+            echo "::error::Неожиданный адрес публикации: $PAGE_URL"
+            exit 1
+          fi
+
+          html="$(mktemp)"
+          ready=false
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --location --silent --show-error --connect-timeout 6 --max-time 12               --output "$html" "$PAGE_URL" && grep -q '<div id="root"' "$html"; then
+              ready=true
+              break
+            fi
+            echo "::warning::Попытка $attempt: опубликованный сайт недоступен или HTML некорректен"
+            sleep 3
+          done
+          if [ "$ready" != true ]; then
+            echo '::error::Публикация существует, но https://vaqt.pro/ не отдаёт приложение. Проверьте DNS и HTTPS.'
+            exit 1
+          fi
+
+          mapfile -t assets < <(grep -oE '(src|href)="/assets/[^"]+\.(js|css)"' "$html" | cut -d '"' -f2 | sort -u)
+          if [ "${#assets[@]}" -lt 2 ]; then
+            echo '::error::В опубликованном HTML отсутствуют обязательные JS/CSS-файлы.'
+            exit 1
+          fi
+          for asset in "${assets[@]}"; do
+            content_type="$(curl --fail --location --silent --show-error --connect-timeout 6 --max-time 12               --output /dev/null --write-out '%{content_type}' "https://vaqt.pro$asset")"
+            if [[ "$content_type" == *text/html* || -z "$content_type" ]]; then
+              echo "::error::Некорректный ресурс $asset (Content-Type: $content_type)"
+              exit 1
+            fi
+          done
+          echo 'Опубликованный HTML, JS и CSS доступны по публичному HTTPS-адресу.'
+
       - name: Создать Git-тег и GitHub Release
         run: gh release create "$APP_VERSION" --target "$RELEASE_COMMIT" --title "$APP_VERSION" --generate-notes
 
