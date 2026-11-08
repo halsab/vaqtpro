@@ -75,7 +75,7 @@ jobs:
           fi
 
           mapfile -t assets < <(grep -oE '(src|href)="/assets/[^"]+\.(js|css)"' "$html" | cut -d '"' -f2 | sort -u)
-          if ! grep -qE 'src="/assets/[^"]+\\.js"' "$html" || ! grep -qE 'href="/assets/[^"]+\\.css"' "$html"; then
+          if ! grep -qE 'src="/assets/[^"]+\.js"' "$html" || ! grep -qE 'href="/assets/[^"]+\.css"' "$html"; then
             echo '::error::В опубликованном HTML отсутствуют обязательные JS/CSS-файлы.'
             exit 1
           fi
