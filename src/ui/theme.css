@@ -6,6 +6,16 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Kazan Basma Mushaf';
+  src: url('../assets/KazanBasmaMushaf-Normal.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:lang(ar) { font-family: 'Kazan Basma Mushaf', serif !important; }
+
 :root {
   color-scheme: light;
   font-family: 'Old Timey Mono', monospace;

@@ -8,7 +8,7 @@ afterEach(() => {
 })
 
 describe('getCurrentPosition', () => {
-  it('быстро получает допустимые кешированные координаты', async () => {
+  it('получает свежие coarse-координаты без устаревшего кэша', async () => {
     const getPosition = vi.fn((success: PositionCallback, _error?: PositionErrorCallback, _options?: PositionOptions) =>
       success({
         coords: { latitude: 55.8, longitude: 49.1, accuracy: 750 },
@@ -31,7 +31,7 @@ describe('getCurrentPosition', () => {
     expect(getPosition.mock.calls[0]?.[2]).toEqual({
       enableHighAccuracy: false,
       timeout: 10_000,
-      maximumAge: 600_000,
+      maximumAge: 0,
     })
   })
 

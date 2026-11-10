@@ -198,7 +198,7 @@ html[data-input='pointer'] .select-field { outline: none; }
   margin-inline: calc(0px - var(--screen-inset-left)) calc(0px - var(--screen-inset-right));
   padding-inline: var(--screen-inset-left) var(--screen-inset-right);
   overflow: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   scrollbar-width: thin;
   scrollbar-color: var(--background-tertiary) transparent;
 }
@@ -353,6 +353,13 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .share-label { display: block; margin-bottom: 8px; }
 .app-share-url { font: var(--font-body); appearance: none; display: block; width: 100%; height: 2.9em; min-height: 2.9em; padding: 0; margin: 0; border: 0; border-radius: 0; resize: none; background: var(--background-secondary); color: var(--text-primary); letter-spacing: 0; overflow-wrap: anywhere; text-align: center; }
 .markdown-article { font: var(--font-body); overflow-wrap: anywhere; }
+.markdown-article .markdown-arabic {
+  direction: rtl !important;
+  unicode-bidi: isolate !important;
+  font-family: 'Kazan Basma Mushaf', serif !important;
+  font-size: 34px !important;
+  line-height: 1.8 !important;
+}
 .ramadan-article-flow { display: grid; gap: 16px; }
 .ramadan-dhikr-arabic, .recitation-arabic { direction: rtl; text-align: right; unicode-bidi: plaintext; overflow-wrap: anywhere; }
 .markdown-article > * + * { margin-top: 16px; }

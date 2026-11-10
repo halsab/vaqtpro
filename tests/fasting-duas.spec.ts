@@ -35,6 +35,9 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
     const suhurArticle = page.getByRole('region', { name: 'Дуа сухура' })
     await expect(suhurArticle.locator('h1')).toHaveText('Дуа сухура')
     await expect(suhurArticle.locator('[dir="rtl"][lang="ar"]')).toContainText('نَوَيْتُ أَنْ أَصُومَ')
+    const recitation = suhurArticle.locator('[dir="rtl"][lang="ar"]')
+    await expect.poll(() => recitation.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Kazan Basma Mushaf')
+    await expect.poll(() => recitation.evaluate(element => getComputedStyle(element).fontSize)).toBe('16px')
     await expect.poll(() => suhurArticle.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
 
     await page.emulateMedia({ colorScheme: 'light' })

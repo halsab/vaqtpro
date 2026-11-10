@@ -35,6 +35,7 @@ export default defineConfig({
         '**/prayer-source-upgrade.spec.ts',
         '**/qibla.spec.ts',
         '**/fasting-duas.spec.ts',
+        '**/arabic-typography.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], launchOptions: {
         args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],
@@ -52,7 +53,7 @@ export default defineConfig({
       name: 'mobile-safari-portrait',
       // Экспортные E2E сняты по запросу владельца: Playwright не проверяет системный picker/share sheet и качество файлов на устройствах.
       // Спиннер, автозапуск picker, повторный тап, отправку файлов и внешний вид владелец проверяет вручную.
-      testMatch: ['**/mobile.spec.ts', '**/ramadan-dhikr.spec.ts', '**/fasting-duas.spec.ts'],
+      testMatch: ['**/mobile.spec.ts', '**/ramadan-dhikr.spec.ts', '**/fasting-duas.spec.ts', '**/arabic-typography.spec.ts'],
       use: { ...devices['iPhone 13'] },
     },
     {

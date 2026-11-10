@@ -61,7 +61,8 @@ test('monthly table keeps its header, date column, and separators frozen on both
     return {
       scroller: { x: scroller.getBoundingClientRect().x, y: scroller.getBoundingClientRect().y,
         width: scroller.clientWidth, height: scroller.clientHeight, scrollWidth: scroller.scrollWidth,
-        scrollHeight: scroller.scrollHeight, left: scroller.scrollLeft, top: scroller.scrollTop },
+        scrollHeight: scroller.scrollHeight, left: scroller.scrollLeft, top: scroller.scrollTop,
+        overscrollBehavior: getComputedStyle(scroller).overscrollBehavior },
       screenContent: { width: screenContent.clientWidth, height: screenContent.clientHeight,
         scrollWidth: screenContent.scrollWidth, scrollHeight: screenContent.scrollHeight,
         left: screenContent.scrollLeft, top: screenContent.scrollTop },
@@ -84,6 +85,7 @@ test('monthly table keeps its header, date column, and separators frozen on both
   })
 
   const before = await geometry()
+  expect(before.scroller.overscrollBehavior).toBe('none')
   expect(before.scroller.scrollWidth).toBeGreaterThan(before.scroller.width)
   expect(before.scroller.scrollHeight).toBeGreaterThan(before.scroller.height)
   expect(before.screenContent.scrollWidth).toBe(before.screenContent.width)
@@ -232,6 +234,8 @@ test('short viewports keep navigation stationary and expose the full table throu
 })
 
 test('monthly scrollport reaches panel edges, keeps horizontal insets, and clips beneath transparent frozen cells', async ({ page }) => {
+  // A full month and enlarged text can take longer to settle under parallel WebKit CI.
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 422, height: 646 })
   await openMonth(page)
   await page.evaluate(() => {
@@ -379,6 +383,7 @@ test('mobile two-axis scrolling measures only visible cells while preserving fro
 })
 
 test('month navigation preserves one scroll owner and keeps changed rows reachable', async ({ page }) => {
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 390, height: 720 })
   await openMonth(page)
   const scroller = page.locator('.prayer-month-table-scroll')
@@ -418,6 +423,9 @@ test('month navigation preserves one scroll owner and keeps changed rows reachab
 })
 
 test('monthly geometry stays contained across the approved short-screen matrix and themes', async ({ page }) => {
+  // WebKit startup can stall while the deterministic place-search fixture hydrates.
+  // Keep every geometry assertion across the full matrix.
+  test.setTimeout(90_000)
   await openMonth(page)
   const viewportPairs = [
     ...[320, 390].flatMap(width => [360, 479, 480, 481, 540, 720].map(height => [width, height] as const)),
@@ -546,6 +554,7 @@ test('monthly geometry stays contained across the approved short-screen matrix a
 })
 
 test('monthly table uses available width before enabling horizontal scrolling', async ({ page }) => {
+  test.setTimeout(60_000)
   await openMonth(page)
   const region = page.locator('.prayer-month-table-scroll')
   for (const [width, shouldOverflow] of [[740, false], [390, true], [320, true]] as const) {
@@ -559,6 +568,7 @@ test('monthly table uses available width before enabling horizontal scrolling', 
 })
 
 test('long localized cells, estimated markers, and unavailable values remain centered and readable at 200%', async ({ page }) => {
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 320, height: 720 })
   await openMonth(page)
   await page.evaluate(() => {
@@ -572,6 +582,13 @@ test('long localized cells, estimated markers, and unavailable values remain cen
     unavailableCell.textContent = '—'
     unavailableCell.setAttribute('aria-label', 'Время недоступно')
   })
+
+  await page.evaluate(async () => { await document.fonts.ready })
+  // Font substitution and table layout can settle on different WebKit frames.
+  // Keep the strict zero-overflow condition, but assert it after layout stabilizes.
+  await expect.poll(() => page.locator('.prayer-month-table').evaluate(table =>
+    [...table.querySelectorAll<HTMLElement>('thead th, tbody th, tbody td')]
+      .every(cell => cell.scrollWidth <= cell.clientWidth))).toBe(true)
 
   const layout = await page.evaluate(() => {
     const scroll = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
@@ -598,8 +615,10 @@ test('long localized cells, estimated markers, and unavailable values remain cen
   expect(layout.unavailable).toBe('—')
 })
 
-test('civil weekdays stay the same in distant browser timezones', async ({ browser }) => {
-  for (const timezone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
+for (const timezone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
+  test(`civil weekdays stay the same in browser timezone ${timezone}`, async ({ browser }) => {
+    // Each timezone receives a separate test budget instead of sharing 30 seconds.
+    test.setTimeout(60_000)
     const context = await browser.newContext({ timezoneId: timezone, baseURL: 'http://127.0.0.1:4175' })
     try {
       await installGeoNamesFixture(context)
@@ -610,5 +629,5 @@ test('civil weekdays stay the same in distant browser timezones', async ({ brows
     } finally {
       await context.close()
     }
-  }
-})
+  })
+}

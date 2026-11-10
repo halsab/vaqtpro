@@ -47,7 +47,7 @@ export function getCurrentPosition(
         (error) => resolve(failure(mapPositionError(error))),
         accuracy === 'precise'
           ? { enableHighAccuracy: true, timeout: 30_000, maximumAge: 0 }
-          : { enableHighAccuracy: false, timeout: 10_000, maximumAge: 600_000 },
+          : { enableHighAccuracy: false, timeout: 10_000, maximumAge: 0 },
       )
     } catch {
       resolve(failure({ kind: 'geolocation', reason: 'unavailable' }))

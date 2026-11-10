@@ -37,6 +37,9 @@ test('Mobile Safari выбирает место и открывает кален
 })
 
 test('Mobile Safari opens a complete monthly timetable responsively', async ({ page }) => {
+  // WebKit startup/search hydration can exceed the standard CI budget; the measured
+  // timetable-open performance assertion below remains a strict 1-second limit.
+  test.setTimeout(60_000)
   await page.goto('./')
   await choosePlace(page)
   await page.locator('#home-date').click()

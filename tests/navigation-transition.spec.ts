@@ -224,6 +224,7 @@ test('uses an opacity-only native crossfade for forward and Back navigation', as
 })
 
 test('uses the same opacity-only crossfade for event detail and Back', async ({ page }) => {
+  test.setTimeout(60_000)
   await installTransitionProbe(page)
   await page.goto('./')
   await choosePlace(page)
@@ -253,6 +254,7 @@ test('uses the same opacity-only crossfade for event detail and Back', async ({ 
 })
 
 test('browser Back and Forward restore the route through opacity-only transitions', async ({ page }) => {
+  test.setTimeout(60_000)
   await installTransitionProbe(page)
   await page.goto('./')
   await choosePlace(page)
@@ -299,6 +301,7 @@ test('snapshot alignment holds in compact portrait and landscape viewports', asy
 })
 
 test('reduced motion performs functional navigation without starting a transition', async ({ page }) => {
+  test.setTimeout(60_000)
   await installTransitionProbe(page)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.goto('./')

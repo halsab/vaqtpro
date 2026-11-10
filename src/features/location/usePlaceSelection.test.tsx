@@ -105,12 +105,12 @@ describe('one-shot GPS operations', () => {
     expect(h.persist.mock.calls.filter(([, change]) => change === 'selection')).toHaveLength(1)
     expect(h.persist.mock.calls.some(([, change]) => change === 'refinement')).toBe(true)
   })
-  it('keeps a final low-accuracy point available for explicit acceptance', async () => {
+  it('keeps the latest low-accuracy GPS point available for explicit acceptance', async () => {
     const h = setup()
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
     await act(async () => { h.coarse.resolve(success(coarseFix)); h.precise.resolve(success(poorPreciseFix)); await pending })
-    expect(h.result.current.gpsPreview).toMatchObject(coarseFix)
+    expect(h.result.current.gpsPreview).toMatchObject(poorPreciseFix)
     expect(h.result.current.place).toBeNull()
     expect(h.result.current.gpsState).toEqual({ status: 'ready', lowAccuracy: true })
     expect(h.chosen).not.toHaveBeenCalled()
@@ -261,7 +261,7 @@ describe('one-shot GPS operations', () => {
     expect(h.result.current.place).toMatchObject(preciseFix)
     expect(h.chosen).toHaveBeenCalledOnce()
   })
-  it('ignores late coarse after precise and never replaces GPS coordinates with city coordinates', async () => {
+  it('ignores late coarse after precise and commits the named place canonical calculation anchor', async () => {
     const h = setup()
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
@@ -269,7 +269,69 @@ describe('one-shot GPS operations', () => {
     await act(async () => { h.coarse.resolve(success(coarseFix)); await pending })
     expect(h.result.current.place).toMatchObject(preciseFix)
     await act(async () => { h.lookup.resolve(success({ ...city, name: 'Казань', latitude: 55.79, longitude: 49.12, timeZone: 'Europe/Samara' })); await Promise.resolve() })
-    expect(h.result.current.place).toMatchObject({ ...preciseFix, timeZone: 'America/Los_Angeles', name: 'Казань' })
+    expect(h.result.current.place).toMatchObject({ id: 'geonames:1', selection: 'city', cityName: 'Казань',
+      latitude: 55.79, longitude: 49.12, timeZone: 'Europe/Samara' })
+  })
+  it('clears provisional GPS state after resolving a named settlement', async () => {
+    const h = setup()
+    let pending!: Promise<void>
+    act(() => { pending = h.result.current.locate() })
+    await act(async () => {
+      h.coarse.resolve(success(coarseFix))
+      h.precise.resolve(success(poorPreciseFix))
+      await pending
+    })
+    expect(h.result.current.gpsPreview).toMatchObject(poorPreciseFix)
+    await act(async () => {
+      h.lookup.resolve(success({ ...city, name: 'Казань', latitude: poorPreciseFix.latitude, longitude: poorPreciseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place?.selection).toBe('city')
+    expect(h.result.current.gpsPreview).toBeNull()
+    expect(h.result.current.gpsState.status).toBe('idle')
+  })
+
+  it('re-anchors after a late precise fix moves beyond an early coarse-selected settlement', async () => {
+    const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
+    const newLookup = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
+    h.services.cities.findNearest = vi.fn().mockReturnValueOnce(h.lookup.promise).mockReturnValueOnce(newLookup.promise)
+    let pending!: Promise<void>
+    act(() => { pending = h.result.current.locate() })
+    await act(async () => { h.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_600)) })
+    await waitFor(() => expect(h.services.cities.findNearest).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      h.lookup.resolve(success({ ...city, name: 'First', latitude: goodCoarseFix.latitude, longitude: goodCoarseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place).toMatchObject({ selection: 'city', cityName: 'First' })
+    const farPreciseFix = { ...preciseFix, latitude: 56.4, longitude: 50.0 }
+    await act(async () => { h.precise.resolve(success(farPreciseFix)); await pending })
+    expect(h.result.current.place).toMatchObject({ selection: 'gps', latitude: farPreciseFix.latitude })
+    await waitFor(() => expect(h.services.cities.findNearest).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      newLookup.resolve(success({ ...city, name: 'Second', latitude: farPreciseFix.latitude, longitude: farPreciseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place).toMatchObject({ selection: 'city', cityName: 'Second', latitude: farPreciseFix.latitude })
+    expect(h.chosen).toHaveBeenCalledOnce()
+  })
+
+  it('uses a newer precise fix even when its reported accuracy is lower quality than the earlier coarse fix', async () => {
+    const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
+    const older = { latitude: 56.3604, longitude: 50.019, accuracy: 15, timestamp: 100 }
+    const fresh = { latitude: 55.79, longitude: 49.12, accuracy: 1_200, timestamp: 200 }
+    let pending!: Promise<void>
+    act(() => { pending = h.result.current.locate() })
+    await act(async () => { h.coarse.resolve(success(older)); await Promise.resolve() })
+    await act(async () => { h.precise.resolve(success(fresh)); await pending })
+    expect(h.services.cities.findNearest).toHaveBeenCalledWith(fresh.latitude, fresh.longitude, 25, false)
+    await act(async () => {
+      h.lookup.resolve(success({ ...city, name: 'Казань', latitude: 55.7887, longitude: 49.1221 }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place).toMatchObject({ selection: 'city', cityName: 'Казань',
+      latitude: 55.7887, longitude: 49.1221 })
   })
   it('retains useful coarse when precise fails', async () => {
     const h = setup()
@@ -319,15 +381,17 @@ describe('one-shot GPS operations', () => {
     let interactivePending!: Promise<void>
     act(() => { interactivePending = interactive.result.current.locate() })
     await act(async () => { interactive.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    await act(async () => { interactive.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await Promise.resolve() })
     expect(interactive.services.cities.findNearest).toHaveBeenCalledWith(goodCoarseFix.latitude, goodCoarseFix.longitude, 25, false)
-    await act(async () => { interactive.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await interactivePending })
+    await act(async () => { interactive.lookup.resolve(success(null)); await interactivePending })
 
     const background = setup()
     let backgroundPending!: Promise<void>
     act(() => { backgroundPending = background.result.current.locate(false) })
     await act(async () => { background.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    await act(async () => { background.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await Promise.resolve() })
     expect(background.services.cities.findNearest).toHaveBeenCalledWith(goodCoarseFix.latitude, goodCoarseFix.longitude, 25, true)
-    await act(async () => { background.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await backgroundPending })
+    await act(async () => { background.lookup.resolve(success(null)); await backgroundPending })
     expect(background.persist.mock.calls.some(([, change]) => change === 'selection')).toBe(false)
   })
   it.each([
@@ -338,11 +402,13 @@ describe('one-shot GPS operations', () => {
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
     await act(async () => { h.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await Promise.resolve() })
+    await waitFor(() => expect(h.services.cities.findNearest).toHaveBeenCalledOnce())
     expect(h.result.current.nameLookupState).toBe('loading')
     await act(async () => { h.lookup.resolve(lookupResult); await Promise.resolve() })
     expect(h.result.current.nameLookupState).toBe(expectedState)
     expect(h.result.current.place).toMatchObject(goodCoarseFix)
-    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await pending })
+    await act(async () => { await pending })
   })
   it('maps a rejected name lookup to failed without rolling back coordinates', async () => {
     const h = setup()
@@ -350,9 +416,10 @@ describe('one-shot GPS operations', () => {
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
     await act(async () => { h.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await Promise.resolve() })
     await waitFor(() => expect(h.result.current.nameLookupState).toBe('failed'))
     expect(h.result.current.place).toMatchObject(goodCoarseFix)
-    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await pending })
+    await act(async () => { await pending })
   })
   it('re-evaluates the automatic profile when a nearest-city country arrives', async () => {
     const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
@@ -365,10 +432,12 @@ describe('one-shot GPS operations', () => {
       h.lookup.resolve(success({ ...city, countryCode: 'TR', latitude: goodCoarseFix.latitude, longitude: goodCoarseFix.longitude }))
       await Promise.resolve()
     })
-    expect(h.result.current.place?.nearbyCity?.countryCode).toBe('TR')
+    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await pending })
+    await waitFor(() => expect(h.result.current.place?.selection).toBe('city'))
+    expect(h.result.current.place).toMatchObject({ selection: 'city', latitude: goodCoarseFix.latitude,
+      longitude: goodCoarseFix.longitude, timeZone: 'Europe/Berlin' })
     expect(resolvePrayerTimeSource(h.result.current.place as Place, automaticPreferences()))
       .toMatchObject({ kind: 'calculated', settings: { profile: 'turkey', asrMethod: 'standard' } })
-    await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await pending })
   })
   it('retains a country resolved before the precise fix without falling back to MWL', async () => {
     const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
@@ -379,17 +448,15 @@ describe('one-shot GPS operations', () => {
       h.lookup.resolve(success({ ...city, countryCode: 'TR', latitude: coarseFix.latitude, longitude: coarseFix.longitude }))
       await Promise.resolve()
     })
-    expect(resolvePrayerTimeSource(h.result.current.gpsPreview as Place, automaticPreferences()))
-      .toMatchObject({ kind: 'calculated', settings: { profile: 'turkey' } })
+    expect(h.result.current.gpsPreview).toMatchObject(coarseFix)
     await act(async () => { h.precise.resolve(success(preciseFix)); await pending })
-    expect(h.result.current.place).toMatchObject({ ...preciseFix, nearbyCity: { countryCode: 'TR' } })
+    await waitFor(() => expect(h.result.current.place?.selection).toBe('city'))
+    expect(h.result.current.place).toMatchObject({ selection: 'city', latitude: coarseFix.latitude, longitude: coarseFix.longitude })
     expect(resolvePrayerTimeSource(h.result.current.place as Place, automaticPreferences()))
       .toMatchObject({ kind: 'calculated', settings: { profile: 'turkey' } })
   })
-  it('retains the prior country when the refined fix lookup fails or finds nothing', async () => {
+  it('keeps the canonical named-place anchor when a later GPS fix refines', async () => {
     const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
-    const secondLookup = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
-    h.services.cities.findNearest = vi.fn().mockReturnValueOnce(h.lookup.promise).mockReturnValueOnce(secondLookup.promise)
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
     await act(async () => { h.coarse.resolve(success(coarseFix)); await Promise.resolve() })
@@ -397,16 +464,14 @@ describe('one-shot GPS operations', () => {
       h.lookup.resolve(success({ ...city, countryCode: 'TR', latitude: coarseFix.latitude, longitude: coarseFix.longitude }))
       await Promise.resolve()
     })
-    await act(async () => { h.precise.resolve(success(preciseFix)); await Promise.resolve() })
-    await act(async () => { secondLookup.resolve(success(null)); await pending })
-    expect(h.result.current.place).toMatchObject({ ...preciseFix, nearbyCity: { countryCode: 'TR' } })
+    await act(async () => { h.precise.resolve(success(preciseFix)); await pending })
+    expect(h.services.cities.findNearest).toHaveBeenCalledTimes(1)
+    expect(h.result.current.place).toMatchObject({ selection: 'city', latitude: coarseFix.latitude, longitude: coarseFix.longitude })
     expect(resolvePrayerTimeSource(h.result.current.place as Place, automaticPreferences()))
       .toMatchObject({ kind: 'calculated', settings: { profile: 'turkey' } })
   })
   it('invalidates country metadata after refinement moves more than 25 km from its city', async () => {
     const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
-    const secondLookup = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
-    h.services.cities.findNearest = vi.fn().mockReturnValueOnce(h.lookup.promise).mockReturnValueOnce(secondLookup.promise)
     const farPreciseFix = { ...preciseFix, latitude: 56.2 }
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
@@ -420,7 +485,8 @@ describe('one-shot GPS operations', () => {
     expect(h.result.current.place?.nearbyCity).toBeUndefined()
     expect(resolvePrayerTimeSource(h.result.current.place as Place, automaticPreferences()))
       .toMatchObject({ kind: 'calculated', settings: { profile: 'muslimWorldLeague' } })
-    await act(async () => { secondLookup.resolve(success(null)); await pending })
+    await act(async () => { await pending })
+    expect(h.result.current.place).toMatchObject(farPreciseFix)
   })
   it('restores a saved GPS country and calculation profile without another lookup', () => {
     const base = createGpsPlace(goodCoarseFix, 'UTC', null, 'gps:saved-country')
@@ -433,7 +499,7 @@ describe('one-shot GPS operations', () => {
     expect(h.services.cities.findNearest).not.toHaveBeenCalled()
     expect(h.services.getPosition).not.toHaveBeenCalled()
   })
-  it('commits a late nearby-city name as an in-place refinement for the accepted GPS fix', async () => {
+  it('commits a late nearest place as a named canonical location', async () => {
     const h = setup()
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
@@ -443,32 +509,28 @@ describe('one-shot GPS operations', () => {
       h.lookup.resolve(success({ ...city, name: 'Казань', latitude: goodCoarseFix.latitude, longitude: goodCoarseFix.longitude }))
       await Promise.resolve()
     })
-    expect(h.result.current.place).toMatchObject({ name: 'Казань', ...goodCoarseFix })
-    expect(h.persist.mock.calls.some(([choice, change]) =>
-      change === 'refinement' && choice?.place?.name === 'Казань'
-      && choice.place.latitude === goodCoarseFix.latitude && choice.place.longitude === goodCoarseFix.longitude)).toBe(true)
     await act(async () => { h.precise.resolve(failure({ kind: 'geolocation', reason: 'timeout' })); await pending })
+    await waitFor(() => expect(h.result.current.place?.selection).toBe('city'))
+    expect(h.result.current.place).toMatchObject({ selection: 'city', cityName: 'Казань',
+      latitude: goodCoarseFix.latitude, longitude: goodCoarseFix.longitude, timeZone: 'Europe/Berlin' })
+    expect(h.persist.mock.calls.some(([choice, change]) =>
+      change === 'selection' && choice?.place?.selection === 'city'
+      && choice.place.latitude === goodCoarseFix.latitude && choice.place.longitude === goodCoarseFix.longitude)).toBe(true)
   })
-  it('ignores an obsolete nearest-city result after GPS refinement starts a newer lookup', async () => {
-    const first = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
-    const second = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
-    let calls = 0
+  it('uses the final refined GPS fix for one nearest-place lookup', async () => {
     const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
-    h.services.cities.findNearest = vi.fn(() => (++calls === 1 ? first.promise : second.promise))
     let pending!: Promise<void>
     act(() => { pending = h.result.current.locate() })
     await act(async () => { h.coarse.resolve(success(coarseFix)); await Promise.resolve() })
     await act(async () => { h.precise.resolve(success(preciseFix)); await Promise.resolve() })
-    await waitFor(() => expect(h.services.cities.findNearest).toHaveBeenCalledTimes(2))
+    await act(async () => { await pending })
+    expect(h.services.cities.findNearest).toHaveBeenCalledTimes(1)
+    expect(h.services.cities.findNearest).toHaveBeenCalledWith(preciseFix.latitude, preciseFix.longitude, 25, false)
     await act(async () => {
-      second.resolve(success({ ...city, countryCode: 'CA', latitude: preciseFix.latitude, longitude: preciseFix.longitude }))
+      h.lookup.resolve(success({ ...city, countryCode: 'CA', latitude: preciseFix.latitude, longitude: preciseFix.longitude }))
       await Promise.resolve()
     })
-    await act(async () => {
-      first.resolve(success({ ...city, countryCode: 'RU', latitude: coarseFix.latitude, longitude: coarseFix.longitude }))
-      await pending
-    })
-    expect(h.result.current.place).toMatchObject({ ...preciseFix, nearbyCity: { countryCode: 'CA' } })
+    expect(h.result.current.place).toMatchObject({ selection: 'city', latitude: preciseFix.latitude, longitude: preciseFix.longitude })
     expect(resolvePrayerTimeSource(h.result.current.place as Place, automaticPreferences()))
       .toMatchObject({ kind: 'calculated', settings: { profile: 'canadaFcna' } })
   })
