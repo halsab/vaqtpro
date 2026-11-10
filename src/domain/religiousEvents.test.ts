@@ -31,10 +31,6 @@ function resolve(date: string, options: Partial<Parameters<typeof resolveReligio
   })
 }
 
-describe('реестр религиозных событий', () => {
-
-})
-
 describe('listReligiousEventOccurrences', () => {
   const list = (fromDate: string, toDateExclusive: string, correction: -1 | 0 | 1 = 0) => listReligiousEventOccurrences({
     fromDate,
