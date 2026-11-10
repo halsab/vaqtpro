@@ -1,10 +1,9 @@
-import { choosePlace, expect, test } from './fixtures'
+import { seedSelectedPlace, expect, test } from './fixtures'
 
 test('Arabic Markdown uses the bundled Mushaf font on narrow screens in both themes', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-06-25T12:00:00.000Z'))
   await page.setViewportSize({ width: 320, height: 720 })
-  await page.goto('./')
-  await choosePlace(page)
+  await seedSelectedPlace(page)
   await page.locator('#home-date').click()
   await page.getByRole('button', { name: 'Праздники и события' }).click()
   await page.locator('#religious-event-2026-06-25-ashura').click()
