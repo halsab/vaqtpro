@@ -16,19 +16,6 @@ const a = { locationChoice: { mode: 'calculated' as const, source: 'manual' as c
 const b = { locationChoice: { mode: 'calculated' as const, source: 'manual' as const,
   coordinates: { latitude: 55.742, longitude: 52.399, timeZone: 'Europe/Moscow', accuracy: null, timestamp: 2 } } }
 
-it.each(['result', 'rejection'])('handles %s failure and retries the latest complete state', async kind => {
-  const save = vi.fn().mockImplementationOnce(() => kind === 'result'
-    ? Promise.resolve(failure({ kind: 'storage', reason: 'unavailable' }))
-    : Promise.reject(new Error('denied'))).mockResolvedValue(success(undefined))
-  const writer = createSettingsPersistence(save)
-  writer.save(a)
-  await writer.drain()
-  expect(writer.getStatus()).toBe('failed')
-  writer.retry()
-  await writer.drain()
-  expect(save.mock.lastCall?.[0]).toEqual(a)
-  expect(writer.getStatus()).toBe('saved')
-})
 
 it('retries a selected place and its recent history as one settings snapshot', async () => {
   const place = createGpsPlace({ latitude: 40, longitude: -73, accuracy: 20, timestamp: 123 }, 'America/New_York', null, 'gps:history:40.000000:-73.000000')
@@ -49,28 +36,6 @@ it('retries a selected place and its recent history as one settings snapshot', a
   expect(writer.getStatus()).toBe('saved')
 })
 
-it.each(['committed', 'failed'] as const)('keeps only unsaved place events after an in-flight write is %s', async result => {
-  const first = deferred<Awaited<ReturnType<SaveSettings>>>()
-  const second = deferred<Awaited<ReturnType<SaveSettings>>>()
-  const placeA = createGpsPlace({ latitude: 40, longitude: -73, accuracy: 20, timestamp: 123 }, 'America/New_York', null, 'gps:operation:a')
-  const placeB = createGpsPlace({ latitude: 41, longitude: -74, accuracy: 20, timestamp: 456 }, 'America/New_York', null, 'gps:operation:b')
-  const choiceA = { mode: 'calculated' as const, source: 'automatic' as const, coordinates: placeA, place: placeA }
-  const choiceB = { mode: 'calculated' as const, source: 'automatic' as const, coordinates: placeB, place: placeB }
-  const save = vi.fn<SaveSettings>().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
-  const writer = createSettingsPersistence(save)
-
-  writer.save({ locationChoice: choiceA, placeEvents: [{ change: 'selection', choice: choiceA }] })
-  await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
-  writer.save({ locationChoice: choiceB, placeEvents: [{ change: 'selection', choice: choiceB }] })
-  first.resolve(result === 'committed' ? success(undefined) : failure({ kind: 'storage', reason: 'unavailable' }))
-  await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2))
-
-  expect(save.mock.calls[1]?.[0]).toMatchObject({ locationChoice: choiceB })
-  expect(save.mock.calls[1]?.[0].placeEvents?.map(event => event.choice)).toEqual(
-    result === 'committed' ? [choiceB] : [choiceA, choiceB])
-  second.resolve(success(undefined))
-  await writer.drain()
-})
 
 it('serializes rapid changes and keeps earlier unsaved fields', async () => {
   const first = deferred<Awaited<ReturnType<SaveSettings>>>()

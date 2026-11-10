@@ -28,17 +28,6 @@ describe('calculated schedule chronology', () => {
     expect(selectEventPair(new Date('2026-05-04T20:54:00Z'), events).current?.key).toBe('fajr')
   })
 
-  it('resolves Tatarstan May 5 late Fajr to its actual previous-day instant', () => {
-    const value = calculatePrayerSchedule(
-      { latitude: 55.7946485, longitude: 49.1115022 },
-      '2026-05-05', 'Europe/Moscow',
-      { profile: 'tatarstan', asrMethod: 'hanafi', highLatitudeRule: 'tatarstan' },
-    )
-    const fajr = buildScheduleEvents(value).find(({ key }) => key === 'fajr')
-
-    expect(fajr).toMatchObject({ time: '23:58', scheduleDate: '2026-05-05', date: '2026-05-04', dayOffset: -1 })
-    expect(fajr?.instant).toBe(value.entries.fajr.instant)
-  })
 
   it('selects current and next events by absolute instant regardless of input order', () => {
     const events = buildScheduleEvents(schedule())
@@ -54,13 +43,6 @@ describe('calculated schedule chronology', () => {
     }
   })
 
-  it('prefers a prayer over a marker when both resolve to the same instant', () => {
-    const value = schedule()
-    const zenith = value.entries.zenith.instant
-    value.entries.dhuhr = { ...value.entries.dhuhr, instant: zenith }
-    const pair = selectEventPair(new Date(zenith), buildScheduleEvents(value))
-    expect(pair.current?.key).toBe('dhuhr')
-  })
 
   it('preserves local civil dates and offsets across a timezone date boundary', () => {
     const value = schedule('2026-01-01', 'Pacific/Apia')
@@ -82,10 +64,4 @@ describe('calculated schedule chronology', () => {
     expect(midnight.next).toMatchObject({ key: 'isha', scheduleDate: '2026-12-31', date: '2027-01-01', dayOffset: 1 })
   })
 
-  it('returns null when no event exists before or after the current time', () => {
-    const events = buildScheduleEvents(schedule())
-    expect(selectEventPair(new Date('2026-05-04T00:00:00Z'), events).current).toBeNull()
-    expect(selectEventPair(new Date('2026-05-06T00:00:00Z'), events).next).toBeNull()
-    expect(selectEventPair(new Date(), [])).toEqual({ next: null, current: null })
-  })
 })

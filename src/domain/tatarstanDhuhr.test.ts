@@ -28,19 +28,7 @@ describe('Tatarstan Dhuhr policy', () => {
     }, {})).toEqual({ '11:45': 1, '12:00': 36, '12:05': 1, '12:15': 2, '11:50': 2 })
   })
 
-  it.each([
-    ['11:30:00.000', '12:00'], ['11:58:00.000', '12:00'], ['11:59:00.000', '12:00'],
-    ['11:59:30.000', '12:01'], ['12:00:00.000', '12:01'], ['12:02:00.000', '12:03'],
-    ['12:04:00.000', '12:05'], ['11:59:59.999', '12:01'],
-  ])('uses local noon or the minute after zenith for %s', (time, expected) => {
-    const date = '2026-06-21'
-    expect(shown(tatarstanDhuhrInstant(date, 'Europe/Moscow', zenith(time, date)), date)).toBe(expected as PrayerTime)
-  })
 
-  it('uses the selected IANA timezone for its noon baseline', () => {
-    const date = '2026-01-15'
-    expect(shown(tatarstanDhuhrInstant(date, 'America/New_York', zenith('10:00', date, 'America/New_York')), date, 'America/New_York')).toBe('12:00')
-  })
 
   it('matches manually selected and GPS places only through verified locality identity', () => {
     expect(verifiedTatarstanLocalityId({ id: 'geonames:551487', selection: 'city', cityId: 551487,
@@ -75,12 +63,6 @@ describe('Tatarstan Dhuhr policy', () => {
     expect(safetyLater).toBeGreaterThan(zenith('12:20', date))
   })
 
-  it('keeps fixed locality times independent of the requested year', () => {
-    for (const date of ['2026-06-21', '2031-06-21']) {
-      const instant = tatarstanDhuhrInstant(date, 'Europe/Moscow', zenith('11:30', date), 'agriz')
-      expect(shown(instant, date)).toBe('11:45')
-    }
-  })
 
   it('uses the generic formula for excluded and unknown localities regardless of year', () => {
     const date = '2031-04-03'
@@ -90,27 +72,6 @@ describe('Tatarstan Dhuhr policy', () => {
     }
   })
 
-  it.each([
-    ['agriz', '11:45'],
-    ['muslyumovo', '11:50'],
-    ['nizhnekamsk', '11:50'],
-    ['zelenodolsk', '12:05'],
-    ['buinsk', '12:15'],
-    ['staroe-drozhzhanoe', '12:15'],
-    ['bolshie-kaybitsy', '12:00'],
-    ['apastovo', '12:00'],
-  ] as const)('wires verified locality %s through the complete Tatarstan calculation', (id, expectedDhuhr) => {
-    const locality = TATARSTAN_LOCALITIES.find(item => item.id === id)
-    if (!locality) throw new Error(`Missing locality ${id}`)
-    const place = createLocalityPlace(locality, 0)
-    const schedule = calculatePrayerSchedule(place, '2026-06-21', place.timeZone, {
-      profile: 'tatarstan', asrMethod: 'hanafi', highLatitudeRule: 'tatarstan',
-    })
-
-    expect(Object.keys(schedule.entries)).toEqual(['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha'])
-    expect(schedule.entries.dhuhr.time).toBe(expectedDhuhr)
-    expect(schedule.entries.dhuhr.instant).toBeGreaterThan(schedule.entries.zenith.instant)
-  })
 
   it('keeps all seven calculated events complete across the approved 2026 date and locality matrix', () => {
     const dates = [

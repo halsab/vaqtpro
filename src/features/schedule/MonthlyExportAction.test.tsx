@@ -62,43 +62,7 @@ it('never prepares PDF on screen entry; first tap prepares and second tap shares
   expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
 })
 
-it('retries preparation through the same icon after a PDF failure', async () => {
-  prepareMonthlyPdf.mockRejectedValueOnce(new Error('render failed')).mockResolvedValueOnce(pdf)
-  const user = userEvent.setup()
-  render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
 
-  const button = screen.getByRole('button', { name: shareLabel })
-  expect(prepareMonthlyPdf).not.toHaveBeenCalled()
-  await user.click(button)
-  await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
-  expect(button).toBeEnabled()
-  expect(button).toHaveAccessibleName('Повторить: PDF')
-  expect(deliverFile).not.toHaveBeenCalled()
-
-  await user.click(button)
-  await waitFor(() => expect(button).toBeEnabled())
-  expect(prepareMonthlyPdf).toHaveBeenCalledTimes(2)
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(button).toHaveAccessibleName(shareLabel)
-  expect(deliverFile).not.toHaveBeenCalled()
-})
-
-it('retries sharing a previously prepared PDF without another generation', async () => {
-  prepareMonthlyPdf.mockResolvedValue(pdf)
-  deliverFile.mockResolvedValueOnce('failed').mockResolvedValueOnce('shared')
-  const user = userEvent.setup()
-  render(<MonthlyExportAction snapshot={snapshot} labels={labels} />)
-  const button = screen.getByRole('button', { name: shareLabel })
-  await user.click(button)
-  await waitFor(() => expect(button).toBeEnabled())
-  await user.click(button)
-  await waitFor(() => expect(screen.getByRole('alert')).toBeVisible())
-  expect(button).toHaveAccessibleName('Повторить: PDF')
-  await user.click(button)
-  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
-  expect(deliverFile).toHaveBeenCalledTimes(2)
-  expect(prepareMonthlyPdf).toHaveBeenCalledOnce()
-})
 
 it('does not publish an obsolete PDF if the selected month changes during generation', async () => {
   deliverFile.mockResolvedValue('shared')

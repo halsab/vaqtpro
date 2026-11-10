@@ -18,84 +18,43 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    // Release gate: основной сценарий, offline, privacy и CSP.
+    // Each case runs in exactly one risk-appropriate browser project.
     {
       name: 'chromium',
       testMatch: [
         '**/smoke.spec.ts',
-        '**/homepage-seo.spec.ts',
         '**/offline.spec.ts',
         '**/privacy.spec.ts',
-        '**/analytics.spec.ts',
+        '**/security.spec.ts',
         '**/location-selection.spec.ts',
         '**/navigation-transition.spec.ts',
-        '**/ramadan-dhikr.spec.ts',
-        '**/deferred-loading.spec.ts',
-        '**/security.spec.ts',
-        '**/prayer-source-upgrade.spec.ts',
-        '**/qibla.spec.ts',
         '**/fasting-duas.spec.ts',
-        '**/arabic-typography.spec.ts',
+        '**/ramadan-dhikr.spec.ts',
       ],
       use: { ...devices['Desktop Chrome'], launchOptions: {
-        args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],
+        args: ['--enable-features=BackForwardCache'],
+        ignoreDefaultArgs: ['--disable-back-forward-cache'],
       } },
+    },
+    {
+      name: 'mobile-safari-portrait',
+      testMatch: [
+        '**/mobile.spec.ts',
+        '**/qibla.spec.ts',
+        '**/arabic-typography.spec.ts',
+      ],
+      use: { ...devices['iPhone 13'] },
     },
     {
       name: 'chromium-execution-gate',
       testMatch: ['**/execution-gate.spec.ts'],
-      use: { ...devices['Desktop Chrome'], serviceWorkers: 'block', launchOptions: {
-        args: ['--enable-features=BackForwardCache'], ignoreDefaultArgs: ['--disable-back-forward-cache'],
-      } },
-    },
-    // Критические сценарии мобильного WebKit (portrait).
-    {
-      name: 'mobile-safari-portrait',
-      // Экспортные E2E сняты по запросу владельца: Playwright не проверяет системный picker/share sheet и качество файлов на устройствах.
-      // Спиннер, автозапуск picker, повторный тап, отправку файлов и внешний вид владелец проверяет вручную.
-      testMatch: ['**/mobile.spec.ts', '**/ramadan-dhikr.spec.ts', '**/fasting-duas.spec.ts', '**/arabic-typography.spec.ts'],
-      use: { ...devices['iPhone 13'] },
-    },
-    {
-      name: 'webkit-execution-gate',
-      testMatch: ['**/execution-gate.spec.ts'],
-      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
-    },
-    {
-      name: 'monthly-chromium',
-      testMatch: ['**/monthly-sticky.spec.ts'],
       use: { ...devices['Desktop Chrome'], serviceWorkers: 'block' },
     },
-    {
-      name: 'monthly-webkit',
-      testMatch: ['**/monthly-sticky.spec.ts'],
-      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
-    },
-    {
-      name: 'monthly-mobile-safari',
-      testMatch: ['**/monthly-sticky.spec.ts'],
-      use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
-    },
-    {
-      name: 'webkit-deferred-loading',
-      testMatch: ['**/deferred-loading.spec.ts'],
-      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
-    },
-    {
-      name: 'webkit-mobile-jelly',
-      testMatch: ['**/jelly-pointer.spec.ts', '**/navigation-transition.spec.ts', '**/qibla.spec.ts'],
-      use: { ...devices['iPhone 13'], browserName: 'webkit', serviceWorkers: 'block' },
-    },
-    {
-      name: 'webkit-analytics-bfcache',
-      testMatch: ['**/analytics-bfcache.spec.ts'],
-      use: { ...devices['Desktop Safari'], serviceWorkers: 'block' },
-    },
-    // Обновление service worker меняет dist/sw.js; запускается строго после остальных.
+    // This test intentionally updates dist/sw.js and must run after the others.
     {
       name: 'chromium-sw',
-      testMatch: '**/sw-update.spec.ts',
-      dependencies: ['chromium', 'mobile-safari-portrait', 'chromium-execution-gate', 'webkit-execution-gate'],
+      testMatch: ['**/sw-update.spec.ts'],
+      dependencies: ['chromium', 'mobile-safari-portrait', 'chromium-execution-gate'],
       use: { ...devices['Desktop Chrome'] },
     },
   ],

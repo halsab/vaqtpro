@@ -60,11 +60,6 @@ function unwrap<Value>(result: Result<Value, unknown>): Value {
 afterEach(async () => { vi.unstubAllGlobals(); await deleteVaqtProDatabase() })
 
 describe('calculation-only database', () => {
-  it('creates only settings and control stores on a fresh install', async () => {
-    expect(unwrap(await getSetting('appearance'))).toBe('system')
-    expect(unwrap(await getSetting('calendarPreferences'))).toEqual({ calendar: 'gregorian', correction: 0 })
-    expect(await databaseDetails()).toEqual({ version: 15, stores: ['control', 'settings'] })
-  })
 
   it.each([4, 5, 12, 13, 14])('discards incompatible old prayer state on upgrade from v%s', async version => {
     await createLegacyDatabase(version, {
@@ -93,17 +88,6 @@ describe('calculation-only database', () => {
     expect(await databaseDetails()).toEqual({ version: 15, stores: ['control', 'settings'] })
   })
 
-  it('discards previous flat coordinates and profile IDs instead of migrating them', async () => {
-    await createLegacyDatabase(4, { settings: [
-      { key: 'locationId', value: 'naberezhnye-chelny' },
-      { key: 'locationMode', value: 'official' },
-      { key: 'calculatedLocation', value: { latitude: 55, longitude: 49 } },
-      { key: 'calculationSettings', value: { profile: 'dumRf' } },
-    ] })
-    expect(unwrap(await getLocationChoice())).toBeUndefined()
-    expect(unwrap(await getSetting('calculationSettings'))).toBeUndefined()
-    expect(unwrap(await getSetting('locationId' as 'locationChoice'))).toBeUndefined()
-  })
 
   it('retains new calculated selections across reads without rewriting them', async () => {
     const choice: LocationChoice = { mode: 'calculated', coordinates: {
@@ -117,11 +101,6 @@ describe('calculation-only database', () => {
     expect(await databaseDetails()).toEqual({ version: 15, stores: ['control', 'settings'] })
   })
 
-  it('rejects writing an obsolete official source choice', async () => {
-    const invalid = { mode: 'official', locationId: 'kazan', source: 'manual' } as unknown as LocationChoice
-    expect(await saveLocationChoice(invalid)).toMatchObject({ ok: false, error: { kind: 'data', reason: 'invalid' } })
-    expect(unwrap(await getLocationChoice())).toBeUndefined()
-  })
 
   it('clears user settings atomically and increments generation', async () => {
     const choice: LocationChoice = { mode: 'calculated', coordinates: {

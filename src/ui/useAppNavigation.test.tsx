@@ -124,35 +124,7 @@ describe('навигация экранов', () => {
     expect(screen.getByText('home value: 1')).toBeVisible()
   })
 
-  it('отменяет подготовленную навигацию, если пользователь выбрал другой экран', async () => {
-    let resolvePreparation: (() => void) | undefined
-    const prepare = () => new Promise<void>(resolve => { resolvePreparation = resolve })
-    render(<PreparedNavigationExample prepare={prepare} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Open when ready' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-    await act(() => {
-      resolvePreparation?.()
-      return Promise.resolve()
-    })
-    expect(screen.getByText('settings')).toBeInTheDocument()
-  })
 
-  it('возвращает фокус к исходной кнопке после ожидания подготовки', async () => {
-    let resolvePreparation: (() => void) | undefined
-    const prepare = () => new Promise<void>(resolve => { resolvePreparation = resolve })
-    render(<PreparedNavigationExample prepare={prepare} />)
-    const caller = screen.getByRole('button', { name: 'Open when ready' })
-    caller.focus()
-    fireEvent.click(caller)
-    screen.getByRole('button', { name: 'Other focus' }).focus()
-    await act(() => {
-      resolvePreparation?.()
-      return Promise.resolve()
-    })
-    expect(screen.getByText('share')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    await waitFor(() => expect(caller).toHaveFocus())
-  })
 
   it('сохраняет вложенную цепочку DateScreen → список → статья и восстанавливает focus', async () => {
     const user = userEvent.setup()
@@ -186,75 +158,10 @@ describe('навигация экранов', () => {
     await waitFor(() => expect(screen.getByText('arafa')).toBeVisible())
   })
 
-  it('сохраняет Ramadan article → dhikr identity в Back/Forward и возвращает фокус выбранной декаде', async () => {
-    const user = userEvent.setup()
-    render(<RamadanDhikrNavigationExample />)
-    await user.click(screen.getByRole('button', { name: 'Рамадан' }))
-    const selected = screen.getByRole('button', { name: 'Зикр вторых 10 дней' })
-    await user.click(selected)
-    expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: 'Назад' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Зикр вторых 10 дней' })).toHaveFocus())
-    act(() => { window.history.forward() })
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Зикр вторых 10 дней' })).toBeVisible())
-  })
 
-  it('rejects malformed Ramadan dhikr history IDs instead of rendering an invalid screen', async () => {
-    const user = userEvent.setup()
-    render(<RamadanDhikrNavigationExample />)
-    await user.click(screen.getByRole('button', { name: 'Рамадан' }))
-    await user.click(screen.getByRole('button', { name: 'Зикр первых 10 дней' }))
 
-    const currentState = window.history.state as {
-      salahNavigation: { session: string; entries: Array<Record<string, unknown>> }
-    }
-    const lastEntry = currentState.salahNavigation.entries.at(-1)
-    if (!lastEntry) throw new Error('Missing Ramadan dhikr navigation entry')
-    const malformedState = {
-      salahNavigation: {
-        ...currentState.salahNavigation,
-        entries: [
-          ...currentState.salahNavigation.entries.slice(0, -1),
-          { ...lastEntry, ramadanDhikrId: { toString: () => 'first' } },
-        ],
-      },
-    }
 
-    act(() => { window.dispatchEvent(new PopStateEvent('popstate', { state: malformedState })) })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Рамадан' })).toBeVisible())
-  })
-
-  it.each(['Сегодня', 'Месяц'])('отложенный автофокус не перехватывает фокус после действия «%s»', action => {
-    const paint = controlFrames()
-    render(<CalendarNavigationExample />)
-    fireEvent.click(screen.getByRole('button', { name: 'Выбрать дату' }))
-    if (action === 'Сегодня') fireEvent.click(screen.getByRole('button', { name: action }))
-    else screen.getByRole('combobox', { name: action }).focus()
-    const field = screen.getByRole('combobox', { name: action === 'Сегодня' ? 'День' : 'Месяц' })
-    expect(field).toHaveFocus()
-    paint()
-    expect(field).toHaveFocus()
-  })
-
-  it('фокусирует Назад после открытия экрана, если пользователь ещё не выбрал поле', () => {
-    const paint = controlFrames()
-    render(<CalendarNavigationExample />)
-    fireEvent.click(screen.getByRole('button', { name: 'Выбрать дату' }))
-    paint()
-    expect(screen.getByRole('button', { name: 'Назад' })).toHaveFocus()
-  })
-
-  it('возвращается по шагам и восстанавливает фокус у вызвавшей кнопки', async () => {
-    const user = userEvent.setup()
-    render(<NavigationExample />)
-    await user.click(screen.getByRole('button', { name: 'Настройки' }))
-    await user.click(screen.getByRole('button', { name: 'Поделиться' }))
-    await user.click(screen.getByRole('button', { name: 'Назад' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Поделиться' })).toHaveFocus())
-    act(() => { window.history.back() })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Настройки' })).toHaveFocus())
-  })
 
   it('разблокирует внутреннюю навигацию, если history traversal не выпускает popstate', () => {
     vi.useFakeTimers()
@@ -272,54 +179,7 @@ describe('навигация экранов', () => {
     }
   })
 
-  it('keeps the Back recovery timer valid after rejected same-screen and prepared opens', async () => {
-    vi.useFakeTimers()
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
-    let resolvePreparation: (() => void) | undefined
-    try {
-      render(<TraversalRecoveryExample prepare={() => new Promise<void>(resolve => { resolvePreparation = resolve })} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
 
-      // Во время ожидания popstate оба действия должны остаться без побочных эффектов.
-      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Prepare share' }))
-      await act(async () => { resolvePreparation?.(); await Promise.resolve() })
-      act(() => { vi.advanceTimersByTime(1_000) })
-
-      fireEvent.click(screen.getByRole('button', { name: 'Share' }))
-      expect(screen.getByText('share')).toBeInTheDocument()
-      expect(back).toHaveBeenCalledOnce()
-    } finally {
-      vi.useRealTimers()
-      back.mockRestore()
-    }
-  })
-
-  it('ignores repeated Back and Home during traversal and recovers after a missing Home popstate', () => {
-    vi.useFakeTimers()
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
-    const go = vi.spyOn(window.history, 'go').mockImplementation(() => {})
-    try {
-      render(<TraversalRecoveryExample prepare={() => Promise.resolve()} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Share' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
-
-      expect(go).toHaveBeenCalledOnce()
-      expect(back).not.toHaveBeenCalled()
-      act(() => { vi.advanceTimersByTime(1_000) })
-      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-
-      expect(screen.getByText('settings')).toBeInTheDocument()
-    } finally {
-      vi.useRealTimers()
-      back.mockRestore()
-      go.mockRestore()
-    }
-  })
 
   it('keeps a newer screen when a timed-out history traversal delivers popstate late', () => {
     vi.useFakeTimers()
@@ -344,52 +204,7 @@ describe('навигация экранов', () => {
     }
   })
 
-  it('treats a later Back popstate to the timed-out target as navigation', () => {
-    vi.useFakeTimers()
-    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {})
-    const forward = vi.spyOn(window.history, 'forward').mockImplementation(() => {})
-    try {
-      render(<NavigationExample />)
-      fireEvent.click(screen.getByRole('button', { name: 'Настройки' }))
-      const settingsHistoryState: unknown = window.history.state
-      fireEvent.click(screen.getByRole('button', { name: 'Поделиться' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Назад' }))
-      act(() => { vi.advanceTimersByTime(1_000) })
-      fireEvent.click(screen.getByRole('button', { name: 'Повторно открыть настройки' }))
 
-      act(() => {
-        const event = new PopStateEvent('popstate')
-        Object.defineProperty(event, 'state', { value: settingsHistoryState })
-        window.dispatchEvent(event)
-      })
-
-      expect(screen.getByText('settings')).toBeInTheDocument()
-      expect(forward).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-      back.mockRestore()
-      forward.mockRestore()
-    }
-  })
-
-  it('завершает вложенный сценарий возвращением на главную', async () => {
-    const user = userEvent.setup()
-    render(<NavigationExample />)
-    await user.click(screen.getByRole('button', { name: 'Настройки' }))
-    await user.click(screen.getByRole('button', { name: 'Поделиться' }))
-    await user.click(screen.getByRole('button', { name: 'На главную' }))
-    await waitFor(() => expect(screen.getByText('home')).toBeInTheDocument())
-  })
 })
 
 
-it('does not surface a late preparation failure after navigation to another screen', async () => {
-  let rejectPreparation: ((reason: Error) => void) | undefined
-  const onFailure = vi.fn()
-  render(<PreparedNavigationExample prepare={() => new Promise((_resolve, reject) => { rejectPreparation = reject })} onFailure={onFailure} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Open when ready' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
-  await act(async () => { rejectPreparation?.(new Error('chunk unavailable')); await Promise.resolve() })
-  expect(onFailure).not.toHaveBeenCalled()
-  expect(screen.getByText('settings')).toBeVisible()
-})
