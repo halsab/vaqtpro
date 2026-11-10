@@ -28,7 +28,8 @@
     "data:check:geography": "tsx scripts/buildLocalGeography.ts --check",
     "data:update:offline-cities": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts",
     "data:check:offline-cities": "tsx scripts/buildOfflineSeedFromHistoricCatalog.ts --check",
-    "geonames:check": "tsx scripts/checkGeoNamesAccount.ts"
+    "geonames:check": "tsx scripts/checkGeoNamesAccount.ts",
+    "test:budget": "node scripts/checkTestBudget.mjs"
   },
   "dependencies": {
     "adhan": "4.4.6",

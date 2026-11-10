@@ -80,6 +80,9 @@ jobs:
       - name: Установить зависимости
         run: npm ci
 
+      - name: Проверить глобальный лимит тестов (250)
+        run: npm run test:budget
+
       - name: Определить область изменений
         id: changes
         shell: bash
