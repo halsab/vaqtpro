@@ -234,6 +234,8 @@ test('short viewports keep navigation stationary and expose the full table throu
 })
 
 test('monthly scrollport reaches panel edges, keeps horizontal insets, and clips beneath transparent frozen cells', async ({ page }) => {
+  // A full month and enlarged text can take longer to settle under parallel WebKit CI.
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 422, height: 646 })
   await openMonth(page)
   await page.evaluate(() => {
@@ -600,8 +602,10 @@ test('long localized cells, estimated markers, and unavailable values remain cen
   expect(layout.unavailable).toBe('—')
 })
 
-test('civil weekdays stay the same in distant browser timezones', async ({ browser }) => {
-  for (const timezone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
+for (const timezone of ['Pacific/Honolulu', 'Pacific/Kiritimati']) {
+  test(`civil weekdays stay the same in browser timezone ${timezone}`, async ({ browser }) => {
+    // Each timezone receives a separate test budget instead of sharing 30 seconds.
+    test.setTimeout(60_000)
     const context = await browser.newContext({ timezoneId: timezone, baseURL: 'http://127.0.0.1:4175' })
     try {
       await installGeoNamesFixture(context)
@@ -612,5 +616,5 @@ test('civil weekdays stay the same in distant browser timezones', async ({ brows
     } finally {
       await context.close()
     }
-  }
-})
+  })
+}

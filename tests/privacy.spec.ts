@@ -1,10 +1,20 @@
 import { choosePlace, expectSchedule, readSavedSetting, expect, test } from './fixtures'
 
-test('геопозиция остаётся локальной и не отправляет координаты', async ({ context, page }) => {
+test('GPS coordinates are disclosed only to the approved GeoNames reverse lookup after user action', async ({ context, page }) => {
   const latitude = 55.812345
   const longitude = 49.123456
   const requests: { url: string; body: string }[] = []
   context.on('request', request => requests.push({ url: request.url(), body: request.postData() ?? '' }))
+  // No named settlement is available in this scenario: retain the original GPS fix.
+  // Keep the reverse response deterministic; never send test coordinates to the live service.
+  await context.route('https://secure.geonames.org/findNearbyPlaceNameJSON**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ geonames: [] }),
+    })
+  })
   await context.grantPermissions(['geolocation'])
   await context.setGeolocation({ latitude, longitude, accuracy: 15 })
 
@@ -35,9 +45,26 @@ test('геопозиция остаётся локальной и не отпр�
 
   const appOrigin = new URL(page.url()).origin
   const externalRequests = requests.filter(({ url }) => new URL(url).origin !== appOrigin)
-  expect(externalRequests.map(({ url }) => new URL(url).origin)).toEqual(['https://secure.geonames.org'])
-  const geocodingRequest = new URL(externalRequests[0]?.url ?? 'https://invalid.local')
-  expect([...geocodingRequest.searchParams.entries()].slice(0, -1)).toEqual([
+  expect(externalRequests).toHaveLength(2)
+  const reverseRequests = externalRequests.filter(({ url }) => new URL(url).pathname === '/findNearbyPlaceNameJSON')
+  const searchRequests = externalRequests.filter(({ url }) => new URL(url).pathname === '/searchJSON')
+  expect(reverseRequests).toHaveLength(1)
+  expect(searchRequests).toHaveLength(1)
+  expect(externalRequests.every(({ url }) => new URL(url).origin === 'https://secure.geonames.org')).toBe(true)
+
+  const reverseRequest = new URL(reverseRequests[0]?.url ?? 'https://invalid.local')
+  expect([...reverseRequest.searchParams.entries()].slice(0, -1)).toEqual([
+    ['lat', String(latitude)],
+    ['lng', String(longitude)],
+    ['radius', '25'],
+    ['maxRows', '100'],
+    ['style', 'FULL'],
+  ])
+  expect(reverseRequest.searchParams.get('username')).toBeTruthy()
+  expect(reverseRequests[0]?.body).toBe('')
+
+  const searchRequest = new URL(searchRequests[0]?.url ?? 'https://invalid.local')
+  expect([...searchRequest.searchParams.entries()].slice(0, -1)).toEqual([
     ['name_startsWith', 'Облово'],
     ['maxRows', '100'],
     ['featureClass', 'P'],
@@ -46,15 +73,16 @@ test('геопозиция остаётся локальной и не отпр�
     ['style', 'FULL'],
     ['type', 'json'],
   ])
-  expect(geocodingRequest.searchParams.get('username')).toBeTruthy()
+  expect(searchRequest.searchParams.get('username')).toBeTruthy()
   expect(requests.some(({ url }) => /cloudflareinsights\.com/.test(url))).toBe(false)
-  const payloads = requests.map(({ url, body }) => `${url} ${body}`).join('\n')
+  const searchPayloads = searchRequests.map(({ url, body }) => `${url} ${body}`).join('\n')
   for (const coordinate of [latitude, longitude]) {
     for (const value of [String(coordinate), coordinate.toFixed(3), coordinate.toFixed(4)]) {
-      expect(payloads).not.toContain(value)
+      expect(searchPayloads).not.toContain(value)
     }
   }
-  expect(payloads).not.toMatch(/nominatim/i)
+  const payloads = requests.map(({ url, body }) => `${url} ${body}`).join('\n')
+  expect(payloads).not.toMatch(/nominatim|accuracy=|timestamp=|recentPlaces=|locationChoice=/i)
 })
 
 test('список из десяти мест остаётся доступным на узком экране', async ({ page }) => {
