@@ -210,7 +210,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
         }
         if (accuracy === 'precise') preciseAccepted = true
         operationResult.best = next
-        if (lookupAnchor && accuracy === 'precise' && !operationResult.selectedCity) {
+        if (lookupAnchor && accuracy === 'precise') {
           // An arriving refined fix invalidates an in-flight coarse-coordinate lookup.
           services.cities.cancelNearest?.()
           startLookup(next)
@@ -255,7 +255,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
     // getCurrentPosition не отменяется AbortController; epoch отсекает обе одноразовые операции.
     await Promise.all([receive('coarse'), receive('precise')])
     if (operation !== epoch.current) return
-    if (operationResult.best && !operationResult.selectedCity && !lookupAnchor) startLookup(operationResult.best)
+    if (operationResult.best && !lookupAnchor) startLookup(operationResult.best)
     if (operationResult.best) {
       if (interactive && isLowAccuracy(operationResult.best.accuracy)) setGpsState({ status: 'ready', lowAccuracy: true })
       return
@@ -358,7 +358,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
     setNotice(null)
     setGpsState({ status: 'idle' })
     setNameLookupState('idle')
-  }, [])
+  }, [services.cities])
   const invalidate = useCallback(() => {
     services.cities.cancelNearest?.()
     epoch.current += 1
@@ -368,6 +368,6 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
     setGpsPreview(null)
     setGpsState({ status: 'idle' })
     setNameLookupState('idle')
-  }, [])
+  }, [services.cities])
   return { place, gpsPreview, source, notice, gpsState, nameLookupState, restore, locate, acceptGps, cancelInteractive, selectLocality, selectCity, selectRecent, invalidate }
 }

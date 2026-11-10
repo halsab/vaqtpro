@@ -12,6 +12,7 @@ it('оставляет runtime-значения текстом и принима
 
 it('keeps Arabic-leading Markdown blocks RTL across nested formatting', async () => {
   const { container } = render(<MarkdownArticle content={'الْحَمْدُ **لِلَّهِ**.\n\nText á قَالَ اللَّهُ end.'} />)
+  await screen.findByText('لِلَّهِ')
   const paragraphs = Array.from(container.querySelectorAll('p'))
   expect(paragraphs[0]?.getAttribute('dir')).toBe('rtl')
   expect(paragraphs[0]?.querySelector('strong .markdown-arabic')).not.toBeNull()
