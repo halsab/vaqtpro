@@ -255,7 +255,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
     // getCurrentPosition не отменяется AbortController; epoch отсекает обе одноразовые операции.
     await Promise.all([receive('coarse'), receive('precise')])
     if (operation !== epoch.current) return
-    if (operationResult.best && !lookupAnchor) startLookup(operationResult.best)
+    if (operationResult.best && lookupRevision === 0) startLookup(operationResult.best)
     if (operationResult.best) {
       if (interactive && isLowAccuracy(operationResult.best.accuracy)) setGpsState({ status: 'ready', lowAccuracy: true })
       return
