@@ -165,11 +165,70 @@ describe('online place search', () => {
     const fetcher = vi.fn<typeof fetch>()
     const service = createCityCatalogService({ fetcher, loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
 
-    await expect(service.findNearest(58.6, 49.6, 25)).resolves.toMatchObject({
+    await expect(service.findNearest(58.6, 49.6, 25, true)).resolves.toMatchObject({
       ok: true,
       value: { id: 1, name: 'Киров' },
     })
     expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('reverse geocodes GPS and selects the closest village regardless of population', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([
+      { geonameId: 501, name: 'Farther', lat: 55, lng: 37.61, countryCode: 'RU', population: 90000,
+        timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' },
+      { geonameId: 502, name: 'Village', lat: 55, lng: 37.6001, countryCode: 'RU', population: 0,
+        timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' },
+    ]))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+
+    await expect(service.findNearest(55, 37.6, 25)).resolves.toMatchObject({
+      ok: true, value: { id: 502, name: 'Village', latitude: 55, longitude: 37.6001, population: 0 },
+    })
+    const request = new URL(fetcher.mock.calls[0]?.[0] as URL)
+    expect(request.pathname).toBe('/findNearbyPlaceNameJSON')
+    expect(request.searchParams.get('radius')).toBe('25')
+    expect(request.searchParams.get('username')).toBe('vaqtpro-test')
+    expect(request.searchParams.get('lat')).toBe('55')
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' })
+  })
+
+  it('rejects reverse-geocode candidates beyond the requested radius', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([
+      { geonameId: 601, name: 'Outside', lat: 55, lng: 37.61, countryCode: 'RU',
+        timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL' },
+    ]))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success({ ...offlineSeed, cities: [] })) })
+
+    await expect(service.findNearest(55, 37.6, 0.5)).resolves.toEqual(success(null))
+  })
+
+  it('accepts a populated place exactly on the 25 km boundary', async () => {
+    const longitude = 2 * Math.asin(Math.sin(25 / (2 * 6_371))) * 180 / Math.PI
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([{
+      geonameId: 602, name: 'Boundary village', lat: 0, lng: longitude, countryCode: 'RU',
+      timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL',
+    }]))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success({ ...offlineSeed, cities: [] })) })
+
+    await expect(service.findNearest(0, 0, 25)).resolves.toMatchObject({
+      ok: true, value: { id: 602, name: 'Boundary village' },
+    })
+  })
+
+  it.each([
+    ['missing credentials', '', vi.fn<typeof fetch>()],
+    ['provider failure', 'vaqtpro-test', vi.fn<typeof fetch>().mockRejectedValue(new TypeError('offline'))],
+  ] as const)('uses the compact offline seed for GPS when GeoNames is unavailable: %s', async (_case, username, fetcher) => {
+    const service = createCityCatalogService({ fetcher, geonamesUsername: username,
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+
+    await expect(service.findNearest(58.6, 49.6, 25)).resolves.toMatchObject({
+      ok: true, value: { id: 1, name: 'Киров', latitude: 58.6, longitude: 49.6 },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(username ? 1 : 0)
   })
 
   it('returns an explicit failure when both online search and the offline seed are unavailable', async () => {

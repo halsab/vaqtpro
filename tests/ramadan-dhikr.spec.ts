@@ -25,6 +25,7 @@ test('Ramadan dhikr pages support narrow layout, keyboard navigation and browser
   await expect(firstPage.locator('.ramadan-dhikr-arabic')).toHaveAttribute('dir', 'rtl')
   await expect(firstPage.locator('.ramadan-dhikr-arabic')).toHaveAttribute('lang', 'ar')
   expect(await firstPage.locator('.ramadan-dhikr-arabic').evaluate(element => getComputedStyle(element).direction)).toBe('rtl')
+  expect(await firstPage.locator('.ramadan-dhikr-arabic').evaluate(element => getComputedStyle(element).fontSize)).toBe('36px')
   expect(await firstPage.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
 
   await page.getByRole('button', { name: 'Назад' }).click()

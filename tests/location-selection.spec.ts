@@ -173,6 +173,30 @@ test('initial low-accuracy GPS stays provisional until explicit acceptance', asy
   })
 })
 
+test('a newer precise Kazan fix wins over an older coarse fix near Khasanshaikh', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: {
+      getCurrentPosition: (success: PositionCallback, _error: PositionErrorCallback | undefined, options?: PositionOptions) => {
+        const precise = options?.enableHighAccuracy === true
+        const coords = precise
+          ? { latitude: 55.79, longitude: 49.12, accuracy: 1_200 }
+          : { latitude: 56.3604, longitude: 50.019, accuracy: 15 }
+        setTimeout(() => success({
+          coords: { ...coords, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+          timestamp: precise ? 2_000 : 1_000,
+        } as GeolocationPosition), precise ? 20 : 0)
+      },
+    } })
+  })
+  await page.context().grantPermissions(['geolocation'])
+  await page.goto('./')
+  await page.getByRole('button', { name: 'По геопозиции' }).click()
+  await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
+  await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
+    mode: 'calculated', place: { selection: 'city', latitude: 55.78874, longitude: 49.12214 },
+  })
+})
+
 test('search cancels delayed unaccepted GPS callbacks', async ({ page }) => {
   await page.addInitScript(() => {
     const target = window as Window & { __gpsCallbacks: Array<(position: GeolocationPosition) => void> }

@@ -7,6 +7,7 @@ import { loadOfflineCitySeed } from './cityRepository'
 import type { CityCatalogService, CitySearchResult } from './cityCatalog'
 
 export const GEONAMES_SEARCH_URL = 'https://secure.geonames.org/searchJSON'
+export const GEONAMES_REVERSE_URL = 'https://secure.geonames.org/findNearbyPlaceNameJSON'
 const MAX_RESULTS = 100
 const REQUEST_TIMEOUT_MS = 12_000
 const MIN_QUERY_LENGTH = 2
@@ -268,11 +269,37 @@ export function createCityCatalogService(dependencies: {
     }
   }
 
-  const findNearest = async (latitude: number, longitude: number, maxDistanceKm: number, _localOnly = false): Promise<Result<City | null, DataFailure>> => {
+  const findNearest = async (latitude: number, longitude: number, maxDistanceKm: number, localOnly = false): Promise<Result<City | null, DataFailure>> => {
     if (!validNearestQuery(latitude, longitude, maxDistanceKm)) return failure({ kind: 'data', reason: 'invalid' })
     const loaded = await load()
     if (!loaded.ok) return loaded
-    return success(seed ? findNearestCity(latitude, longitude, seed.cities, maxDistanceKm) : null)
+    const offlineNearest = () => seed ? findNearestCity(latitude, longitude, seed.cities, maxDistanceKm) : null
+    if (localOnly || !geonamesUsername.trim()) return success(offlineNearest())
+
+    const url = new URL(GEONAMES_REVERSE_URL)
+    url.searchParams.set('lat', String(latitude))
+    url.searchParams.set('lng', String(longitude))
+    url.searchParams.set('radius', String(maxDistanceKm))
+    url.searchParams.set('maxRows', String(MAX_RESULTS))
+    url.searchParams.set('style', 'FULL')
+    url.searchParams.set('username', geonamesUsername.trim())
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    try {
+      const response = await fetcher(url, { cache: 'no-store', signal: controller.signal })
+      if (!response.ok) return success(offlineNearest())
+      const raw: unknown = await response.json()
+      if (!object(raw) || !Array.isArray(raw.geonames) || object(raw.status)) return success(offlineNearest())
+      const candidates = parseGeoNamesResults(raw)
+        .map(city => ({ city, distance: haversineDistanceKm(latitude, longitude, city.latitude, city.longitude) }))
+        .filter(candidate => candidate.distance <= maxDistanceKm)
+        .sort((a, b) => a.distance - b.distance)
+      return success(candidates[0]?.city ?? null)
+    } catch {
+      return success(offlineNearest())
+    } finally {
+      clearTimeout(timeout)
+    }
   }
 
   return { load, search, findNearest, cancelSearch, cancelPending: cancelSearch }

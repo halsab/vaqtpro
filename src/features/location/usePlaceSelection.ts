@@ -4,9 +4,10 @@ import type { CoverageGeometry } from '../../domain/localGeography'
 import type { LocationChoice } from '../../storage/database'
 import type { LocationSelectionSource } from '../../domain/locationSelection'
 import { shouldStartAutomaticLocation } from '../../domain/locationSelection'
-import { createCityPlace, createGpsPlace, createLocalityPlace, isFreshGpsPlace, isUsefulRefinement, refineGpsPlace, withNearbyCity, type Place } from '../../domain/place'
+import { createCityPlace, createGpsPlace, createLocalityPlace, isFreshGpsPlace, isUsefulRefinement, refineGpsPlace, type Place } from '../../domain/place'
 import { placeFromChoice } from '../../domain/placeMigration'
 import { validPosition } from '../../domain/localGeography'
+import { haversineDistanceKm } from '../../domain/location'
 import type { City } from '../../domain/cities'
 import type { GeolocationFailure } from '../../domain/errors'
 import type { Result } from '../../domain/result'
@@ -120,18 +121,18 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
       activeInteractive.current = null
     }
     const geometry = services.loadGeography().catch(() => null)
-    const operationResult: { best: Place | null } = { best: null }
+    const operationResult: { best: Place | null; selectedCity?: Place } = { best: null }
     const runtimeId = `gps:${crypto.randomUUID()}`
     let preciseAccepted = false
-    let revision = 0
     const failures: GeolocationFailure[] = []
     const finished = { coarse: false, precise: false }
 
-    const lookupName = (next: Place, lookupRevision: number) => {
+    const lookupName = async (next: Place) => {
       setNameLookupState('loading')
       // Интерактивный запрос может загрузить только вычисленный spatial package; фон остаётся local-only.
-      void services.cities.findNearest(next.latitude, next.longitude, 25, !interactive).then(result => {
-        if (operation !== epoch.current || lookupRevision !== revision) return
+      try {
+        const result = await services.cities.findNearest(next.latitude, next.longitude, 25, !interactive)
+        if (operation !== epoch.current) return
         if (!result.ok) {
           setNameLookupState(result.error.reason === 'offline' ? 'offline' : 'failed')
           return
@@ -140,22 +141,18 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
           setNameLookupState('not-found')
           return
         }
-        const pendingInteractive = activeInteractive.current?.operation === operation && !activeInteractive.current.navigated
-        const active = pendingInteractive ? gpsPreviewRef.current ?? operationResult.best : current.current
-        if (!active || active.selection !== 'gps') return
-        const named = withNearbyCity(active, result.value)
-        if (named !== active) {
-          if (pendingInteractive) {
-            operationResult.best = named
-            gpsPreviewRef.current = named
-            setGpsPreview(named)
-          } else apply(named, 'automatic', operation,
-            activeInteractive.current?.operation === operation && activeInteractive.current.navigated ? 'refinement' : 'automatic')
+        if (haversineDistanceKm(next.latitude, next.longitude, result.value.latitude, result.value.longitude) > 25) {
+          setNameLookupState('not-found')
+          return
         }
+        if (operationResult.selectedCity) return
+        operationResult.selectedCity = createCityPlace(result.value, next.timestamp)
+        apply(operationResult.selectedCity, 'automatic', operation, interactive ? 'selection' : 'automatic')
+        if (interactive) finishInteractive(operation)
         setNameLookupState('resolved')
-      }).catch(() => {
-        if (operation === epoch.current && lookupRevision === revision) setNameLookupState('failed')
-      })
+      } catch {
+        if (operation === epoch.current) setNameLookupState('failed')
+      }
     }
 
     const receive = async (accuracy: 'coarse' | 'precise') => {
@@ -168,8 +165,8 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
           return
         }
         const data = await geometry
-        if (operation !== epoch.current || (accuracy === 'coarse' && preciseAccepted)) return
-        // Lookup обогащает current, а refinement должен брать это обогащение только от текущего GPS operation.
+        if (operation !== epoch.current || operationResult.selectedCity || (accuracy === 'coarse' && preciseAccepted)) return
+        // После выбора населённого пункта координаты GPS уже не должны менять расчётный якорь.
         const pendingInteractive = interactive && activeInteractive.current?.operation === operation && !activeInteractive.current.navigated
         const basePreview = pendingInteractive ? gpsPreviewRef.current : null
         const enriched = current.current?.selection === 'gps' && current.current.id === operationResult.best?.id
@@ -179,13 +176,13 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
         const next = base
           ? refineGpsPlace(base, result.value, services.getDeviceTimeZone(), data)
           : createGpsPlace(result.value, services.getDeviceTimeZone(), data, runtimeId)
-        if (operationResult.best && !isUsefulRefinement(operationResult.best, next)) {
+        const isNewPreciseFix = accuracy === 'precise' && result.value.timestamp > (operationResult.best?.timestamp ?? -Infinity)
+        if (operationResult.best && !isNewPreciseFix && !isUsefulRefinement(operationResult.best, next)) {
           if (accuracy === 'precise') preciseAccepted = true
           return
         }
         if (accuracy === 'precise') preciseAccepted = true
         operationResult.best = next
-        const lookupRevision = ++revision
         if (pendingInteractive && isLowAccuracy(next.accuracy)) {
           gpsPreviewRef.current = next
           setGpsPreview(next)
@@ -195,7 +192,6 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
           apply(next, 'automatic', operation,
             activeInteractive.current?.operation === operation && activeInteractive.current.navigated ? 'refinement' : 'automatic')
         }
-        lookupName(next, lookupRevision)
         if (interactive) {
           const lowAccuracy = isLowAccuracy(next.accuracy)
           if (!lowAccuracy) {
@@ -219,6 +215,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
     // getCurrentPosition не отменяется AbortController; epoch отсекает обе одноразовые операции.
     await Promise.all([receive('coarse'), receive('precise')])
     if (operation !== epoch.current) return
+    if (operationResult.best && !operationResult.selectedCity) void lookupName(operationResult.best)
     if (operationResult.best) {
       if (interactive && isLowAccuracy(operationResult.best.accuracy)) setGpsState({ status: 'ready', lowAccuracy: true })
       return

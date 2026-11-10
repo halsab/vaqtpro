@@ -61,7 +61,8 @@ test('monthly table keeps its header, date column, and separators frozen on both
     return {
       scroller: { x: scroller.getBoundingClientRect().x, y: scroller.getBoundingClientRect().y,
         width: scroller.clientWidth, height: scroller.clientHeight, scrollWidth: scroller.scrollWidth,
-        scrollHeight: scroller.scrollHeight, left: scroller.scrollLeft, top: scroller.scrollTop },
+        scrollHeight: scroller.scrollHeight, left: scroller.scrollLeft, top: scroller.scrollTop,
+        overscrollBehavior: getComputedStyle(scroller).overscrollBehavior },
       screenContent: { width: screenContent.clientWidth, height: screenContent.clientHeight,
         scrollWidth: screenContent.scrollWidth, scrollHeight: screenContent.scrollHeight,
         left: screenContent.scrollLeft, top: screenContent.scrollTop },
@@ -84,6 +85,7 @@ test('monthly table keeps its header, date column, and separators frozen on both
   })
 
   const before = await geometry()
+  expect(before.scroller.overscrollBehavior).toBe('none')
   expect(before.scroller.scrollWidth).toBeGreaterThan(before.scroller.width)
   expect(before.scroller.scrollHeight).toBeGreaterThan(before.scroller.height)
   expect(before.screenContent.scrollWidth).toBe(before.screenContent.width)
