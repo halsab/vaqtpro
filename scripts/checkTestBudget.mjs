@@ -82,11 +82,13 @@ function discoverPlaywright() {
   const result = listing.match(/Total:\s*(\d+)\s+tests?\s+in\s+\d+\s+files?/i)
   if (!result) throw new Error('Could not parse Playwright test-list total: ' + listing.slice(-1200))
   const collectedFiles = new Set()
-  for (const line of listing.split(/\r?\n/)) {
-    const match = line.match(/(?:^|›)\s*(tests\/[^\s›]+\.spec\.[jt]sx?):\d+:\d+\s*›/)
-    if (match) collectedFiles.add(resolve(ROOT, match[1]))
+  const availableSpecs = walk(ROOT).filter(file => /\.spec\.[cm]?[jt]sx?$/.test(file))
+  for (const file of availableSpecs) {
+    const path = relative(ROOT, file).split(sep).join('/')
+    const testDirRelative = path.startsWith('tests/') ? path.slice('tests/'.length) : path
+    if (listing.includes(path + ':') || listing.includes(testDirRelative + ':')) collectedFiles.add(file)
   }
-  if (Number(result[1]) && collectedFiles.size === 0) throw new Error('Playwright cases found, but source files could not be identified')
+  if (Number(result[1]) && collectedFiles.size === 0) throw new Error('Playwright cases found, but source files could not be identified:\n' + listing.slice(0, 1500))
   return { count: Number(result[1]), files: collectedFiles }
 }
 
