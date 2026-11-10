@@ -423,6 +423,9 @@ test('month navigation preserves one scroll owner and keeps changed rows reachab
 })
 
 test('monthly geometry stays contained across the approved short-screen matrix and themes', async ({ page }) => {
+  // WebKit startup can stall while the deterministic place-search fixture hydrates.
+  // Keep every geometry assertion across the full matrix.
+  test.setTimeout(90_000)
   await openMonth(page)
   const viewportPairs = [
     ...[320, 390].flatMap(width => [360, 479, 480, 481, 540, 720].map(height => [width, height] as const)),

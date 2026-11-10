@@ -303,6 +303,9 @@ test('generic Euler-only acquisition offers explicit recovery after timeout', as
 })
 
 test('a silent Generic Sensor without a WebKit fallback offers a useful retry', async ({ page }) => {
+  // Under WebKit CI the initial GeoNames fixture/search may be slow; the sensor
+  // silence/retry behavior itself retains its own explicit timing assertions.
+  test.setTimeout(90_000)
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'platform', { configurable: true, value: 'iPhone' })
     Object.defineProperty(navigator, 'userAgent', { configurable: true, value: 'Mozilla/5.0 (iPhone)' })

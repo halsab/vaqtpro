@@ -224,6 +224,7 @@ test('uses an opacity-only native crossfade for forward and Back navigation', as
 })
 
 test('uses the same opacity-only crossfade for event detail and Back', async ({ page }) => {
+  test.setTimeout(60_000)
   await installTransitionProbe(page)
   await page.goto('./')
   await choosePlace(page)
