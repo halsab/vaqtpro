@@ -1,17 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
-import { CalculationMethod, Coordinates, HighLatitudeRule, PolarCircleResolution, PrayerTimes } from 'adhan'
-
+import { describe, expect, it } from 'vitest'
 import { getZonedTime, zonedDateTimeToInstant } from './locationTime'
 import { addDays } from './date'
-import {
-  CALCULATION_PROFILES,
-  UnsupportedCalculationProfileError,
-  calculatePrayerSchedule,
-  calculateSolarZenith,
-  getCalculationProfileCapability,
-  getEffectiveParameters,
-  type CalculationSettings,
-} from './prayerCalculation'
+import { CALCULATION_PROFILES, calculatePrayerSchedule, calculateSolarZenith, type CalculationSettings } from './prayerCalculation'
 
 const KAZAN = { latitude: 55.7946485, longitude: 49.1115022 }
 const MECCA = { latitude: 21.4225, longitude: 39.8262 }
@@ -305,20 +295,6 @@ describe('расчёт солнечного транзита', () => {
   })
 })
 
-describe('independent institutional comparisons', () => {
-  const keys = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const
-  const minutes = (time: string) => {
-    const [hour = 0, minute = 0] = time.split(':').map(Number)
-    return hour * 60 + minute
-  }
-
-
-  // IACAD Ramadan calendar: https://iacad.gov.ae/assets/b4d53ecb/ramadan-in-dubai-2026-ad-1447-ah.aspx
-  // Egypt's General Authority for Survey: https://www.esa.gov.eg/praytimes.aspx
-
-
-
-})
 
 it('applies adjustments to absolute instants across midnight and countdown chronology', async () => {
   const { buildScheduleEvents, selectEventPair } = await import('./scheduleEvents')

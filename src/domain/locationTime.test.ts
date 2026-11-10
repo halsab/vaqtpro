@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  createLocationClock,
-  getCivilDate,
-  getDeviceTimeZone,
-  getUtcOffset,
-  getZonedTime,
-  isValidTimeZone,
-  zonedDateTimeToInstant,
-} from './locationTime'
+import { getCivilDate, getUtcOffset, getZonedTime, zonedDateTimeToInstant } from './locationTime'
 
 describe('location time', () => {
 

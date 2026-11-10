@@ -23,12 +23,6 @@ vi.mock('./executionGate', () => ({
 
 import { ExecutionGateView } from './ExecutionGateView'
 
-function deferred<T>() {
-  let resolve!: (value?: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((done, fail) => { resolve = value => done(value as T); reject = fail })
-  return { promise, resolve, reject }
-}
 
 function createGate(start: Promise<boolean>) {
   return {

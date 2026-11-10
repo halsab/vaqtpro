@@ -1,18 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { scheduleContextKey, type ScheduleContext } from '../../domain/scheduleContext'
-import { verifiedTatarstanLocalityId } from '../../domain/tatarstanDhuhr'
 import { automaticPreferences } from '../../domain/sourcePreferences'
-import { createCityPlace, withNearbyCity } from '../../domain/place'
+import { createCityPlace } from '../../domain/place'
 import { DEFAULT_CALCULATION_SETTINGS, calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import type { City } from '../../domain/cities'
-import {
-  activateFastScheduleContext,
-  currentFastScheduleGeneration,
-  FAST_SCHEDULE_STORAGE_KEYS,
-  invalidateFastScheduleSnapshot,
-  readFastScheduleSnapshot,
-  writeFastScheduleSnapshot,
-} from './fastScheduleSnapshot'
+import { activateFastScheduleContext, currentFastScheduleGeneration, FAST_SCHEDULE_STORAGE_KEYS, invalidateFastScheduleSnapshot, readFastScheduleSnapshot, writeFastScheduleSnapshot } from './fastScheduleSnapshot'
 
 const now = new Date('2026-10-19T10:00:00.000Z')
 const city: City = { id: 551487, name: 'Казань', countryCode: 'RU', admin1Code: '73', admin1Name: 'Татарстан',
@@ -36,14 +28,6 @@ function memoryStorage(): Storage {
   }
 }
 
-function checksum(value: string): string {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return (hash >>> 0).toString(16).padStart(8, '0')
-}
 
 let store: Storage
 

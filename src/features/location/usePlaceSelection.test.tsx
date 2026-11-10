@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { usePlaceSelection } from './usePlaceSelection'
 import type { AppServices } from '../../App'
 import { success, failure } from '../../domain/result'
-import { createGpsPlace, withNearbyCity, type Place } from '../../domain/place'
+import { createGpsPlace, type Place } from '../../domain/place'
 import { automaticPreferences } from '../../domain/sourcePreferences'
 import { resolvePrayerTimeSource } from '../../domain/prayerSource'
 import { parseCoverageGeometry } from '../../domain/localGeography'
@@ -17,7 +17,6 @@ const locations = [{ id: 'kazan', name: 'Казань', latitude: 55.79, longitu
 const coarseFix = { latitude: 55.79, longitude: 49.12, accuracy: 1200, timestamp: 100 }
 const goodCoarseFix = { ...coarseFix, accuracy: 500 }
 const preciseFix = { ...coarseFix, latitude: 55.8, accuracy: 10, timestamp: 200 }
-const poorPreciseFix = { ...coarseFix, latitude: 55.791, accuracy: 1100, timestamp: 200 }
 const city: City = { id: 1, name: 'Berlin', countryCode: 'DE', admin1Code: '16', admin1Name: 'Berlin', latitude: 52.52, longitude: 13.4, population: 1, timeZone: 'Europe/Berlin', featureCode: 'PPL' }
 function deferred<T>() {
   let resolve!: (value: T) => void

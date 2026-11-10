@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { circularExponentialStep, createOrientationSession, eulerScreenTopHeading, hasRememberedOrientationGrant, projectedHorizontalHeadingRate, quaternionScreenTopHeading, screenAngleDegrees } from './qiblaOrientation'
+import { createOrientationSession, eulerScreenTopHeading, hasRememberedOrientationGrant, quaternionScreenTopHeading } from './qiblaOrientation'
 
 describe('Qibla orientation geometry', () => {
 

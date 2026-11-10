@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createCityPlace, createGpsPlace, createLocalityPlace, withNearbyCity, type Place } from '../domain/place'
+import { createGpsPlace, createLocalityPlace, type Place } from '../domain/place'
 import { success } from '../domain/result'
 import { createSettingsPersistence } from '../features/settings/settingsPersistence'
 import { clearAppData, deleteVaqtProDatabase, getLocationChoice, getSetting, setSetting, type LocationChoice, type SettingsPatch } from '../storage/database'

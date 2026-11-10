@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createGpsPlace, homePlaceLabel, refineGpsPlace, createCityPlace, isFreshGpsPlace, withNearbyCity } from './place'
+import { createGpsPlace, homePlaceLabel, refineGpsPlace, createCityPlace } from './place'
 import { placeFromChoice } from './placeMigration'
-import { getDeviceTimeZone } from './locationTime'
 import type { CoverageGeometry } from './localGeography'
 const geometry: CoverageGeometry = { uncertaintyMeters: 2000, polygons: [[[[49,55],[50,55],[50,56],[49,56],[49,55]]]] }
 const position = { latitude: 55.5, longitude: 49.5, accuracy: 1000, timestamp: 100 }

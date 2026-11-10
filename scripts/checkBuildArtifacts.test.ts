@@ -2,14 +2,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import {
-  checkBuildArtifacts,
-  reportBuildArtifactFailure,
-  validateBuildArtifacts,
-  type BuildArtifact,
-} from './checkBuildArtifacts'
+import { checkBuildArtifacts, validateBuildArtifacts, type BuildArtifact } from './checkBuildArtifacts'
 
 const citySource = {
   name: 'GeoNames',

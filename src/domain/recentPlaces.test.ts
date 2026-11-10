@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { required } from '../test/required'
-import { createCityPlace, createLocalityPlace, createGpsPlace, withNearbyCity } from './place'
-import { migrateRecentPlaces, rememberPlace, restoreRecentPlaces, updateRecentPlace } from './recentPlaces'
+import { createCityPlace, createLocalityPlace, createGpsPlace } from './place'
+import { migrateRecentPlaces, rememberPlace, restoreRecentPlaces } from './recentPlaces'
 
 const locality = (id: string, longitude = 49) => createLocalityPlace({ id, name: id, latitude: 55, longitude }, 10)
 const city = (id: number, longitude = 49) => createCityPlace({ id, name: 'Одинаковое имя', countryCode: 'RU', admin1Code: '73', admin1Name: 'Татарстан', latitude: 55, longitude, population: 1, timeZone: 'Europe/Moscow' }, 10)

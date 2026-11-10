@@ -9,21 +9,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App, type AppServices } from './App'
 import type { GeolocationPermission } from './platform/browser'
-import type { PrayerRepositoryOptionalSettings, PrayerRepositoryState } from './data/prayerRepository'
-import {
-  searchCities,
-  type CityDataset,
-} from './domain/cities'
+import type { PrayerRepositoryState } from './data/prayerRepository'
+import { searchCities, type CityDataset } from './domain/cities'
 import { calculatePrayerSchedule, DEFAULT_CALCULATION_SETTINGS } from './domain/prayerCalculation'
-import { createCityPlace, createGpsPlace, createLocalityPlace, type Place } from './domain/place'
-import { migrateRecentPlaces, rememberPlace } from './domain/recentPlaces'
+import { createCityPlace, type Place } from './domain/place'
 import { scheduleContextKey, type ScheduleContext } from './domain/scheduleContext'
-import { activateFastScheduleContext, FAST_SCHEDULE_STORAGE_KEYS, invalidateFastScheduleSnapshot,
-  readFastScheduleSnapshot, writeFastScheduleSnapshot } from './features/schedule/fastScheduleSnapshot'
+import { activateFastScheduleContext, FAST_SCHEDULE_STORAGE_KEYS, invalidateFastScheduleSnapshot, readFastScheduleSnapshot, writeFastScheduleSnapshot } from './features/schedule/fastScheduleSnapshot'
 import { failure, success } from './domain/result'
-import { setLanguagePreference } from './localization'
-import { deleteVaqtProDatabase, getLocationChoice, setSetting, type SettingsPatch } from './storage/database'
-import { createPrayerRepository, loadPrayerRepositoryOptionalSettings } from './data/prayerRepository'
+import { type SettingsPatch } from './storage/database'
 import { THEME_PREFERENCE_CACHE_KEY } from './ui/themePreferenceCache'
 
 type RemovedProviderTestStubs = {
@@ -396,55 +389,11 @@ describe('VaqtPro', () => {
 
 })
 
-function homeDate() {
-  const value = screen.getByRole('button', { name: 'Выбрать дату' }).querySelector('time')
-  if (!value) throw new Error('Главная дата расписания не отображается')
-  return value
-}
 
-async function chooseGregorianDate(date: string) {
-  const [year, month, day] = date.split('-')
-  await userEvent.click(screen.getByRole('button', { name: 'Выбрать дату' }))
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Год' }), String(Number(year)))
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Месяц' }), String(Number(month)))
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'День' }), String(Number(day)))
-  await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
-  await screen.findByRole('list', { name: 'Расписание дня' })
-}
 
-async function showGpsKazan(deviceTimeZone: string, currentInstant: string) {
-  const now = new Date(currentInstant)
-  const services = createServices({
-    initialize: vi.fn().mockResolvedValue(initialized({ locationChoice: null })),
-    getDeviceTimeZone: () => deviceTimeZone,
-    getPosition: vi.fn().mockResolvedValue(success({
-      latitude: 55.7946,
-      longitude: 49.1115,
-      accuracy: 50,
-      timestamp: now.getTime(),
-    })),
-    now: () => new Date(now),
-    getDays: vi.fn().mockResolvedValue(success([])),
-  })
-  render(<App services={services} />)
-  await userEvent.click(await screen.findByRole('button', { name: 'По геопозиции' }))
-  await screen.findByRole('button', { name: '55.7946, 49.1115' })
-  await screen.findByRole('list', { name: 'Расписание дня' })
-  return services
-}
 
 async function expectSchedule() {
   expect(await screen.findByRole('list', { name: 'Расписание дня' })).toBeVisible()
-}
-async function openSource() {
-  await userEvent.click(await screen.findByRole('button', { name: 'Настройки' }))
-  await userEvent.click(screen.getByRole('button', { name: /^Расписание/ }))
-}
-async function backHomeFromSource() {
-  await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
-  await waitFor(() => expect(screen.getByRole('button', { name: /^Расписание/ })).toHaveFocus())
-  await userEvent.click(screen.getByRole('button', { name: 'Назад' }))
-  await screen.findByRole('region', { name: 'Главная' })
 }
 async function chooseCity(query: string, result: string | RegExp, current: string | RegExp = 'Казань') {
   await userEvent.click(screen.getByRole('button', { name: current }))

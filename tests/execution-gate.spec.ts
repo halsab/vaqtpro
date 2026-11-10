@@ -29,19 +29,3 @@ test('two tabs share one execution owner and explicitly hand it off', async ({ c
 
 
 
-const gateThemes = [
-  { family: 'classic', tone: 'dark', date: '2026-10-21', key: 'autumn' },
-  { family: 'classic', tone: 'light', date: '2026-10-21', key: 'autumn' },
-  ...(['winter', 'spring', 'summer', 'autumn'] as const).flatMap((season, index) => ([
-    { family: 'seasonal', tone: 'dark', date: ['2026-01-15', '2026-04-15', '2026-07-15', '2026-10-15'][index], key: season },
-    { family: 'seasonal', tone: 'light', date: ['2026-01-15', '2026-04-15', '2026-07-15', '2026-10-15'][index], key: season },
-  ])),
-] as const
-
-for (const palette of gateThemes) {
-}
-
-
-
-
-

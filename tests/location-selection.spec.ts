@@ -1,4 +1,4 @@
-import { choosePlace, expect, expectSchedule, readSavedSetting, test } from './fixtures'
+import { expect, expectSchedule, readSavedSetting, test } from './fixtures'
 
 
 test('online search returns a rural settlement and a separate selectable district', async ({ page }) => {

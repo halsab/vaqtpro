@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { calculateQiblaBearing, estimateBearingOriginUncertainty, formatAngularUncertainty, roundAzimuthForDisplay, shortestAngleDelta, wrap360, wrapSigned } from './qibla'
+import { calculateQiblaBearing, estimateBearingOriginUncertainty, shortestAngleDelta, wrapSigned } from './qibla'
 
 describe('qibla bearing', () => {
 

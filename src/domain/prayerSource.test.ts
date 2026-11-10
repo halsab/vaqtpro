@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createCityPlace, createGpsPlace, createLocalityPlace, withNearbyCity } from './place'
+import { createGpsPlace, createLocalityPlace, withNearbyCity } from './place'
 import { initialManualCalculation, resolvePrayerTimeSource } from './prayerSource'
-import { automaticPreferences, isSourcePreferences, manualCalculation, restoreSourcePreferences } from './sourcePreferences'
-import { automaticCalculationDefaults, effectiveCalculationSettings, isCalculationSelection } from './calculationSettings'
+import { automaticPreferences, manualCalculation, restoreSourcePreferences } from './sourcePreferences'
+import { effectiveCalculationSettings } from './calculationSettings'
 import { calculatePrayerSchedule } from './prayerCalculation'
 
 const kazan = createLocalityPlace({ id: 'kazan', name: 'Казань', latitude: 55.79, longitude: 49.12 }, 0)

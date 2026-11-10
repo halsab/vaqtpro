@@ -3,13 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { addDays } from './date'
 import { calculatePrayerSchedule } from './prayerCalculation'
 import { zonedDateTimeToInstant } from './locationTime'
-import {
-  RELIGIOUS_EVENT_IDS,
-  RELIGIOUS_EVENTS,
-  isReligiousEventId,
-  listReligiousEventOccurrences,
-  resolveReligiousBanner,
-} from './religiousEvents'
+import { listReligiousEventOccurrences, resolveReligiousBanner } from './religiousEvents'
 import type { PrayerSchedule } from './scheduleEvents'
 
 function calculated(date: string, fajr = '05:00', maghrib = '18:00'): PrayerSchedule {

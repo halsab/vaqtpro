@@ -1,4 +1,4 @@
-import { choosePlace, expect, expectSchedule, readSavedSetting, test } from './fixtures'
+import { choosePlace, expect, expectSchedule, test } from './fixtures'
 
 
 test('Mobile Safari выбирает место и открывает календарь без потери расписания', async ({ page }) => {

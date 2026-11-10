@@ -20,37 +20,8 @@ function NavigationExample() {
   </>
 }
 
-function PreparedNavigationExample({ prepare, onFailure }: { prepare: () => Promise<void>; onFailure?: () => void }) {
-  const navigation = useAppNavigation()
-  if (navigation.screen === 'share') return <><p>share</p><button onClick={navigation.back}>Back</button></>
-  return <>
-    <p>{navigation.screen}</p>
-    <button id="prepared-caller" onClick={() => { void navigation.openPrepared('share', prepare).catch(() => onFailure?.()) }}>Open when ready</button>
-    <button id="other-focus">Other focus</button>
-    <button onClick={() => navigation.open('settings')}>Settings</button>
-  </>
-}
 
-function TraversalRecoveryExample({ prepare }: { prepare: () => Promise<void> }) {
-  const navigation = useAppNavigation()
-  return <>
-    <p>{navigation.screen}</p>
-    <button onClick={() => navigation.open('settings')}>Settings</button>
-    <button onClick={() => navigation.open('share')}>Share</button>
-    <button onClick={() => { void navigation.openPrepared('share', prepare) }}>Prepare share</button>
-    <button onClick={navigation.back}>Back</button>
-    <button onClick={navigation.home}>Home</button>
-  </>
-}
 
-function CalendarNavigationExample() {
-  const navigation = useAppNavigation()
-  const [date, setDate] = useState('2026-09-02')
-  return navigation.screen === 'home'
-    ? <button id="open-date" onClick={() => navigation.open('date')}>Выбрать дату</button>
-    : <DateScreen selectedDate={date} today="2026-09-01" preferences={DEFAULT_CALENDAR_PREFERENCES} hijriSupported
-        onDateChange={setDate} onPreferencesChange={() => {}} onOpenReligiousEvents={() => navigation.open('religious-events')} onBack={navigation.back} />
-}
 
 function ReligiousNavigationExample() {
   const navigation = useAppNavigation()
@@ -59,15 +30,6 @@ function ReligiousNavigationExample() {
     : <><p>{navigation.religiousEventId}</p><button onClick={navigation.back}>Назад</button></>
 }
 
-function RamadanDhikrNavigationExample() {
-  const navigation = useAppNavigation()
-  if (navigation.screen === 'home') return <button id="ramadan-banner" onClick={() => navigation.open({ screen: 'religious-event', religiousEventId: 'ramadan' })}>Рамадан</button>
-  if (navigation.screen === 'religious-event' && navigation.religiousEventId) return <ReligiousEventScreen
-    eventId={navigation.religiousEventId} onBack={navigation.back}
-    onOpenRamadanDhikr={ramadanDhikrId => navigation.open({ screen: 'ramadan-dhikr', ramadanDhikrId })} />
-  if (navigation.screen === 'ramadan-dhikr' && navigation.ramadanDhikrId) return <RamadanDhikrScreen dhikrId={navigation.ramadanDhikrId} onBack={navigation.back} />
-  return null
-}
 
 function NestedReligiousNavigationExample() {
   const navigation = useAppNavigation()
@@ -95,17 +57,6 @@ function FastingNavigationExample() {
   return <><p>{navigation.fastingDuaId}</p><button onClick={navigation.back}>Назад</button></>
 }
 
-function controlFrames() {
-  const callbacks = new Map<number, FrameRequestCallback>()
-  let id = 0
-  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callbacks.set(++id, callback); return id })
-  vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(id => { callbacks.delete(id) })
-  return () => act(() => {
-    const pending = [...callbacks.values()]
-    callbacks.clear()
-    for (const callback of pending) callback(0)
-  })
-}
 
 describe('навигация экранов', () => {
   it('проходит Home → Пост → дуа и возвращает исходное состояние Home', async () => {

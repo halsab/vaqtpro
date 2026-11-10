@@ -1,4 +1,4 @@
-import { StrictMode, Profiler, act } from 'react'
+import { act } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,10 +6,7 @@ import { fireEvent } from '@testing-library/react'
 
 import { createCityPlace } from '../../domain/place'
 import type { City } from '../../domain/cities'
-import { createTranslator } from '../../localization/messages'
 import { QiblaScreen } from './QiblaScreen'
-import { formatRelativeGuidance } from './relativeGuidance'
-
 const place = createCityPlace({
   id: 551487, name: 'Казань', countryCode: 'RU', admin1Code: '73', admin1Name: 'Татарстан',
   latitude: 55.7946, longitude: 49.1115, population: 1_308_660, timeZone: 'Europe/Moscow',

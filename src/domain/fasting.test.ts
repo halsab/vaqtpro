@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { calendarDateFromCivil, civilDateFromCalendar } from './calendar'
 import { addDays } from './date'
-import {
-  buildFastingScheduleEvents,
-  fastingProgress,
-  isFastingModeActive,
-  resolveActiveRamadanOccurrence,
-  resolveFastingTimeline,
-  restoreFastingModePreferences,
-  updateFastingModePreferences,
-} from './fasting'
+import { buildFastingScheduleEvents, isFastingModeActive, resolveActiveRamadanOccurrence, resolveFastingTimeline, updateFastingModePreferences } from './fasting'
 import { calculatePrayerSchedule } from './prayerCalculation'
 import { zonedDateTimeToInstant } from './locationTime'
 import { ramadanOccurrenceIdForDate } from './religiousEvents'
