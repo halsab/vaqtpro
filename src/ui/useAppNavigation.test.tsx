@@ -5,8 +5,6 @@ import { useState } from 'react'
 import { DateScreen } from '../features/calendar/DateScreen'
 import { DEFAULT_CALENDAR_PREFERENCES } from '../domain/calendar'
 import { ReligiousEventsScreen } from '../features/religiousEvents/ReligiousEventsScreen'
-import { ReligiousEventScreen } from '../features/religiousEvents/ReligiousEventScreen'
-import { RamadanDhikrScreen } from '../features/religiousEvents/RamadanDhikrScreen'
 import { useAppNavigation } from './useAppNavigation'
 
 function NavigationExample() {
