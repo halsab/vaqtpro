@@ -62,8 +62,11 @@ test('the production-like beacon stays silent after another tab saves OFF and hi
   await expect.poll(() => rumRequests.length).toBeGreaterThan(0)
   await page.getByRole('button', { name: 'По геопозиции' }).click()
   await expectSchedule(page)
+  // The explicitly requested GPS fix resolves to the nearest named settlement (Kazan).
+  // Its canonical coordinates, not the raw GPS point, anchor prayer calculations.
   await expect.poll(() => readSavedSetting(page, 'locationChoice')).toMatchObject({
-    place: { selection: 'gps', latitude, longitude, accuracy: 15 },
+    place: { selection: 'city', cityName: 'Казань', latitude: 55.7887, longitude: 49.1221,
+      accuracy: null, timeZone: 'Europe/Moscow' },
   })
   await choosePlace(page, 'Казань', /Казань/)
   const renderedPrayerSchedule = await page.getByRole('list', { name: 'Расписание дня' }).innerText()

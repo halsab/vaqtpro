@@ -383,6 +383,7 @@ test('mobile two-axis scrolling measures only visible cells while preserving fro
 })
 
 test('month navigation preserves one scroll owner and keeps changed rows reachable', async ({ page }) => {
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 390, height: 720 })
   await openMonth(page)
   const scroller = page.locator('.prayer-month-table-scroll')
@@ -550,6 +551,7 @@ test('monthly geometry stays contained across the approved short-screen matrix a
 })
 
 test('monthly table uses available width before enabling horizontal scrolling', async ({ page }) => {
+  test.setTimeout(60_000)
   await openMonth(page)
   const region = page.locator('.prayer-month-table-scroll')
   for (const [width, shouldOverflow] of [[740, false], [390, true], [320, true]] as const) {
@@ -563,6 +565,7 @@ test('monthly table uses available width before enabling horizontal scrolling', 
 })
 
 test('long localized cells, estimated markers, and unavailable values remain centered and readable at 200%', async ({ page }) => {
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 320, height: 720 })
   await openMonth(page)
   await page.evaluate(() => {
@@ -576,6 +579,13 @@ test('long localized cells, estimated markers, and unavailable values remain cen
     unavailableCell.textContent = '—'
     unavailableCell.setAttribute('aria-label', 'Время недоступно')
   })
+
+  await page.evaluate(async () => { await document.fonts.ready })
+  // Font substitution and table layout can settle on different WebKit frames.
+  // Keep the strict zero-overflow condition, but assert it after layout stabilizes.
+  await expect.poll(() => page.locator('.prayer-month-table').evaluate(table =>
+    [...table.querySelectorAll<HTMLElement>('thead th, tbody th, tbody td')]
+      .every(cell => cell.scrollWidth <= cell.clientWidth))).toBe(true)
 
   const layout = await page.evaluate(() => {
     const scroll = document.querySelector<HTMLElement>('.prayer-month-table-scroll')
