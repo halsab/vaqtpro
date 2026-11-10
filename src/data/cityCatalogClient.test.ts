@@ -193,6 +193,43 @@ describe('online place search', () => {
     expect(fetcher.mock.calls[0]?.[1]).toMatchObject({ cache: 'no-store' })
   })
 
+  it('does not require the offline seed to perform an online GPS lookup', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([{
+      geonameId: 700, name: 'Online only', lat: 55, lng: 37,
+      countryCode: 'RU', timezone: { timeZoneId: 'Europe/Moscow' }, fcode: 'PPL',
+    }]))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(failure({ kind: 'data', reason: 'unavailable' })) })
+    await expect(service.findNearest(55, 37, 25)).resolves.toMatchObject({
+      ok: true, value: { id: 700, name: 'Online only' },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to offline seed for an unusable nonempty GeoNames response', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([{
+      geonameId: 701, name: 'Invalid', lat: 55, lng: 37, countryCode: 'RU',
+      timezone: { timeZoneId: 'Invalid/Zone' }, fcode: 'PPL',
+    }]))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    await expect(service.findNearest(58.6, 49.6, 25)).resolves.toMatchObject({
+      ok: true, value: { id: 1, name: 'Киров' },
+    })
+  })
+
+  it('cancels in-flight reverse lookup without using a stale fallback', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_url, options) => new Promise((_resolve, reject) => {
+      options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+    }))
+    const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
+      loadOfflineSeed: () => Promise.resolve(success(offlineSeed)) })
+    const pending = service.findNearest(58.6, 49.6, 25)
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
+    service.cancelPending?.()
+    await expect(pending).resolves.toMatchObject({ ok: false, error: { reason: 'superseded' } })
+  })
+
   it('rejects reverse-geocode candidates beyond the requested radius', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response([
       { geonameId: 601, name: 'Outside', lat: 55, lng: 37.61, countryCode: 'RU',

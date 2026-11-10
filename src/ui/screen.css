@@ -362,7 +362,6 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 }
 .ramadan-article-flow { display: grid; gap: 16px; }
 .ramadan-dhikr-arabic, .recitation-arabic { direction: rtl; text-align: right; unicode-bidi: plaintext; overflow-wrap: anywhere; }
-.recitation-article .recitation-arabic { font-size: 28px; line-height: 1.8; }
 .markdown-article > * + * { margin-top: 16px; }
 .markdown-article > * + blockquote { margin-top: 18px; }
 .markdown-article > blockquote + * { margin-top: 18px; }

@@ -12,7 +12,7 @@ export interface CitySearchResult {
 export interface CityCatalogService {
   load: () => Promise<Result<undefined, DataFailure>>
   search: (query: string, language?: string, startRow?: number) => Promise<Result<CitySearchResult, DataFailure>>
-  // Радиус 0–200 км. Город — подсказка названия, не регион или timezone GPS-точки.
+  // Радиус 0–200 км; для GPS-вызова выбранный город становится каноническим якорем расчёта.
   findNearest: (
     latitude: number,
     longitude: number,
@@ -20,5 +20,6 @@ export interface CityCatalogService {
     localOnly?: boolean,
   ) => Promise<Result<City | null, DataFailure>>
   cancelSearch?: () => void
+  cancelNearest?: () => void
   cancelPending?: () => void
 }

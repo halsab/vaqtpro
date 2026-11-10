@@ -272,6 +272,51 @@ describe('one-shot GPS operations', () => {
     expect(h.result.current.place).toMatchObject({ id: 'geonames:1', selection: 'city', cityName: 'Казань',
       latitude: 55.79, longitude: 49.12, timeZone: 'Europe/Samara' })
   })
+  it('clears provisional GPS state after resolving a named settlement', async () => {
+    const h = setup()
+    let pending!: Promise<void>
+    act(() => { pending = h.result.current.locate() })
+    await act(async () => {
+      h.coarse.resolve(success(coarseFix))
+      h.precise.resolve(success(poorPreciseFix))
+      await pending
+    })
+    expect(h.result.current.gpsPreview).toMatchObject(poorPreciseFix)
+    await act(async () => {
+      h.lookup.resolve(success({ ...city, name: 'Казань', latitude: poorPreciseFix.latitude, longitude: poorPreciseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place?.selection).toBe('city')
+    expect(h.result.current.gpsPreview).toBeNull()
+    expect(h.result.current.gpsState.status).toBe('idle')
+  })
+
+  it('re-anchors after a late precise fix moves beyond an early coarse-selected settlement', async () => {
+    const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
+    const newLookup = deferred<Awaited<ReturnType<AppServices['cities']['findNearest']>>>()
+    h.services.cities.findNearest = vi.fn().mockReturnValueOnce(h.lookup.promise).mockReturnValueOnce(newLookup.promise)
+    let pending!: Promise<void>
+    act(() => { pending = h.result.current.locate() })
+    await act(async () => { h.coarse.resolve(success(goodCoarseFix)); await Promise.resolve() })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 1_600)) })
+    await waitFor(() => expect(h.services.cities.findNearest).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      h.lookup.resolve(success({ ...city, name: 'First', latitude: goodCoarseFix.latitude, longitude: goodCoarseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place).toMatchObject({ selection: 'city', cityName: 'First' })
+    const farPreciseFix = { ...preciseFix, latitude: 56.4, longitude: 50.0 }
+    await act(async () => { h.precise.resolve(success(farPreciseFix)); await pending })
+    expect(h.result.current.place).toMatchObject({ selection: 'gps', latitude: farPreciseFix.latitude })
+    await waitFor(() => expect(h.services.cities.findNearest).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      newLookup.resolve(success({ ...city, name: 'Second', latitude: farPreciseFix.latitude, longitude: farPreciseFix.longitude }))
+      await Promise.resolve()
+    })
+    expect(h.result.current.place).toMatchObject({ selection: 'city', cityName: 'Second', latitude: farPreciseFix.latitude })
+    expect(h.chosen).toHaveBeenCalledOnce()
+  })
+
   it('uses a newer precise fix even when its reported accuracy is lower quality than the earlier coarse fix', async () => {
     const h = setup({ loadGeography: vi.fn().mockResolvedValue(null) })
     const older = { latitude: 56.3604, longitude: 50.019, accuracy: 15, timestamp: 100 }

@@ -2,7 +2,7 @@ import { Children, cloneElement, isValidElement, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform } from 'react-markdown'
 
 const ALLOWED_ELEMENTS = ['h1', 'h2', 'p', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'a']
-const ARABIC_RUN = /[\p{Script=Arabic}\p{Mark}\u0640\u200C-\u200F](?:[\p{Script=Arabic}\p{Mark}\u0640\u200C-\u200F\u060C\u061B\u061F\u06D4\u066A-\u066D]|[ \u00a0]+(?=[\p{Script=Arabic}\p{Mark}\u0640]))*/gu
+const ARABIC_RUN = /(?=\p{Script=Arabic})\p{Letter}(?:[\p{Script=Arabic}\p{Mark}\u0640\u200C-\u200F\u060C\u061B\u061F\u06D4\u066A-\u066D]|[ \u00a0]+(?=(?=\p{Script=Arabic})\p{Letter}))*/gu
 
 function markArabicText(text: string): ReactNode {
   const output: ReactNode[] = []
@@ -26,14 +26,24 @@ function markArabicChildren(children: ReactNode): ReactNode {
   })
 }
 
+function flatText(children: ReactNode): string {
+  return Children.toArray(children).map(child => typeof child === 'string' ? child
+    : isValidElement<{ children?: ReactNode }>(child) ? flatText(child.props.children) : '').join('')
+}
+
+const ARABIC_LEADING = /^\s*(?=\p{Script=Arabic})\p{Letter}/u
+function blockDirection(children: ReactNode): 'rtl' | undefined {
+  return ARABIC_LEADING.test(flatText(children)) ? 'rtl' : undefined
+}
+
 export function MarkdownArticleContent({ content }: { content: string }) {
   return <div className="markdown-article">
     <Markdown allowedElements={ALLOWED_ELEMENTS} skipHtml urlTransform={defaultUrlTransform} components={{
-      h1: ({ children, ...props }) => <h1 {...props}>{markArabicChildren(children)}</h1>,
-      h2: ({ children, ...props }) => <h2 {...props}>{markArabicChildren(children)}</h2>,
-      p: ({ children, ...props }) => <p {...props}>{markArabicChildren(children)}</p>,
-      li: ({ children, ...props }) => <li {...props}>{markArabicChildren(children)}</li>,
-      blockquote: ({ children, ...props }) => <blockquote {...props}>{markArabicChildren(children)}</blockquote>,
+      h1: ({ children, ...props }) => <h1 {...props} dir={blockDirection(children)}>{markArabicChildren(children)}</h1>,
+      h2: ({ children, ...props }) => <h2 {...props} dir={blockDirection(children)}>{markArabicChildren(children)}</h2>,
+      p: ({ children, ...props }) => <p {...props} dir={blockDirection(children)}>{markArabicChildren(children)}</p>,
+      li: ({ children, ...props }) => <li {...props} dir={blockDirection(children)}>{markArabicChildren(children)}</li>,
+      blockquote: ({ children, ...props }) => <blockquote {...props} dir={blockDirection(children)}>{markArabicChildren(children)}</blockquote>,
       a: ({ href, children }) => {
         const external = /^https?:\/\//i.test(href ?? '')
         return <a href={href} target={external ? '_blank' : undefined} rel={external ? 'noreferrer' : undefined}>{markArabicChildren(children)}</a>

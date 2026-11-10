@@ -1166,21 +1166,24 @@ describe('VaqtPro', () => {
       await waitFor(async () => {
         const value = await loadPrayerRepositoryOptionalSettings()
         expect(value.ok && value.value.recentPlaces).toEqual(expect.arrayContaining([
-          expect.objectContaining({ name: 'Стамбул', timestamp: 200, accuracy: 10, latitude: 41.03, id: 'gps:history:41.010000:28.950000' }),
+          expect.objectContaining({ selection: 'city', cityName: 'Стамбул', timestamp: 200,
+            latitude: 41.03, longitude: 28.95, timeZone: 'Europe/Istanbul', id: 'geonames:745044' }),
           expect.objectContaining({ id: 'geonames:551487' }),
         ]))
       })
-      expect(await getLocationChoice()).toMatchObject({ value: { place: { name: 'Стамбул', timestamp: 200, latitude: 41.03 } } })
+      expect(await getLocationChoice()).toMatchObject({ value: { place: { selection: 'city', cityName: 'Стамбул',
+        timeZone: 'Europe/Istanbul', timestamp: 200, latitude: 41.03, accuracy: null } } })
       expect(saveSettings.mock.calls.filter(([patch]) => patch.placeEvents?.some(event => event.change === 'refinement'))
         .every(([patch]) => patch.recentPlaces === undefined)).toBe(true)
       const loaded = await loadPrayerRepositoryOptionalSettings()
       await act(async () => { optional.resolve(loaded); await optional.promise })
-      await chooseCity('Москва', /Москва/, '41.0300, 28.9500')
+      await chooseCity('Москва', /Москва/, /Стамбул/)
       await userEvent.click(screen.getByRole('button', { name: 'Москва' }))
-      await userEvent.click(within(screen.getByRole('region', { name: 'Недавние места' })).getByRole('button', { name: 'Стамбул · GPS, 41.0300, 28.9500' }))
+      await userEvent.click(within(screen.getByRole('region', { name: 'Недавние места' })).getByRole('button', { name: /^Стамбул/ }))
       expect(services.getPosition).toHaveBeenCalledTimes(2)
       await waitFor(async () => expect(await getLocationChoice()).toMatchObject({ value: { source: 'manual', place: {
-        latitude: 41.03, longitude: 28.95, accuracy: 10, timestamp: 200,
+        selection: 'city', latitude: 41.03, longitude: 28.95, accuracy: null,
+        timeZone: 'Europe/Istanbul', timestamp: 200,
       } } }))
     } finally {
       selectionGate.resolve(undefined)

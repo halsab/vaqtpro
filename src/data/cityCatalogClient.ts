@@ -138,12 +138,19 @@ export function createCityCatalogService(dependencies: {
   let seedLoad: Promise<Result<undefined, DataFailure>> | null = null
   let searchRevision = 0
   let activeSearch: AbortController | null = null
+  const activeReverse = new Set<AbortController>()
+  const cancelledReverse = new WeakSet<AbortController>()
 
   const cancelSearch = () => {
     searchRevision += 1
     activeSearch?.abort()
     activeSearch = null
   }
+  const cancelNearest = () => {
+    for (const controller of activeReverse) { cancelledReverse.add(controller); controller.abort() }
+    activeReverse.clear()
+  }
+  const cancelPending = () => { cancelSearch(); cancelNearest() }
 
   const load = (): Promise<Result<undefined, DataFailure>> => {
     if (seed) return Promise.resolve(success(undefined))
@@ -271,11 +278,15 @@ export function createCityCatalogService(dependencies: {
 
   const findNearest = async (latitude: number, longitude: number, maxDistanceKm: number, localOnly = false): Promise<Result<City | null, DataFailure>> => {
     if (!validNearestQuery(latitude, longitude, maxDistanceKm)) return failure({ kind: 'data', reason: 'invalid' })
-    const loaded = await load()
-    if (!loaded.ok) return loaded
-    const offlineNearest = () => seed ? findNearestCity(latitude, longitude, seed.cities, maxDistanceKm) : null
-    if (localOnly || !geonamesUsername.trim()) return success(offlineNearest())
+    const offlineNearest = async (): Promise<Result<City | null, DataFailure>> => {
+      const loaded = await load()
+      // A missing offline asset must not prevent coordinate-only GPS recovery.
+      return success(loaded.ok && seed ? findNearestCity(latitude, longitude, seed.cities, maxDistanceKm) : null)
+    }
+    if (localOnly || !geonamesUsername.trim()) return offlineNearest()
 
+    // Preload the optional offline reserve without delaying live reverse geocoding.
+    void load()
     const url = new URL(GEONAMES_REVERSE_URL)
     url.searchParams.set('lat', String(latitude))
     url.searchParams.set('lng', String(longitude))
@@ -284,25 +295,37 @@ export function createCityCatalogService(dependencies: {
     url.searchParams.set('style', 'FULL')
     url.searchParams.set('username', geonamesUsername.trim())
     const controller = new AbortController()
+    activeReverse.add(controller)
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    const fallback = async (): Promise<Result<City | null, DataFailure>> => {
+      const result = await offlineNearest()
+      return cancelledReverse.has(controller) ? failure({ kind: 'data', reason: 'superseded' }) : result
+    }
     try {
       const response = await fetcher(url, { cache: 'no-store', signal: controller.signal })
-      if (!response.ok) return success(offlineNearest())
+      if (cancelledReverse.has(controller)) return failure({ kind: 'data', reason: 'superseded' })
+      if (!response.ok) return await fallback()
       const raw: unknown = await response.json()
-      if (!object(raw) || !Array.isArray(raw.geonames) || object(raw.status)) return success(offlineNearest())
-      const candidates = parseGeoNamesResults(raw)
+      if (cancelledReverse.has(controller)) return failure({ kind: 'data', reason: 'superseded' })
+      if (!object(raw) || !Array.isArray(raw.geonames) || object(raw.status)) return await fallback()
+      const valid = parseGeoNamesResults(raw)
+      // Valid empty results mean no settlement; an unusable nonempty payload is a provider failure.
+      if (raw.geonames.length > 0 && valid.length === 0) return await fallback()
+      const candidates = valid
         .map(city => ({ city, distance: haversineDistanceKm(latitude, longitude, city.latitude, city.longitude) }))
         .filter(candidate => candidate.distance <= maxDistanceKm)
         .sort((a, b) => a.distance - b.distance)
       return success(candidates[0]?.city ?? null)
     } catch {
-      return success(offlineNearest())
+      if (cancelledReverse.has(controller)) return failure({ kind: 'data', reason: 'superseded' })
+      return await fallback()
     } finally {
       clearTimeout(timeout)
+      activeReverse.delete(controller)
     }
   }
 
-  return { load, search, findNearest, cancelSearch, cancelPending: cancelSearch }
+  return { load, search, findNearest, cancelSearch, cancelNearest, cancelPending }
 }
 
 export const cityCatalogService = createCityCatalogService()
