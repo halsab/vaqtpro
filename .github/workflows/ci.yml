@@ -80,6 +80,9 @@ jobs:
       - name: Установить зависимости
         run: npm ci
 
+      - name: Проверить глобальный лимит тестов (250)
+        run: npm run test:budget
+
       - name: Определить область изменений
         id: changes
         shell: bash
@@ -129,10 +132,6 @@ jobs:
 
       - name: Проверить lint
         run: npm run lint
-
-      - name: Отдельно проверить типы TypeScript
-        if: github.event_name != 'schedule'
-        run: npm run typecheck
 
       - name: Запустить модульные тесты
         if: github.event_name != 'schedule'

@@ -76,6 +76,48 @@ export async function choosePlace(page: import('@playwright/test').Page, query =
   await expect(page.locator('.event-countdown')).toBeVisible()
 }
 
+/**
+ * Seed a valid saved locality without exercising city-search/network startup.
+ * Use only when the test's risk is unrelated to place discovery.
+ */
+export async function seedSelectedPlace(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('./manifest.webmanifest')
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('salah', 15)
+      request.onupgradeneeded = () => {
+        const db = request.result
+        if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' })
+        if (!db.objectStoreNames.contains('control')) db.createObjectStore('control')
+      }
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error ?? new Error('Could not initialize selected place'))
+    })
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const place = {
+          id: 'locality:kazan', selection: 'city', name: 'Казань',
+          latitude: 55.79, longitude: 49.12, accuracy: null, timestamp: 0,
+          timeZone: 'Europe/Moscow', automaticTimeZone: { id: 'Europe/Moscow', source: 'city' },
+          region: { code: 'RU-TA', name: 'Татарстан' }, coverage: 'inside',
+        }
+        const transaction = database.transaction(['settings', 'control'], 'readwrite')
+        transaction.objectStore('settings').put({
+          key: 'locationChoice',
+          value: { mode: 'calculated', source: 'manual', coordinates: place, place },
+        })
+        transaction.objectStore('control').put(0, 'generation')
+        transaction.oncomplete = () => resolve()
+        transaction.onerror = () => reject(transaction.error ?? new Error('Could not save selected place'))
+        transaction.onabort = () => reject(transaction.error ?? new Error('Selected-place write was aborted'))
+      })
+    } finally {
+      database.close()
+    }
+  })
+  await page.goto('./')
+}
+
 export async function expectSchedule(page: import('@playwright/test').Page, count = 7) {
   await expect(page.getByRole('region', { name: 'Главная', exact: true })).toBeVisible()
   await expect(page.getByRole('list', { name: 'Расписание дня' }).getByRole('listitem')).toHaveCount(count)

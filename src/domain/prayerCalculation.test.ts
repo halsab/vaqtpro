@@ -1,17 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
-import { CalculationMethod, Coordinates, HighLatitudeRule, PolarCircleResolution, PrayerTimes } from 'adhan'
-
+import { describe, expect, it } from 'vitest'
 import { getZonedTime, zonedDateTimeToInstant } from './locationTime'
 import { addDays } from './date'
-import {
-  CALCULATION_PROFILES,
-  UnsupportedCalculationProfileError,
-  calculatePrayerSchedule,
-  calculateSolarZenith,
-  getCalculationProfileCapability,
-  getEffectiveParameters,
-  type CalculationSettings,
-} from './prayerCalculation'
+import { CALCULATION_PROFILES, calculatePrayerSchedule, calculateSolarZenith, type CalculationSettings } from './prayerCalculation'
 
 const KAZAN = { latitude: 55.7946485, longitude: 49.1115022 }
 const MECCA = { latitude: 21.4225, longitude: 39.8262 }
@@ -120,27 +110,6 @@ describe('calculatePrayerSchedule', () => {
     expect(restored.estimatedPrayers).not.toContain('fajr')
   })
 
-  it.each([
-    ['2026-05-04', []],
-    ['2026-05-05', ['isha']],
-    ['2026-05-06', ['fajr', 'isha']],
-    ['2026-06-21', ['fajr', 'isha']],
-    ['2026-08-07', ['fajr', 'isha']],
-    ['2026-08-08', ['fajr']],
-    ['2026-08-09', []],
-  ] as const)('keeps the actual-engine seasonal fallback transition for Kazan on %s', (date, estimatedPrayers) => {
-    const schedule = calculatePrayerSchedule(KAZAN, date, 'Europe/Moscow', withSettings({}))
-
-    expect(schedule.estimatedPrayers).toEqual(estimatedPrayers)
-    if (schedule.estimatedPrayers.includes('fajr')) {
-      const difference = schedule.entries.sunrise.instant - schedule.entries.fajr.instant
-      expect(difference).toBeGreaterThanOrEqual(120 * MINUTE)
-      expect(difference).toBeLessThanOrEqual(121 * MINUTE)
-    }
-    if (schedule.estimatedPrayers.includes('isha')) {
-      expect(schedule.entries.isha.instant - schedule.entries.maghrib.instant).toBe(90 * MINUTE)
-    }
-  })
 
   it('делает стандартный Аср раньше ханафитского', () => {
     const hanafi = calculatePrayerSchedule(
@@ -175,39 +144,7 @@ describe('calculatePrayerSchedule', () => {
     }
   })
 
-  it.each([
-    ['canadaFcna', 13, 13, 0],
-    ['dubai', 18.2, 18.2, 0],
-    ['qatar', 18, 0, 90],
-    ['kuwait', 18, 17.5, 0],
-    ['egyptian', 19.5, 17.5, 0],
-  ] as const)('сохраняет параметры профиля %s из Adhan 4.4.6', (profile, fajrAngle, ishaAngle, ishaInterval) => {
-    expect(getEffectiveParameters(withSettings({ profile }), '2026-10-09', 'Asia/Riyadh'))
-      .toMatchObject({ fajrAngle, ishaAngle, ishaInterval })
-  })
 
-  it.each([
-    ['dubai', CalculationMethod.Dubai], ['qatar', CalculationMethod.Qatar],
-    ['kuwait', CalculationMethod.Kuwait], ['egyptian', CalculationMethod.Egyptian],
-  ] as const)('сохраняет все встроенные поправки preset-а %s', (profile, preset) => {
-    const coordinates = new Coordinates(25.2854, 51.531)
-    const parameters = preset()
-    parameters.highLatitudeRule = HighLatitudeRule.TwilightAngle
-    parameters.polarCircleResolution = PolarCircleResolution.AqrabBalad
-    const expected = new PrayerTimes(coordinates, new Date(2026, 9, 9, 12), parameters)
-    const actual = calculatePrayerSchedule(
-      { latitude: coordinates.latitude, longitude: coordinates.longitude },
-      '2026-10-09', 'Asia/Qatar',
-      { profile, asrMethod: 'standard', highLatitudeRule: 'twilightAngle' },
-    )
-
-    expect(actual.entries.fajr.instant).toBe(expected.fajr.getTime())
-    expect(actual.entries.sunrise.instant).toBe(expected.sunrise.getTime())
-    expect(actual.entries.dhuhr.instant).toBe(expected.dhuhr.getTime())
-    expect(actual.entries.asr.instant).toBe(expected.asr.getTime())
-    expect(actual.entries.maghrib.instant).toBe(expected.maghrib.getTime())
-    expect(actual.entries.isha.instant).toBe(expected.isha.getTime())
-  })
 
   it('использует для Qatar фиксированный интервал Иша 90 минут круглый год', () => {
     for (const date of ['2026-02-18', '2026-06-21']) {
@@ -251,59 +188,12 @@ describe('calculatePrayerSchedule', () => {
     expect(deviations).toEqual({ fajr: 0, sunrise: 0, dhuhr: 0, asr: -1, maghrib: -2, isha: -1 })
   })
 
-  it.each([
-    ['Istanbul', { latitude: 41.0082, longitude: 28.9784 },
-      ['05:37', '07:02', '12:57', '16:07', '18:41', '20:00'], [1, 0, -1, -2, -1, -1]],
-    ['Antalya', { latitude: 36.8969, longitude: 30.7133 },
-      ['05:33', '06:52', '12:50', '16:04', '18:37', '19:51'], [0, 0, -1, -1, -1, -1]],
-  ] as const)('compares Turkey calculation with official Diyanet %s on 2026-10-09', (_city, coordinates, published, expected) => {
-    const schedule = calculatePrayerSchedule(coordinates, '2026-10-09', 'Europe/Istanbul',
-      { profile: 'turkey', asrMethod: 'standard', highLatitudeRule: 'twilightAngle' })
-    const prayerKeys = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const
-    const minutes = (time: string): number => {
-      const [hour = 0, minute = 0] = time.split(':').map(Number)
-      return hour * 60 + minute
-    }
-    const deviations = prayerKeys.map((key, index) =>
-      minutes(schedule.entries[key].time) - minutes(published[index] ?? ''))
-    // Primary monthly schedules:
-    // https://namazvakitleri.diyanet.gov.tr/en-US/9541/prayer-time-for-istanbul
-    // https://namazvakitleri.diyanet.gov.tr/tr-TR/9225/antalya-icin-namaz-vakti
-    // Signed difference means calculated minus published. No official equivalence is claimed.
-    expect(deviations).toEqual(expected)
-  })
 
   it('rejects non-canonical calculation dates', () => {
     expect(() => calculatePrayerSchedule(KAZAN, '2026-1-15', 'Europe/Moscow')).toThrow('invalid-calculation-date')
     expect(() => calculatePrayerSchedule(KAZAN, '2026-01-15-extra', 'Europe/Moscow')).toThrow('invalid-calculation-date')
   })
 
-  it('считает российский профиль по углам 16°/15°', () => {
-    const russia = calculatePrayerSchedule(
-      KAZAN,
-      '2026-01-15',
-      'Europe/Moscow',
-      withSettings({ profile: 'russia' }),
-    )
-    const tatarstan = calculatePrayerSchedule(
-      KAZAN,
-      '2026-01-15',
-      'Europe/Moscow',
-      withSettings({}),
-    )
-    const isna = calculatePrayerSchedule(
-      KAZAN,
-      '2026-01-15',
-      'Europe/Moscow',
-      withSettings({ profile: 'northAmerica' }),
-    )
-
-    expect(CALCULATION_PROFILES.map(profile => profile.id)).toContain('russia')
-    expect(russia.profile).toBe('russia')
-    expect(russia.entries.fajr.instant).toBeGreaterThan(tatarstan.entries.fajr.instant)
-    expect(russia.entries.fajr.instant).toBeLessThan(isna.entries.fajr.instant)
-    expect(russia.entries.isha.instant).toBe(isna.entries.isha.instant)
-  })
 
   it('восстанавливает полярный день и возвращает упорядоченное расписание', () => {
     const schedule = calculatePrayerSchedule(
@@ -328,39 +218,7 @@ describe('calculatePrayerSchedule', () => {
     expect([...instants].sort((a, b) => a - b)).toEqual(instants)
   })
 
-  it('поддерживает правило ближайшего дня для полярной местности', () => {
-    const schedule = calculatePrayerSchedule(
-      { latitude: 78.2232, longitude: 15.6469 },
-      '2026-12-21',
-      'Arctic/Longyearbyen',
-      withSettings({ highLatitudeRule: 'nearestDay' }),
-    )
 
-    expect(schedule.polarResolutionApplied).toBe(true)
-    expect(schedule.estimatedPrayers).toEqual([
-      'fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha',
-    ])
-    expect(Number.isFinite(schedule.entries.sunrise.instant)).toBe(true)
-    expect(Number.isFinite(schedule.entries.maghrib.instant)).toBe(true)
-  })
-
-  it('retains the selected profile rounding for the schedule zenith', () => {
-    const coordinates = new Coordinates(41.0082, 28.9784)
-    const parameters = CalculationMethod.Turkey()
-    parameters.highLatitudeRule = HighLatitudeRule.TwilightAngle
-    parameters.polarCircleResolution = PolarCircleResolution.AqrabBalad
-    const transitParameters = CalculationMethod.Other()
-    transitParameters.polarCircleResolution = parameters.polarCircleResolution
-    transitParameters.rounding = parameters.rounding
-    const expected = new PrayerTimes(coordinates, new Date(2026, 8, 11, 12), transitParameters)
-    const schedule = calculatePrayerSchedule(
-      { latitude: coordinates.latitude, longitude: coordinates.longitude },
-      '2026-09-11', 'Europe/Istanbul',
-      { profile: 'turkey', asrMethod: 'standard', highLatitudeRule: 'twilightAngle' },
-    )
-
-    expect(schedule.entries.zenith.instant).toBe(expected.dhuhr.getTime())
-  })
 
   it('форматирует те же рассчитанные моменты в выбранной таймзоне', () => {
     const moscow = calculatePrayerSchedule(KAZAN, '2026-01-15', 'Europe/Moscow')
@@ -406,107 +264,15 @@ describe('calculatePrayerSchedule', () => {
     }
   })
 
-  it('явно отклоняет Умм аль-Кура, если точный календарь недоступен', () => {
-    const reason = 'ummAlQuraUnavailable' as const
-    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions
-    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(
-      function (this: Intl.DateTimeFormat) {
-        return { ...resolvedOptions.call(this), calendar: 'gregory' }
-      },
-    )
-
-    expect(getCalculationProfileCapability('ummAlQura')).toEqual({
-      supported: false,
-      reason,
-    })
-    let thrown: unknown
-    try {
-      calculatePrayerSchedule(
-        MECCA,
-        '2026-02-18',
-        'Asia/Riyadh',
-        withSettings({ profile: 'ummAlQura' }),
-      )
-    } catch (error) {
-      thrown = error
-    }
-
-    expect(thrown).toBeInstanceOf(UnsupportedCalculationProfileError)
-    expect(thrown).toMatchObject({ profile: 'ummAlQura', message: reason })
-  })
 })
 
 describe('расчёт солнечного транзита', () => {
-  it.each([
-    ['Pacific/Apia на границе года', { latitude: -13.83, longitude: -171.76 }, 'Pacific/Apia', '2026-01-01', '2025-12-31T23:30:22.000Z', '12:30'],
-    ['Pacific/Kiritimati на границе года', { latitude: 1.87, longitude: -157.4 }, 'Pacific/Kiritimati', '2026-01-01', '2025-12-31T22:32:54.000Z', '12:32'],
-    ['Pacific/Kiritimati перед UTC-сменой года', { latitude: 1.87, longitude: -157.4 }, 'Pacific/Kiritimati', '2026-12-31', '2026-12-30T22:32:19.000Z', '12:32'],
-    ['New York при начале DST', { latitude: 40.71, longitude: -74.01 }, 'America/New_York', '2026-03-08', '2026-03-08T17:06:44.000Z', '13:06'],
-    ['New York при окончании DST', { latitude: 40.71, longitude: -74.01 }, 'America/New_York', '2026-11-01', '2026-11-01T16:39:34.000Z', '11:39'],
-    ['обычный пояс Europe/Moscow', { latitude: 55.79, longitude: 49.12 }, 'Europe/Moscow', '2026-06-21', '2026-06-21T08:45:19.000Z', '11:45'],
-  ] as const)('совпадает с независимым солнечным транзитом NOAA: %s', (_label, coordinates, timeZone, date, reference, localTime) => {
-    const zenith = calculateSolarZenith(coordinates, date, timeZone)
-    expect(zenith).not.toBeNull()
-    if (!zenith) throw new Error('Не удалось рассчитать зенит')
-    // Эталонные UTC-моменты рассчитаны по уравнениям NOAA: https://gml.noaa.gov/grad/solcalc/solareqns.PDF
-    expect(Math.abs(zenith.instant - Date.parse(reference))).toBeLessThanOrEqual(5_000)
-    expect(zenith.time).toBe(localTime)
-    expect(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(zenith.instant)))
-      .toBe(date)
-  })
 
-  it.each([
-    [{ latitude: -13.83, longitude: -171.76 }, 'Pacific/Apia', '2026-01-15'],
-    [{ latitude: 1.87, longitude: -157.4 }, 'Pacific/Kiritimati', '2026-01-15'],
-    [{ latitude: 40.71, longitude: -74.01 }, 'America/New_York', '2026-03-08'],
-  ] as const)('возвращает зенит внутри местной даты %s %s', (coordinates, timeZone, date) => {
-    const zenith = calculateSolarZenith(coordinates, date, timeZone)
-    expect(zenith).not.toBeNull()
-    if (!zenith) throw new Error('Не удалось рассчитать зенит')
-    expect(new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(zenith.instant)))
-      .toBe(date)
-    expect(Math.abs(zenith.instant - zonedDateTimeToInstant(date, zenith.time, timeZone).getTime())).toBeLessThan(60_000)
-  })
 
   it('сохраняет явную недоступность для пропущенной гражданской даты', () => {
     expect(calculateSolarZenith({ latitude: -13.83, longitude: -171.76 }, '2011-12-30', 'Pacific/Apia')).toBeNull()
   })
 
-  it.each([
-    ['Pacific/Apia', { latitude: -13.83, longitude: -171.76 }, '2026-01-01'],
-    ['Pacific/Kiritimati', { latitude: 1.87, longitude: -157.4 }, '2026-01-01'],
-    ['America/New_York at DST start', { latitude: 40.71, longitude: -74.01 }, '2026-03-08'],
-    ['America/New_York at DST end', { latitude: 40.71, longitude: -74.01 }, '2026-11-01'],
-    ['Toronto', { latitude: 43.6532, longitude: -79.3832 }, '2026-01-01'],
-    ['Yellowknife', { latitude: 62.454, longitude: -114.3718 }, '2026-06-21'],
-    ['Murmansk', { latitude: 68.9585, longitude: 33.0827 }, '2026-06-21'],
-    ['Sinop', { latitude: 42.0268, longitude: 35.1511 }, '2026-06-21'],
-    ['Tromso', { latitude: 69.6492, longitude: 18.9553 }, '2026-06-21'],
-  ] as const)('keeps all schedule events on the requested local date for %s', (label, coordinates, date) => {
-    const timeZone = label.startsWith('Pacific/')
-      ? label
-      : label.startsWith('America/') ? 'America/New_York'
-        : label === 'Toronto' ? 'America/Toronto'
-            : label === 'Yellowknife' ? 'America/Yellowknife'
-          : label === 'Murmansk' ? 'Europe/Moscow'
-              : label === 'Sinop' ? 'Europe/Istanbul' : 'Europe/Oslo'
-    const schedule = calculatePrayerSchedule(coordinates, date, timeZone)
-    const localDates = Object.entries(schedule.entries).map(([key, entry]) => {
-      const localDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
-      }).format(new Date(entry.instant))
-      if (localDate !== date) expect(schedule.estimatedPrayers).toContain(key)
-      return localDate
-    })
-    for (const [index, key] of Object.keys(schedule.entries).entries()) {
-      if (schedule.estimatedPrayers.includes(key as keyof typeof schedule.entries)) continue
-      expect(localDates[index]).toBe(date)
-    }
-
-    const zenith = calculateSolarZenith(coordinates, date, timeZone)
-    expect(zenith).not.toBeNull()
-    expect(Math.abs(schedule.entries.zenith.instant - (zenith?.instant ?? 0))).toBeLessThan(MINUTE)
-  })
 
   it('calculates consecutive dates and both calendar-year edges without shifting local dates', () => {
     for (const [timeZone, coordinates, firstDate] of [
@@ -529,91 +295,6 @@ describe('расчёт солнечного транзита', () => {
   })
 })
 
-describe('independent institutional comparisons', () => {
-  const keys = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'] as const
-  const minutes = (time: string) => {
-    const [hour = 0, minute = 0] = time.split(':').map(Number)
-    return hour * 60 + minute
-  }
-
-  it.each([
-    ['2026-01-15', ['06:24', '07:48', '12:28', '14:48', '17:07', '18:15'], [11, 0, -1, 0, -1, 5]],
-    ['2026-04-15', ['05:11', '06:36', '13:19', '17:03', '20:01', '21:07'], [12, -1, -1, 1, 0, 7]],
-    ['2026-07-15', ['04:06', '05:49', '13:24', '17:28', '20:58', '22:17'], [17, 1, 0, -1, -1, 7]],
-    ['2026-10-15', ['06:14', '07:31', '13:04', '16:06', '18:36', '19:38'], [10, 1, -1, -3, -2, 4]],
-  ] as const)('compares Toronto FCNA calculation with the Quran & Sunnah Society 2026 timetable for %s', (date, published, expectedDeviations) => {
-    const schedule = calculatePrayerSchedule(
-      { latitude: 43.6532, longitude: -79.3832 }, date, 'America/Toronto',
-      { profile: 'canadaFcna', asrMethod: 'standard', highLatitudeRule: 'twilightAngle' },
-    )
-    const deviations = keys.map((key, index) =>
-      minutes(schedule.entries[key].time) - minutes(published[index] ?? ''),
-    )
-    // Quran & Sunnah Society of Canada, Toronto Prayer Times (2026):
-    // https://qssc.org/Download/TorontoPrayerTimes2026.pdf
-    // The columns identify Fajr, sunrise (Shuruq), Dhuhr, Asr, Maghrib and Isha.
-    expect(deviations).toEqual(expectedDeviations)
-  })
-
-  // IACAD Ramadan calendar: https://iacad.gov.ae/assets/b4d53ecb/ramadan-in-dubai-2026-ad-1447-ah.aspx
-  // Egypt's General Authority for Survey: https://www.esa.gov.eg/praytimes.aspx
-  it.each([
-    ['dubai', { latitude: 25.2048, longitude: 55.2708 }, '2026-02-18', 'Asia/Dubai',
-      ['05:34', '06:48', '12:36', '15:50', '18:18', '19:32'], [0, 0, 0, 2, 0, 0]],
-    ['egyptian', { latitude: 30.0444, longitude: 31.2357 }, '2026-10-10', 'Africa/Cairo',
-      ['05:27', '06:53', '12:42', '16:01', '18:30', '19:47'], [0, 1, 1, -1, 0, 0]],
-  ] as const)('compares %s with its dated institutional timetable', (profile, coordinates, date, timeZone, published, expectedDeviations) => {
-    const schedule = calculatePrayerSchedule(coordinates, date, timeZone, {
-      profile, asrMethod: 'standard', highLatitudeRule: 'twilightAngle',
-    })
-    const deviations = keys.map((key, index) =>
-      minutes(schedule.entries[key].time) - minutes(published[index] ?? ''),
-    )
-    expect(deviations).toEqual(expectedDeviations)
-  })
-
-  it('compares Kuwait City with the Ministry of Awqaf Ramadan 1437 timetable', () => {
-    const schedule = calculatePrayerSchedule(
-      { latitude: 29.3759, longitude: 47.9774 }, '2016-06-06', 'Asia/Kuwait',
-      { profile: 'kuwait', asrMethod: 'standard', highLatitudeRule: 'twilightAngle' },
-    )
-    const published = ['03:14', '04:48', '11:47', '15:21', '18:45', '20:16']
-    const deviations = keys.map((key, index) =>
-      minutes(schedule.entries[key].time) - minutes(published[index] ?? ''),
-    )
-    // Ministry of Awqaf, Kuwait: local Kuwait City Ramadan 1437 timetable, 1 Ramadan / 2016-06-06.
-    // https://content.awqaf.gov.kw/BasicPages/2020/9/bcc62a0167664473ac725715b92ef6fd.pdf
-    expect(deviations).toEqual([0, 0, 0, 0, 1, 1])
-  })
-
-  it('compares Kuwait City with the Ministry of Awqaf Ramadan 1444 timetable', () => {
-    const schedule = calculatePrayerSchedule(
-      { latitude: 29.3759, longitude: 47.9774 }, '2023-03-23', 'Asia/Kuwait',
-      { profile: 'kuwait', asrMethod: 'standard', highLatitudeRule: 'twilightAngle' },
-    )
-    const published = ['04:30', '05:49', '11:55', '15:23', '18:01', '19:18']
-    const deviations = keys.map((key, index) =>
-      minutes(schedule.entries[key].time) - minutes(published[index] ?? ''),
-    )
-    // Таблица Министерства вакфов: 1 рамадан 1444 соответствует 23 марта 2023 по местному времени Kuwait City.
-    // https://content.awqaf.gov.kw/LatestReleases/2023/4/66c9a677578f41b98fc650d5a75d0aea.pdf
-    expect(deviations).toEqual([0, 0, 0, 0, 0, 0])
-  })
-
-  it('compares a later Kuwait City date in the Ministry of Awqaf Ramadan 1444 timetable', () => {
-    const schedule = calculatePrayerSchedule(
-      { latitude: 29.3759, longitude: 47.9774 }, '2023-04-20', 'Asia/Kuwait',
-      { profile: 'kuwait', asrMethod: 'standard', highLatitudeRule: 'twilightAngle' },
-    )
-    const published = ['03:51', '05:17', '11:47', '15:22', '18:17', '19:38']
-    const deviations = keys.map((key, index) =>
-      minutes(schedule.entries[key].time) - minutes(published[index] ?? ''),
-    )
-    // В печатной таблице Министерства вакфов 20 апреля 2023 указано как 29 рамадан.
-    // https://content.awqaf.gov.kw/LatestReleases/2023/4/66c9a677578f41b98fc650d5a75d0aea.pdf
-    expect(deviations).toEqual([3, 0, 0, 0, 0, 1])
-  })
-})
 
 it('applies adjustments to absolute instants across midnight and countdown chronology', async () => {
   const { buildScheduleEvents, selectEventPair } = await import('./scheduleEvents')

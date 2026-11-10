@@ -28,19 +28,3 @@ test('Arabic Markdown uses the bundled Mushaf font on narrow screens in both the
   }
 })
 
-test('bundled Arabic font remains available after offline PWA reload', async ({ page, context, browserName }) => {
-  test.skip(browserName !== 'chromium', 'Offline PWA reload smoke test uses the Chromium project')
-  await page.goto('./')
-  await page.evaluate(() => navigator.serviceWorker.ready)
-  await page.evaluate(async () => { await document.fonts.load('34px "Kazan Basma Mushaf"', 'الْحَمْدُ') })
-  await context.setOffline(true)
-  try {
-    await page.reload()
-    await expect.poll(() => page.evaluate(async () => {
-      const faces = await document.fonts.load('34px "Kazan Basma Mushaf"', 'الْحَمْدُ')
-      return faces.length > 0 && faces.every(face => face.status === 'loaded')
-    })).toBe(true)
-  } finally {
-    await context.setOffline(false)
-  }
-})

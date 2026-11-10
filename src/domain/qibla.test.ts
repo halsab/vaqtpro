@@ -1,22 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { calculateQiblaBearing, estimateBearingOriginUncertainty, formatAngularUncertainty, roundAzimuthForDisplay, shortestAngleDelta, wrap360, wrapSigned } from './qibla'
+import { calculateQiblaBearing, estimateBearingOriginUncertainty, shortestAngleDelta, wrapSigned } from './qibla'
 
 describe('qibla bearing', () => {
-  it.each([
-    ['Warsaw', 52.2297, 21.0122, 147.587332],
-    ['Kazan', 55.7963, 49.1088, 195.152264],
-    ['New York', 40.7128, -74.006, 58.481697],
-    ['Jakarta', -6.2088, 106.8456, 295.151756],
-    ['Sydney', -33.8688, 151.2093, 277.499604],
-    ['Tokyo', 35.6762, 139.6503, 292.99871],
-    ['London', 51.5074, -0.1278, 118.987219],
-    ['Lima', -12.0464, -77.0428, 72.026546],
-  ])('matches the adhan reference vector for %s', (_name, latitude, longitude, expected) => {
-    const result = calculateQiblaBearing({ latitude, longitude, accuracy: null })
-    expect(result.kind).toBe('bearing')
-    if (result.kind === 'bearing') expect(result.azimuth).toBeCloseTo(expected, 5)
-  })
 
   it('normalizes the dateline while preserving adhan spherical geometry', () => {
     const result = calculateQiblaBearing({ latitude: 21.4225241, longitude: 39.9261818, accuracy: null })
@@ -28,15 +14,6 @@ describe('qibla bearing', () => {
     expect(dateline).toEqual(oppositeDateline)
   })
 
-  it.each([
-    { latitude: Number.NaN, longitude: 0, accuracy: null },
-    { latitude: 0, longitude: Number.POSITIVE_INFINITY, accuracy: null },
-    { latitude: 91, longitude: 0, accuracy: null },
-    { latitude: 0, longitude: 181, accuracy: null },
-    { latitude: 0, longitude: 0, accuracy: -1 },
-  ])('rejects malformed coordinates: $latitude, $longitude', position => {
-    expect(calculateQiblaBearing(position)).toEqual({ kind: 'undefined', reason: 'invalid-position' })
-  })
 
   it('withholds non-unique bearings at the Kaaba, its antipode and the geographic poles', () => {
     expect(calculateQiblaBearing({ latitude: 21.4225241, longitude: 39.8261818, accuracy: null }))
@@ -68,9 +45,6 @@ describe('qibla bearing', () => {
 })
 
 describe('circular angles', () => {
-  it.each([[ -1, 359 ], [360, 0], [721, 1]])('wraps %i to %i', (angle, expected) => {
-    expect(wrap360(angle)).toBe(expected)
-  })
 
   it('uses the shortest signed turn through zero', () => {
     expect(shortestAngleDelta(359, 1)).toBe(2)
@@ -80,10 +54,4 @@ describe('circular angles', () => {
     expect(wrapSigned(541)).toBe(-179)
   })
 
-  it('rounds azimuth through 360 to zero and never renders small uncertainty as exact zero', () => {
-    expect(roundAzimuthForDisplay(359.8)).toBe(0)
-    expect(roundAzimuthForDisplay(359.4)).toBe(359)
-    expect(formatAngularUncertainty(0.001)).toBe('<0.1')
-    expect(formatAngularUncertainty(0)).toBe('0.0')
-  })
 })

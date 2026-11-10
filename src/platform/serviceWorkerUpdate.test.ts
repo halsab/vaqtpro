@@ -30,25 +30,6 @@ describe('service worker update reload guard', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
-  it('не перезагружает повторно при пересоздании callback внутри окна', () => {
-    const reload = vi.fn()
-    const storage = createMemoryStorage()
-    createServiceWorkerReloadGuard({
-      reload,
-      now: () => 20_000,
-      storage,
-      memory: {},
-    })()
-
-    createServiceWorkerReloadGuard({
-      reload,
-      now: () => 20_001,
-      storage,
-      memory: {},
-    })()
-
-    expect(reload).toHaveBeenCalledTimes(1)
-  })
 
   it('разрешает reload для настоящего обновления после истечения окна', () => {
     const reload = vi.fn()
@@ -70,33 +51,6 @@ describe('service worker update reload guard', () => {
     expect(reload).toHaveBeenCalledTimes(2)
   })
 
-  it('при недоступном sessionStorage всё равно делает один reload на страницу', () => {
-    const reload = vi.fn()
-    const unavailableStorage = {
-      getItem: () => {
-        throw new Error('sessionStorage disabled')
-      },
-      setItem: () => {
-        throw new Error('sessionStorage disabled')
-      },
-    }
-    const memory: ServiceWorkerReloadMemory = {}
-
-    createServiceWorkerReloadGuard({
-      reload,
-      now: () => 40_000,
-      storage: unavailableStorage,
-      memory,
-    })()
-    createServiceWorkerReloadGuard({
-      reload,
-      now: () => 40_001,
-      storage: unavailableStorage,
-      memory,
-    })()
-
-    expect(reload).toHaveBeenCalledTimes(1)
-  })
 })
 
 

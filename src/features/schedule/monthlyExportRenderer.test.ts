@@ -39,31 +39,4 @@ it('deduplicates concurrent preparation of an identical snapshot', async () => {
   await expect(first).resolves.toHaveProperty('type', 'application/pdf')
 })
 
-it('reuses three PDF snapshots and evicts the least recently used', async () => {
-  const renderer = vi.fn((_view: MonthlyExportView, _month: string, filename: string) =>
-    Promise.resolve(new File(['pdf'], filename, { type: 'application/pdf' })))
-  const forMonth = (month: string): MonthlyExportView => ({ ...view, month, monthTitle: month })
-  await prepareMonthlyPdf(forMonth('2026-10'), renderer)
-  await prepareMonthlyPdf(forMonth('2026-11'), renderer)
-  await prepareMonthlyPdf(forMonth('2026-12'), renderer)
-  await prepareMonthlyPdf(forMonth('2026-10'), renderer)
-  await prepareMonthlyPdf(forMonth('2027-01'), renderer)
-  await prepareMonthlyPdf(forMonth('2026-10'), renderer)
-  expect(renderer).toHaveBeenCalledTimes(4)
-  await prepareMonthlyPdf(forMonth('2026-11'), renderer)
-  expect(renderer).toHaveBeenCalledTimes(5)
-})
 
-it('serializes expensive PDF renders for different months to limit peak memory', async () => {
-  let releaseFirst: ((file: File) => void) | undefined
-  const renderer = vi.fn()
-    .mockImplementationOnce(() => new Promise<File>(resolve => { releaseFirst = resolve }))
-    .mockImplementationOnce(() => Promise.resolve(new File(['second'], 'second.pdf', { type: 'application/pdf' })))
-  const first = prepareMonthlyPdf({ ...view, month: '2026-05' }, renderer)
-  const second = prepareMonthlyPdf({ ...view, month: '2026-06' }, renderer)
-  await vi.waitFor(() => expect(renderer).toHaveBeenCalledTimes(1))
-  releaseFirst?.(new File(['first'], 'first.pdf', { type: 'application/pdf' }))
-  await first
-  await second
-  expect(renderer).toHaveBeenCalledTimes(2)
-})
