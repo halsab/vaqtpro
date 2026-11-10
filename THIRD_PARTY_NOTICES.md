@@ -68,6 +68,14 @@ VaqtPro включает данные, шрифт и программные за
 - Лицензия: SIL Open Font License 1.1; полный текст — `public/old-timey-mono-license.txt`.
 - Шрифт используется без изменений.
 
+## Шрифт: Noto Sans Mono (татарские тексты)
+
+- Авторы: The Noto Project Authors, © 2018.
+- Источник: https://github.com/notofonts/noto-fonts/tree/main/unhinted/ttf/NotoSansMono
+- Лицензия: SIL Open Font License 1.1; полный текст — `src/assets/NotoSansMono-LICENSE.txt`.
+- Локально поставляется `src/assets/NotoSansMono-Regular.ttf`; применяется только к татарским
+  транскрипциям и переводам. Внешних запросов для загрузки шрифта нет.
+
 ## Шрифт: Kazan Basma Mushaf Normal
 
 - Автор: Muhammet Abay, © 2021.

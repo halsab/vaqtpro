@@ -7,7 +7,6 @@ export function FastingScreen({ onBack, onOpenDua }: { onBack: () => void; onOpe
   const { t } = useLocalization()
   return <Screen label={t('fastingTitle')} top={<BackButton onClick={onBack} />} contentClassName="settings-menu">
     <div className="screen-stack">
-      <h1 className="screen-title">{t('fastingTitle')}</h1>
       {FASTING_DUA_IDS.map(id => {
         const title = t(FASTING_DUA_TITLE_KEYS[id])
         return <ActionRow key={id} id={`fasting-dua-${id}`} title={title} aria-label={title} onClick={() => onOpenDua(id)} />

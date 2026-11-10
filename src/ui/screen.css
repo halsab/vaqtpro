@@ -374,6 +374,7 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .markdown-article h1 { font: var(--font-title); color: var(--text-primary); }
 .markdown-article h2 { font: var(--font-emphasis); color: var(--text-primary); }
 .markdown-article p, .markdown-article li, .markdown-article blockquote { font: var(--font-body); }
+.recitation-article .recitation-tatar { font-family: 'Noto Sans Mono Tatar', monospace; }
 .markdown-article strong { font-weight: 700; font-synthesis: weight; }
 .markdown-article ul, .markdown-article ol { margin-bottom: 0; padding-left: 1.5em; }
 .markdown-article li + li { margin-top: 8px; }

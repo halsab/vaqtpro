@@ -24,7 +24,6 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
     await page.getByRole('button', { name: 'Пост' }).focus()
     await page.keyboard.press('Enter')
     const menu = page.getByRole('region', { name: 'Пост' })
-    await expect(menu.getByRole('heading', { name: 'Пост' })).toBeVisible()
     await expect(menu.locator('.screen-stack button')).toHaveCount(2)
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.themeTone)).toBe('dark')
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
