@@ -68,7 +68,6 @@ export function aboutArticle(version?: string): string {
 Дата хиджры рассчитывается по календарю Умм аль-Кура.
 ${version ? `\nВерсия ${markdownText(version)}.\n` : ''}
 
-Арабский текст отображается шрифтом Kazan Basma Mushaf Normal (© 2021 Muhammet Abay).
 ## Источники и лицензии
 
 - Расчёт: [Adhan JS](https://github.com/batoulapps/adhan-js) (MIT).
@@ -76,7 +75,7 @@ ${version ? `\nВерсия ${markdownText(version)}.\n` : ''}
 - Небольшой офлайн-список мест: GeoNames (CC BY 4.0).
 - Граница Татарстана: © участники [OpenStreetMap](https://www.openstreetmap.org/copyright) через geoBoundaries (ODbL).
 - Шрифт: Old Timey Mono — © 2024 Darren Embry, [SIL Open Font License 1.1](${import.meta.env.BASE_URL}old-timey-mono-license.txt).
-- Арабский шрифт: Kazan Basma Mushaf Normal — © 2021 Muhammet Abay; правообладатель разрешил использование и распространение в составе VaqtPro.
+- Арабский шрифт: Kazan Basma Mushaf Normal — автор Muhammet Abay, © 2021.
 
 [Все источники и лицензии](https://github.com/halsab/vaqtpro/blob/main/THIRD_PARTY_NOTICES.md).`
 }
