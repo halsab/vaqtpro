@@ -15,12 +15,17 @@ describe('уведомления о лицензиях', () => {
     for (const expected of [
       'Old Timey Mono',
       'public/old-timey-mono-license.txt',
+      'Kazan Basma Mushaf Normal',
+      'Muhammet Abay',
       'GeoNames',
       'OpenStreetMap',
     ]) {
       expect(notices).toContain(expected)
     }
     expect(notices).not.toMatch(/ДУМ РТ|ДУМ РФ|dumrt\.ru/i)
+    const kazanNotice = notices.split('## Шрифт: Kazan Basma Mushaf Normal')[1]?.split('\n## ')[0] ?? ''
+    expect(kazanNotice).toContain('Muhammet Abay')
+    expect(kazanNotice).not.toMatch(/лиценз|разрешен|разрешил|правообладател|All rights reserved|Яндекс/i)
     for (const dependency of [
       /\[React \/ ReactDOM 19\.2\.8\]\(https:\/\/github\.com\/react\/react\) — MIT/,
       /\[adhan 4\.4\.6\]\(https:\/\/github\.com\/batoulapps\/adhan-js\) — MIT/,

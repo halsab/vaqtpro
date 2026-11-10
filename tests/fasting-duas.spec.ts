@@ -37,7 +37,8 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
     await expect(suhurArticle.locator('[dir="rtl"][lang="ar"]')).toContainText('نَوَيْتُ أَنْ أَصُومَ')
     const recitation = suhurArticle.locator('[dir="rtl"][lang="ar"]')
     await expect.poll(() => recitation.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Kazan Basma Mushaf')
-    await expect.poll(() => recitation.evaluate(element => getComputedStyle(element).fontSize)).toBe('16px')
+    await expect.poll(() => recitation.evaluate(element => getComputedStyle(element).fontSize)).toBe('28px')
+    await expect.poll(() => recitation.evaluate(element => parseFloat(getComputedStyle(element).lineHeight))).toBeCloseTo(50.4, 1)
     await expect.poll(() => suhurArticle.locator('.screen-content').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
 
     await page.emulateMedia({ colorScheme: 'light' })
@@ -52,6 +53,7 @@ test('fasting dua flow stays keyboard accessible and works offline at 320px in b
     const iftarArticle = page.getByRole('region', { name: 'Дуа ифтара' })
     await expect(iftarArticle.locator('h1')).toHaveText('Дуа ифтара')
     await expect(iftarArticle.locator('[dir="rtl"][lang="ar"]')).toContainText('اللَّهُمَّ لَكَ صُمْتُ')
+    await expect.poll(() => iftarArticle.locator('.recitation-arabic').evaluate(element => getComputedStyle(element).fontSize)).toBe('28px')
     await iftarArticle.getByRole('button', { name: 'Назад' }).click()
     await expect(menu).toBeVisible()
     await menu.getByRole('button', { name: 'Назад' }).click()
