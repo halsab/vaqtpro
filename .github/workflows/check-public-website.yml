@@ -1,0 +1,64 @@
+name: Temporary external VaqtPro availability check
+
+on:
+  push:
+    branches: [diagnostics/live-site-20261110]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-public-site:
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.62.1-noble
+    timeout-minutes: 7
+    steps:
+      - name: Inspect public DNS and HTTPS
+        shell: bash
+        run: |
+          echo "=== A records as seen by runner ==="
+          getent ahostsv4 vaxt.pro || true
+          echo "=== NS lookup ==="
+          (command -v dig >/dev/null && dig +short vaxt.pro NS) || true
+          echo "=== Public origin and static assets ==="
+          curl -fLsS --retry 2 --retry-delay 2 --connect-timeout 8 --max-time 25             -D /tmp/vaqt-headers -o /tmp/vaqt-html             -w 'HTTPS_HTTP=%{http_code} REMOTE_IP=%{remote_ip} TOTAL=%{time_total} TYPE=%{content_type}\n'             https://vaqt.pro/
+          head -15 /tmp/vaqt-headers
+          grep -q '<div id="root"' /tmp/vaqt-html
+          grep -oE '/assets/[^"]+\.(js|css)' /tmp/vaqt-html | sort -u > /tmp/vaqt-assets
+          cat /tmp/vaqt-assets
+          grep -q '\.js$' /tmp/vaqt-assets
+          grep -q '\.css$' /tmp/vaqt-assets
+          while IFS= read -r asset; do
+            echo "ASSET $asset"
+            curl -fLsS --connect-timeout 8 --max-time 20               -o /dev/null -w 'HTTP=%{http_code} TYPE=%{content_type} BYTES=%{size_download}\n'               "https://vaqt.pro$asset"
+          done < /tmp/vaqt-assets
+      - name: Checkout to run browser check
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Open public site in fresh Chromium
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from '@playwright/test'
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage({ serviceWorkers: 'block' })
+          const failures = []
+          page.on('pageerror', error => failures.push(error.message))
+          try {
+            const response = await page.goto('https://vaqt.pro/', { waitUntil: 'domcontentloaded', timeout: 30000 })
+            console.log('BROWSER_HTTP', response?.status(), 'URL', page.url())
+            await page.locator('#root button').first().waitFor({ state: 'visible', timeout: 20000 })
+            const text = (await page.locator('#root').innerText()).slice(0, 450)
+            console.log('BROWSER_ROOT', JSON.stringify(text))
+            console.log('BROWSER_JS_ERRORS', JSON.stringify(failures))
+            if (!/Найти место|Главная|Поиск/.test(text) || failures.length) process.exitCode = 1
+          } finally {
+            await browser.close()
+          }
+          NODE
