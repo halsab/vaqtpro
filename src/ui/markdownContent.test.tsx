@@ -21,6 +21,12 @@ it('keeps Arabic-leading Markdown blocks RTL across nested formatting', async ()
   expect(paragraphs[1]?.querySelectorAll('.markdown-arabic')).toHaveLength(1)
 })
 
+it('does not wrap Arabic link text twice when paragraph and link renderers both process children', async () => {
+  const { container } = render(<MarkdownArticle content={'[بِسْمِ](https://example.org)'} />)
+  await screen.findByRole('link', { name: 'بِسْمِ' })
+  expect(container.querySelectorAll('.markdown-arabic')).toHaveLength(1)
+})
+
 it('isolates Arabic runs in Markdown paragraphs, nested emphasis, and list items without changing surrounding text', async () => {
   const { container } = render(<MarkdownArticle content={'Text قَالَ اللَّهُ clearly.\n\n- Arabic: **سُبْحَانَ اللَّهِ**\n- English stays English'} />)
   const paragraphs = await screen.findAllByText(/Text|English stays English/)

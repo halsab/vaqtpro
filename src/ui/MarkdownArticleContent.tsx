@@ -21,7 +21,9 @@ function markArabicText(text: string): ReactNode {
 function markArabicChildren(children: ReactNode): ReactNode {
   return Children.map(children, child => {
     if (typeof child === 'string') return markArabicText(child)
-    if (!isValidElement<{ children?: ReactNode }>(child) || child.props.children === undefined) return child
+    if (!isValidElement<{ children?: ReactNode; className?: string }>(child)) return child
+    if (child.type === 'span' && child.props.className === 'markdown-arabic') return child
+    if (child.props.children === undefined) return child
     return cloneElement(child, {}, markArabicChildren(child.props.children))
   })
 }

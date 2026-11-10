@@ -187,7 +187,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
           if (haversineDistanceKm(operationResult.best.latitude, operationResult.best.longitude,
             result.value.latitude, result.value.longitude) === 0) return
           const refined = refineGpsPlace(operationResult.best, result.value, services.getDeviceTimeZone(), data)
-          operationResult.selectedCity = undefined
+          delete operationResult.selectedCity
           operationResult.best = refined
           apply(refined, 'automatic', operation, 'selection')
           startLookup(refined)
