@@ -28,7 +28,7 @@ export function ReligiousEventOccurrenceRow({ occurrence, onOpenEvent }: {
   return <li>
     {contentId
       ? <ActionRow id={id} className="religious-event-list-row" title={localizedEventTitle(occurrence.eventId, locale, true)} secondary={date} onClick={() => onOpenEvent(contentId)} />
-      : <div id={id} className="pill pill-row pill-row--stacked religious-event-list-row"><span className="action-row-title">{localizedEventTitle(occurrence.eventId, locale, true)}</span>{date}</div>}
+      : <div id={id} className="pill pill-row pill-row--stacked religious-event-list-row"><span className="action-row-title">{markArabicText(localizedEventTitle(occurrence.eventId, locale, true))}</span>{date}</div>}
   </li>
 }
 

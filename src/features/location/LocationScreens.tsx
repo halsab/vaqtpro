@@ -6,6 +6,7 @@ import type { Place } from '../../domain/place'
 import type { Locality } from '../../domain/types'
 import { BackButton, Screen } from '../../ui/Screen'
 import { ActionRow, ActionButton } from '../../ui/controls'
+import { markArabicText } from '../../ui/ArabicText'
 import type { CityCatalogStatus } from './useCityCatalog'
 import { formatAccuracy, formatCoordinates, geolocationFailureMessage, nameLookupMessage, type GpsUiState, type NameLookupState } from './locationState'
 import { useLocalization } from '../../localization'
@@ -61,11 +62,11 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
       <h1 className="screen-title">{t('selectPlace')}</h1>
       <p className="note">{t('locationPrayerTimesIntro')}</p>
     </div> : null}
-    {place ? <div className="location-current"><p className="screen-title">{gpsPlace
+    {place ? <div className="location-current"><p className="screen-title">{markArabicText(gpsPlace
       ? place.nearbyCity ? t('nearestPlace', { name: place.nearbyCity.cityName || place.nearbyCity.name }) : t('nearestPlaceUnknown')
-      : compactPlaceLabel(place.cityName || place.name, locale)}</p>
+      : compactPlaceLabel(place.cityName || place.name, locale))}</p>
       {gpsPlace ? <><p className="note location-coordinates">{formatCoordinates(place.latitude, place.longitude)}</p><p className="note">{formatAccuracy(place.accuracy, locale)}</p></>
-        : place.region ? <p className="note">{place.region.name}</p> : null}
+        : place.region ? <p className="note">{markArabicText(place.region.name)}</p> : null}
       <div className="location-timezone" aria-label={t('timezone')}>
         <p className="note"><span>{t('timezone')}:</span> <code>{place.timeZone}</code> <span>({getUtcOffset(currentTime, place.timeZone)})</span></p>
       </div>
@@ -94,7 +95,7 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
         const disambiguation = recentManualDisambiguation(item, recent, locale)
         return <ActionRow key={item.id} title={title}
           {...(disambiguation ? {
-            secondary: <span className="note">{disambiguation}</span>,
+            secondary: <span className="note">{markArabicText(disambiguation)}</span>,
             'aria-label': `${title}, ${disambiguation}`,
           } : {})}
           onClick={() => onSelectRecent(item)} />
@@ -200,7 +201,7 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
         const nearby = city.nearbyMajorCity
         const cityName = city.name
         return <li key={city.id}><ActionRow className="city-result" aria-label={`${localizedCityLabel({ ...city, name: cityName }, sameLabel, locale, t)}, ${cityFeatureLabel(city, t)}`} title={cityName}
-          secondary={<span className="note">{entityContext}{sameLabel ? ` · ${city.id}` : ''}</span>}
+          secondary={<span className="note">{markArabicText(entityContext)}{sameLabel ? ` · ${city.id}` : ''}</span>}
           onClick={() => onSelectCity(city)} />
           {nearby ? <ActionRow className="city-result" title={t('cityNearbyMajor', {
             name: nearby.city.name, distance: Math.round(nearby.distanceKm),

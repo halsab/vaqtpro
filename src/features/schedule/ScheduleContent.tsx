@@ -13,6 +13,7 @@ import { PROFILE_LABEL_KEYS } from '../../ui/calculationLabels'
 import type { DisplaySchedule } from './usePrayerSchedules'
 import { useLocalization } from '../../localization'
 import { formatLocalizedCalendarFullDate } from '../../localization/calendar'
+import { markArabicText } from '../../ui/ArabicText'
 import { FastingCard } from '../fasting/FastingCard'
 import { DEFAULT_FASTING_MODE_PREFERENCES, buildFastingScheduleEvents, type FastingModePreferences, type FastingScheduleEvents } from '../../domain/fasting'
 import { useClockCorrection } from '../../ui/useLiveClock'
@@ -33,7 +34,7 @@ function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
       const past = live && !active && event.instant <= now.getTime()
       return <li key={event.key} className={`event-row${past ? ' event-past' : ''}${active ? ' event-current' : ''}`} aria-current={active || undefined}>
         <div className="event-name"><span>{t(SCHEDULE_EVENT_LABEL_KEYS[event.key])}</span>
-          {event.dayOffset ? <small className="event-day">{formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale)}</small> : null}
+          {event.dayOffset ? <small className="event-day">{markArabicText(formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale))}</small> : null}
         </div>
         <time dateTime={new Date(event.instant).toISOString()}>{event.time}</time>
       </li>

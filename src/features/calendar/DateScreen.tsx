@@ -14,7 +14,7 @@ interface SelectOption { value: string; label: string; disabled?: boolean }
 function SelectRow({ label, value, options, onChange, selectRef, valueLanguage }: {
   label: string; value: string; options: SelectOption[]; onChange: (value: string) => void
   selectRef?: RefObject<HTMLSelectElement | null>
-  valueLanguage?: 'ar'
+  valueLanguage?: 'ar' | undefined
 }) {
   return <label className="pill pill-row date-field">
     <span aria-hidden="true">{markArabicText(label)}</span>

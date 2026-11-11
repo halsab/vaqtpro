@@ -38,7 +38,7 @@ function JellyButton({ preset = 'standard', baseClassName, className, type = 'bu
   return <button ref={mergedRef} type={type} disabled={disabled} data-jelly-preset={preset}
     className={`${baseClassName} jelly-action${className ? ` ${className}` : ''}`} {...rest}>
     <canvas ref={canvasRef} className="jelly-action-canvas" aria-hidden="true" />
-    {children}
+    {typeof children === 'string' ? markArabicText(children) : children}
   </button>
 }
 
