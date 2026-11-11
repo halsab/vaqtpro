@@ -175,7 +175,6 @@ export function PrayerMonthTable({ rows, labels, weekdayLabels, dateLabel, table
           const entry = schedule?.entries[key]
           if (!entry) return createElement('td', { key, 'aria-label': t('monthlyTimeUnavailable') }, '—')
           return createElement('td', { key }, createElement('span', { className: 'prayer-month-time' },
-            schedule.estimatedPrayers.includes(key) ? createElement('span', { className: 'prayer-month-estimated', 'aria-label': t('estimatedTime') }, `${t('estimatedApproximation')} `) : null,
             createElement('time', { dateTime: new Date(entry.instant).toISOString() }, entry.time)))
         }))))))
 }
