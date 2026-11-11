@@ -506,7 +506,6 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
           <span className="qibla-cardinal qibla-cardinal-south">{t('qiblaSouth')}</span>
           <span className="qibla-cardinal qibla-cardinal-west">{t('qiblaWest')}</span>
         </div>
-        <span className="qibla-forward-marker" aria-hidden="true" />
         <span ref={pointerRef} className="qibla-pointer" data-visible={pointerVisible || undefined} aria-hidden="true" />
         <span className="qibla-center" aria-hidden="true" />
       </div>

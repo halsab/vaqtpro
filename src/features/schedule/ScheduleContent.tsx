@@ -13,6 +13,7 @@ import { PROFILE_LABEL_KEYS } from '../../ui/calculationLabels'
 import type { DisplaySchedule } from './usePrayerSchedules'
 import { useLocalization } from '../../localization'
 import { formatLocalizedCalendarFullDate } from '../../localization/calendar'
+import { markArabicText } from '../../ui/ArabicText'
 import { FastingCard } from '../fasting/FastingCard'
 import { DEFAULT_FASTING_MODE_PREFERENCES, buildFastingScheduleEvents, type FastingModePreferences, type FastingScheduleEvents } from '../../domain/fasting'
 import { useClockCorrection } from '../../ui/useLiveClock'
@@ -20,10 +21,6 @@ import { useClockCorrection } from '../../ui/useLiveClock'
 const COUNTDOWN: Record<CalculatedPrayerKey, Parameters<ReturnType<typeof useLocalization>['t']>[0]> = {
   fajr: 'countdownFajr', sunrise: 'countdownSunrise',
   zenith: 'countdownZenith', dhuhr: 'countdownDhuhr', asr: 'countdownAsr', maghrib: 'countdownMaghrib', isha: 'countdownIsha',
-}
-
-function estimated(event: ResolvedScheduleEvent, schedules: DisplaySchedule[]): boolean {
-  return schedules.some(day => day.date === event.scheduleDate && day.estimatedPrayers.includes(event.key))
 }
 
 function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
@@ -37,10 +34,9 @@ function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
       const past = live && !active && event.instant <= now.getTime()
       return <li key={event.key} className={`event-row${past ? ' event-past' : ''}${active ? ' event-current' : ''}`} aria-current={active || undefined}>
         <div className="event-name"><span>{t(SCHEDULE_EVENT_LABEL_KEYS[event.key])}</span>
-          {event.dayOffset ? <small className="event-day">{formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale)}</small> : null}
+          {event.dayOffset ? <small className="event-day">{markArabicText(formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale))}</small> : null}
         </div>
-        <time dateTime={new Date(event.instant).toISOString()}>{estimated(event, [schedule])
-          ? <span aria-label={t('estimatedTime')}>{t('estimatedApproximation')} </span> : null}{event.time}</time>
+        <time dateTime={new Date(event.instant).toISOString()}>{event.time}</time>
       </li>
     })}
   </ol>
@@ -127,7 +123,6 @@ export function ScheduleContent({ schedule, schedules, scheduleLoading, schedule
             {live && fastingModeEnabled && timeZone ? <FastingCard events={fastingScheduleEvents} preferences={fastingMode}
               selectedDate={selectedDate} today={today} timeZone={timeZone} correction={calendarPreferences.correction}
               hijriSupported={hijriSupported} now={now} {...(onOpenFasting ? { onOpen: onOpenFasting } : {})} /> : null}
-            {schedule.estimatedPrayers.length > 0 ? <p className="note screen-space">{t('estimatedByHighLatitude')}</p> : null}
             {live && !next ? <p className="note screen-space">{t('nextEventUnavailable')}</p> : null}
           </>}
     {notice}

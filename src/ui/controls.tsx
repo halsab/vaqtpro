@@ -2,6 +2,7 @@ import { useCallback, type ComponentProps, type ReactNode, type RefCallback } fr
 
 import { useJellySurface } from './jelly/useJellySurface'
 import type { JellyPreset } from './jelly/presets'
+import { markArabicText } from './ArabicText'
 
 export type { JellyPreset } from './jelly/presets'
 
@@ -37,7 +38,7 @@ function JellyButton({ preset = 'standard', baseClassName, className, type = 'bu
   return <button ref={mergedRef} type={type} disabled={disabled} data-jelly-preset={preset}
     className={`${baseClassName} jelly-action${className ? ` ${className}` : ''}`} {...rest}>
     <canvas ref={canvasRef} className="jelly-action-canvas" aria-hidden="true" />
-    {children}
+    {typeof children === 'string' ? markArabicText(children) : children}
   </button>
 }
 
@@ -67,11 +68,14 @@ type ActionRowProps = Omit<ComponentProps<'button'>, 'title'> & {
 /** Полноширинная интерактивная строка списка или настройки. */
 export function ActionRow({ title, value, secondary, preset = 'subtle', ...rest }: ActionRowProps) {
   const stacked = secondary !== undefined
+  const displayTitle = typeof title === 'string' ? markArabicText(title) : title
+  const displayValue = typeof value === 'string' ? markArabicText(value) : value
+  const displaySecondary = typeof secondary === 'string' ? markArabicText(secondary) : secondary
 
   return <JellyButton baseClassName={`pill pill-row${stacked ? ' pill-row--stacked' : ''}`} preset={preset} {...rest}>
     {stacked
-      ? <><span className="action-row-title">{title}</span>{secondary}</>
-      : <><span>{title}</span>{value !== undefined ? <span className="note">{value}</span> : null}</>}
+      ? <><span className="action-row-title">{displayTitle}</span>{displaySecondary}</>
+      : <><span>{displayTitle}</span>{value !== undefined ? <span className="note">{displayValue}</span> : null}</>}
   </JellyButton>
 }
 

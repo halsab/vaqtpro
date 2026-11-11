@@ -2,6 +2,7 @@ import { ActionButton } from '../../ui/controls'
 import type { ReligiousBannerState, ReligiousEventId } from '../../domain/religiousEvents'
 import { useLocalization } from '../../localization'
 import { localizedEventTitle } from '../../localization/religiousEvents'
+import { markArabicText } from '../../ui/ArabicText'
 
 export function ReligiousEventBanner({ state, onOpen }: {
   state: ReligiousBannerState
@@ -18,8 +19,8 @@ export function ReligiousEventBanner({ state, onOpen }: {
         : t('eventCountdown', { event: localizedEventTitle(state.secondary.eventId, locale), count: state.secondary.count })
       : null
   const content = <>
-    <span className="religious-event-banner-title">{title}</span>
-    {secondaryText ? <span className="religious-event-banner-secondary">{secondaryText}</span> : null}
+    <span className="religious-event-banner-title">{markArabicText(title)}</span>
+    {secondaryText ? <span className="religious-event-banner-secondary">{markArabicText(secondaryText)}</span> : null}
   </>
 
   return contentId

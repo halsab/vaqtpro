@@ -7,17 +7,19 @@ import { BackButton, Screen } from '../../ui/Screen'
 import { ActionRow, ActionButton, ScreenFooter } from '../../ui/controls'
 import { useLocalization } from '../../localization'
 import { calendarMonthLabels } from '../../localization/calendar'
+import { markArabicText } from '../../ui/ArabicText'
 
 interface SelectOption { value: string; label: string; disabled?: boolean }
 
-function SelectRow({ label, value, options, onChange, selectRef }: {
+function SelectRow({ label, value, options, onChange, selectRef, valueLanguage }: {
   label: string; value: string; options: SelectOption[]; onChange: (value: string) => void
   selectRef?: RefObject<HTMLSelectElement | null>
+  valueLanguage?: 'ar' | undefined
 }) {
   return <label className="pill pill-row date-field">
-    <span aria-hidden="true">{label}</span>
-    <span className="note" aria-hidden="true">{options.find(option => option.value === value)?.label}</span>
-    <select ref={selectRef} aria-label={label} value={value} onChange={event => onChange(event.target.value)}>
+    <span aria-hidden="true">{markArabicText(label)}</span>
+    <span className="note" aria-hidden="true">{markArabicText(options.find(option => option.value === value)?.label ?? '')}</span>
+    <select ref={selectRef} aria-label={label} lang={valueLanguage} value={value} onChange={event => onChange(event.target.value)}>
       {options.map(option => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>)}
     </select>
   </label>
@@ -54,7 +56,7 @@ export function DateScreen({ selectedDate, today, preferences, hijriSupported, o
         if (value === 'gregorian' || (value === 'hijri' && hijriSupported)) onPreferencesChange({ ...preferences, calendar: value })
       }} />
       <SelectRow label={t('day')} selectRef={dayRef} value={String(date.day)} options={numbers(1, daysInCalendarMonth(date.year, date.month, calendar))} onChange={value => updateDate({ day: Number(value) })} />
-      <SelectRow label={t('month')} value={String(date.month)} options={months.map((label, index) => ({ value: String(index + 1), label }))} onChange={value => updateDate({ month: Number(value) })} />
+      <SelectRow label={t('month')} value={String(date.month)} valueLanguage={calendar === 'hijri' ? 'ar' : undefined} options={months.map((label, index) => ({ value: String(index + 1), label }))} onChange={value => updateDate({ month: Number(value) })} />
       <SelectRow label={t('year')} value={String(date.year)} options={numbers(Math.max(1, Math.min(currentYear - 100, date.year)), Math.max(currentYear + 100, date.year))} onChange={value => updateDate({ year: Number(value) })} />
       {calendar === 'hijri' ? <SelectRow label={t('dateCorrection')} value={String(correction)} options={[
         { value: '-1', label: t('dateMinusOne') }, { value: '0', label: '0' }, { value: '1', label: t('datePlusOne') },

@@ -81,12 +81,12 @@ describe('навигация экранов', () => {
     await user.click(screen.getByRole('button', { name: 'Выбрать дату' }))
     const listButton = screen.getByRole('button', { name: 'Праздники и события' })
     await user.click(listButton)
-    const occurrence = screen.getByRole('button', { name: /Начало Рамадана/ })
+    const occurrence = screen.getByRole('button', { name: /Начало.*رمضان/ })
     await user.click(occurrence)
     expect(screen.getByText('ramadan')).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Назад' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: /Начало Рамадана/ })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Начало.*رمضان/ })).toHaveFocus())
     await user.click(screen.getByRole('button', { name: 'Назад' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Праздники и события' })).toHaveFocus())
 

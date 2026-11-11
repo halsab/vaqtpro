@@ -25,6 +25,15 @@ test('GPS coordinates are disclosed only to the approved GeoNames reverse lookup
     .toMatchObject({ place: { selection: 'gps', latitude, longitude, accuracy: 15 } })
   expect(requests.some(({ url }) => url.startsWith('https://secure.geonames.org/searchJSON'))).toBe(false)
 
+  await page.locator('#home-settings').click()
+  await page.locator('#settings-source').click()
+  await page.locator('#source-info').click()
+  const sourceInfo = page.getByRole('region', { name: 'Сведения об источнике' })
+  await expect(sourceInfo).toContainText(`Место: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`)
+  await expect(sourceInfo).not.toContainText('Выберите место')
+  for (let step = 0; step < 3; step += 1) await page.getByRole('button', { name: 'Назад', exact: true }).click()
+  await expectSchedule(page)
+
   await choosePlace(page, 'Облово', /Облово, Тверская Область, Россия/)
   const recentBeforeRecall = await readSavedSetting(page, 'recentPlaces')
   expect(recentBeforeRecall).toEqual(expect.arrayContaining([expect.objectContaining({ selection: 'gps', latitude, longitude, accuracy: 15 })]))
@@ -58,6 +67,7 @@ test('GPS coordinates are disclosed only to the approved GeoNames reverse lookup
     ['lng', String(longitude)],
     ['radius', '25'],
     ['maxRows', '100'],
+    ['lang', 'ru'],
     ['style', 'FULL'],
   ])
   expect(reverseRequest.searchParams.get('username')).toBeTruthy()

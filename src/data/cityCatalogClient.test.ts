@@ -148,9 +148,12 @@ describe('online place search', () => {
     const service = createCityCatalogService({ fetcher, geonamesUsername: 'vaqtpro-test',
       loadOfflineSeed: () => Promise.resolve(success({ ...offlineSeed, cities: [] })) })
 
-    await expect(service.findNearest(0, 0, 25)).resolves.toMatchObject({
+    await expect(service.findNearest(0, 0, 25, false, 'ru')).resolves.toMatchObject({
       ok: true, value: { id: 602, name: 'Boundary village' },
     })
+    const request = new URL(fetcher.mock.calls[0]?.[0] as URL)
+    expect(request.pathname).toBe('/findNearbyPlaceNameJSON')
+    expect(request.searchParams.get('lang')).toBe('ru')
   })
 
 

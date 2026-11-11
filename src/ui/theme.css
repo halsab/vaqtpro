@@ -1,6 +1,6 @@
 @font-face {
-  font-family: 'Old Timey Mono';
-  src: url('../assets/OldTimeyMono.ttf') format('truetype');
+  font-family: 'PT Mono';
+  src: url('../assets/PTMono-Regular.ttf') format('truetype');
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -14,23 +14,31 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Noto Sans Mono Tatar';
-  src: url('../assets/NotoSansMono-Regular.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
+:lang(ar) { font-family: var(--font-family-arabic) !important; }
+/* Shared Arabic inline styling: +8 px relative to the surrounding text role. */
+.arabic-run {
+  direction: rtl;
+  unicode-bidi: isolate;
+  font-size: calc(1em + var(--arabic-size-offset));
+  line-height: inherit;
 }
-
-:lang(ar) { font-family: 'Kazan Basma Mushaf', serif !important; }
 
 :root {
   color-scheme: light;
-  font-family: 'Old Timey Mono', monospace;
-  --font-footnote: 400 0.875rem/1.5 'Old Timey Mono', monospace;
-  --font-body: 400 1rem/1.4 'Old Timey Mono', monospace;
-  --font-emphasis: 400 1.125rem/1.4 'Old Timey Mono', monospace;
-  --font-title: 400 1.25rem/1.3 'Old Timey Mono', monospace;
+  --font-family-ui: 'PT Mono', 'Kazan Basma Mushaf', monospace;
+  --font-family-arabic: 'Kazan Basma Mushaf', serif;
+  --font-weight-regular: 400;
+  --font-weight-strong: 700;
+  --text-line-height: 1.4;
+  --arabic-size-offset: 8px;
+  --arabic-recitation-line-height: 1.8;
+  --font-footnote: var(--font-weight-regular) 0.875rem/var(--text-line-height) var(--font-family-ui);
+  --font-body: var(--font-weight-regular) 1rem/var(--text-line-height) var(--font-family-ui);
+  --font-emphasis: var(--font-weight-regular) 1.125rem/var(--text-line-height) var(--font-family-ui);
+  --font-title: var(--font-weight-regular) 1.25rem/var(--text-line-height) var(--font-family-ui);
+  --font-arabic-body: var(--font-weight-regular) calc(1rem + var(--arabic-size-offset))/var(--text-line-height) var(--font-family-arabic);
+  --font-arabic-recitation: var(--font-weight-regular) 28px/var(--arabic-recitation-line-height) var(--font-family-arabic);
+  font-family: var(--font-family-ui);
   --background-primary: #000000;
   --app-shell-background: var(--background-primary);
   --background-secondary: #f2f2ee;

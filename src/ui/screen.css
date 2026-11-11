@@ -17,7 +17,7 @@ html, body { background: var(--app-shell-background); color: var(--text-primary)
   .app-bottom-surface { display: block; position: fixed; bottom: 0; left: 0; width: 100%; height: var(--content-inset); background: var(--background-secondary); pointer-events: none; z-index: 1; }
 }
 .app-layout:has(.prayer-month-content) + .app-bottom-surface { background: transparent; }
-body { font-family: 'Old Timey Mono', monospace; font-weight: 400; font-synthesis: none; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-family-ui); font-weight: var(--font-weight-regular); font-synthesis: weight; -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 .app-layout {
   --app-safe-area-top: max(0px, env(safe-area-inset-top, 0px));
@@ -117,7 +117,7 @@ button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
   padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--app-keyboard-inset, 0px));
 }
 .screen-content::-webkit-scrollbar { display: none; }
-.app-screen p, .app-screen h1, .app-screen h2, .app-screen dl, .app-screen dd { margin: 0; font-weight: 400; }
+.app-screen p, .app-screen h1, .app-screen h2, .app-screen dl, .app-screen dd { margin: 0; font-weight: var(--font-weight-regular); }
 .pill, .text-field, .select-field {
   font: var(--font-body);
   appearance: none;
@@ -151,8 +151,8 @@ html[data-input='pointer'] .select-field { outline: none; }
 .pill-row { width: 100%; justify-content: space-between; text-align: left; }
 /* Двухстрочная строка списка: обе строки вертикально и слева. */
 .pill-row--stacked { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; white-space: normal; }
-.action-row-title { font-size: 1rem; line-height: 1.2; }
-.action-row-secondary { font-size: 0.8125rem; line-height: 1.2; color: var(--text-secondary); }
+.action-row-title { font: var(--font-body); }
+.action-row-secondary { font: var(--font-footnote); color: var(--text-secondary); }
 /* Icon-only action: строго 44×44 px с glyph по центру. */
 .icon-button { width: var(--button-height); min-width: var(--button-height); height: var(--button-height); padding: 0; flex: 0 0 var(--button-height); }
 .icon-button svg { width: 24px; height: 24px; display: block; }
@@ -213,10 +213,9 @@ html[data-input='pointer'] .select-field { outline: none; }
 .prayer-month-table tbody tr { height: 44px; }
 .prayer-month-table tbody th, .prayer-month-table tbody td { background: transparent; font: var(--font-body); font-variant-numeric: tabular-nums; }
 .prayer-month-table tbody tr:nth-child(even) > * { background: color-mix(in srgb, var(--background-tertiary) 40%, transparent); }
-.prayer-month-table tbody .prayer-month-date { position: sticky; left: 0; z-index: 2; font-weight: 400; }
+.prayer-month-table tbody .prayer-month-date { position: sticky; left: 0; z-index: 2; font-weight: var(--font-weight-regular); }
 .prayer-month-table .prayer-month-date::after, .prayer-month-table .prayer-month-date-heading::after { content: ''; position: absolute; z-index: 1; inset-block: 0; inset-inline-end: 0; width: 1px; background: var(--text-secondary); opacity: .45; pointer-events: none; }
 .prayer-month-time { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-.prayer-month-estimated { color: var(--text-secondary); font: var(--font-footnote); }
 @media (max-width: 390px) {
   .prayer-month-table th, .prayer-month-table td { padding-inline: 4px; }
   .prayer-month-table tr > :nth-child(-n + 2) { padding-inline: 7px; }
@@ -235,19 +234,18 @@ html[data-input='pointer'] .select-field { outline: none; }
 .home-location-time { flex: 0 0 auto; }
 #home-date { flex: 0 0 auto; white-space: nowrap; }
 .event-countdown { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; color: var(--text-primary); }
-.event-countdown .countdown-label, .event-countdown .countdown-value { line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.event-countdown .countdown-label { font: var(--font-emphasis); line-height: 1.05; color: var(--text-secondary); }
+.event-countdown .countdown-label, .event-countdown .countdown-value { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-countdown .countdown-label { font: var(--font-emphasis); color: var(--text-secondary); }
 .qibla-screen-content { display: grid; grid-template-rows: minmax(0, 1fr); place-items: stretch; padding-top: 0; padding-bottom: 0; }
 .qibla-screen { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; justify-items: center; align-items: center; width: 100%; min-width: 0; min-height: 0; padding-block: 8px; }
 .qibla-dial { position: relative; width: min(100%, 72dvh, 640px); min-width: 0; min-height: 0; max-width: 100%; max-height: 100%; aspect-ratio: 1; border: 1px solid color-mix(in srgb, var(--text-secondary) 42%, transparent); border-radius: 50%; }
 .qibla-rose { position: absolute; inset: 0; transform: rotate(var(--qibla-rose-angle, 0deg)); }
 .qibla-dial:not([data-live='true']) .qibla-rose { visibility: hidden; }
-.qibla-cardinal { position: absolute; z-index: 1; color: var(--text-secondary); font: var(--font-footnote); line-height: 1; }
-.qibla-cardinal-north { top: 8px; left: 50%; transform: translateX(-50%); }
-.qibla-cardinal-east { top: 50%; right: 8px; transform: translateY(-50%); }
-.qibla-cardinal-south { bottom: 8px; left: 50%; transform: translateX(-50%); }
-.qibla-cardinal-west { top: 50%; left: 8px; transform: translateY(-50%); }
-.qibla-forward-marker { position: absolute; z-index: 3; top: 0; left: 50%; width: 9px; height: 9px; border: 2px solid var(--background-primary); border-radius: 50%; background: var(--accent-countdown); transform: translate(-50%, -50%); }
+.qibla-cardinal { position: absolute; z-index: 1; color: var(--text-secondary); font: var(--font-footnote); }
+.qibla-cardinal-north { top: 8px; left: 50%; transform: translateX(-50%) rotate(0deg); }
+.qibla-cardinal-east { top: 50%; right: 8px; transform: translateY(-50%) rotate(90deg); }
+.qibla-cardinal-south { bottom: 8px; left: 50%; transform: translateX(-50%) rotate(180deg); }
+.qibla-cardinal-west { top: 50%; left: 8px; transform: translateY(-50%) rotate(-90deg); }
 .qibla-pointer { position: absolute; z-index: 2; top: 50%; left: 50%; width: 8px; height: 42%; border-radius: 5px; background: var(--text-primary); opacity: 0; visibility: hidden; transform: translate(-50%, -100%) rotate(var(--qibla-angle, 0deg)); transform-origin: 50% 100%; }
 .qibla-pointer[data-visible='true'] { opacity: 1; visibility: visible; }
 .qibla-pointer::before { position: absolute; top: -20px; left: 50%; width: 0; height: 0; border-right: 13px solid transparent; border-bottom: 24px solid var(--text-primary); border-left: 13px solid transparent; content: ''; transform: translateX(-50%); }
@@ -255,7 +253,7 @@ html[data-input='pointer'] .select-field { outline: none; }
 .qibla-static-bearing { position: absolute; bottom: 0; color: var(--text-secondary); font: var(--font-footnote); font-variant-numeric: tabular-nums; }
 .screen-bottom:has(.qibla-footer) { justify-content: center; min-height: 0; }
 .qibla-footer { display: grid; justify-items: center; gap: 4px; width: 100%; padding-top: 8px; text-align: center; }
-.qibla-accuracy { max-width: 100%; color: var(--text-secondary); font: var(--font-footnote); line-height: 1.2; overflow-wrap: anywhere; }
+.qibla-accuracy { max-width: 100%; color: var(--text-secondary); font: var(--font-footnote); overflow-wrap: anywhere; }
 .qibla-recovery { display: grid; justify-items: center; gap: 8px; width: 100%; text-align: center; }
 .qibla-recovery p { max-width: 38ch; color: var(--text-secondary); font: var(--font-footnote); overflow-wrap: anywhere; }
 .qibla-recovery .pill { width: min(100%, 22rem); }
@@ -263,7 +261,7 @@ html[data-input='pointer'] .select-field { outline: none; }
   .qibla-screen { padding-block: 2px; }
   .qibla-dial { width: min(100%, 64dvh, 640px); }
 }
-.event-countdown .countdown-value { font: var(--font-title); line-height: 1.05; color: var(--accent-countdown); font-weight: 400; font-variant-numeric: tabular-nums; }
+.event-countdown .countdown-value { font: var(--font-title); color: var(--accent-countdown); font-variant-numeric: tabular-nums; }
 .event-list { list-style: none; padding: 0; margin: 0; }
 .religious-event-banner {
   font: var(--font-body);
@@ -283,8 +281,8 @@ html[data-input='pointer'] .select-field { outline: none; }
 }
 button.religious-event-banner { appearance: none; cursor: pointer; }
 button.religious-event-banner:active { background: var(--text-primary); color: var(--background-secondary); }
-.religious-event-banner-title { font-size: 16px; line-height: 1.2; }
-.religious-event-banner-secondary { font-size: 13px; line-height: 1.2; color: var(--text-secondary); }
+.religious-event-banner-title { font: var(--font-body); }
+.religious-event-banner-secondary { font: var(--font-footnote); color: var(--text-secondary); }
 .religious-events-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .religious-events-list > li { min-width: 0; }
 .event-row { font: var(--font-emphasis); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding-inline: 4px; color: var(--text-primary); }
@@ -353,16 +351,9 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .share-label { display: block; margin-bottom: 8px; }
 .app-share-url { font: var(--font-body); appearance: none; display: block; width: 100%; height: 2.9em; min-height: 2.9em; padding: 0; margin: 0; border: 0; border-radius: 0; resize: none; background: var(--background-secondary); color: var(--text-primary); letter-spacing: 0; overflow-wrap: anywhere; text-align: center; }
 .markdown-article { font: var(--font-body); overflow-wrap: anywhere; }
-.markdown-article .markdown-arabic {
-  direction: rtl !important;
-  unicode-bidi: isolate !important;
-  font-family: 'Kazan Basma Mushaf', serif !important;
-  font-size: 34px !important;
-  line-height: 1.8 !important;
-}
 .ramadan-article-flow { display: grid; gap: 16px; }
 .ramadan-dhikr-arabic, .recitation-arabic { direction: rtl; text-align: right; unicode-bidi: plaintext; overflow-wrap: anywhere; }
-.recitation-article .recitation-arabic { font-size: 28px; line-height: 1.8; }
+.recitation-article .recitation-arabic { font: var(--font-arabic-recitation); }
 .markdown-article > * + * { margin-top: 16px; }
 .markdown-article > * + blockquote { margin-top: 18px; }
 .markdown-article > blockquote + * { margin-top: 18px; }
@@ -374,8 +365,7 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .markdown-article h1 { font: var(--font-title); color: var(--text-primary); }
 .markdown-article h2 { font: var(--font-emphasis); color: var(--text-primary); }
 .markdown-article p, .markdown-article li, .markdown-article blockquote { font: var(--font-body); }
-.recitation-article .recitation-tatar { font-family: 'Noto Sans Mono Tatar', monospace; }
-.markdown-article strong { font-weight: 700; font-synthesis: weight; }
+.markdown-article strong { font-weight: var(--font-weight-strong); font-synthesis: weight; }
 .markdown-article ul, .markdown-article ol { margin-bottom: 0; padding-left: 1.5em; }
 .markdown-article li + li { margin-top: 8px; }
 .markdown-article blockquote { margin: 0; padding-left: 16px; border-left: 1px solid var(--text-secondary); color: var(--text-secondary); }
@@ -386,6 +376,7 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .date-field > span:first-child, .theme-field > span:first-child { flex-shrink: 0; max-width: 100%; }
 .date-field > .note, .theme-field > .note { flex: 0 1 auto; max-width: 100%; margin-left: auto; }
 .date-field select, .theme-field select { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer; font: var(--font-body); }
+.date-field select[lang="ar"] { font: var(--font-arabic-body); }
 .date-field:has(select:focus-visible), .theme-field:has(select:focus-visible) { outline: 2px solid var(--text-primary); outline-offset: -3px; }
 html[data-input='pointer'] .date-field:has(select:focus-visible), html[data-input='pointer'] .theme-field:has(select:focus-visible) { outline: none; }
 

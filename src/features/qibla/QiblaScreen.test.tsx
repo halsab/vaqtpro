@@ -87,7 +87,6 @@ describe('QiblaScreen orientation presentation', () => {
     expect(screen.getByRole('note', { name: 'Оценка точности компаса: Неизвестна.' })).toBeVisible()
     expect(screen.queryByRole('button', { name: /место|локация|город/i })).toBeNull()
     expect(screen.queryByText(/Живое направление доступно/)).toBeNull()
-    expect(document.querySelector('.qibla-forward-marker')).toBeInTheDocument()
     expect(document.querySelector('.qibla-cardinal')).toBeInTheDocument()
   })
 

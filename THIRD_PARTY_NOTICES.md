@@ -60,21 +60,13 @@ VaqtPro включает данные, шрифт и программные за
   таблица `zone1970.tab` (public domain); Татарстан относится к московской зоне.
   Правила DST/исторических переходов выполняет `Intl` браузера; фиксированные offsets не сохраняются.
 
-## Шрифт: Old Timey Mono
+## Шрифт: PT Mono
 
-- Автор: Darren Embry, © 2024.
-- Источник: https://github.com/dse/old-timey-mono-font
-- Версия: `58d9c1b35168cc2162b0dc5274332432a535aee8`, `dist/ttf/OldTimeyMono.ttf`.
-- Лицензия: SIL Open Font License 1.1; полный текст — `public/old-timey-mono-license.txt`.
+- Автор: ParaType Ltd., © 2011.
+- Источник: https://github.com/google/fonts/tree/main/ofl/ptmono
+- Файл: `src/assets/PTMono-Regular.ttf` (`PTM55FT.ttf`); полный файл содержит все шесть дополнительных букв татарской кириллицы.
+- Лицензия: SIL Open Font License 1.1; полный текст — `public/PTMono-OFL.txt`.
 - Шрифт используется без изменений.
-
-## Шрифт: Noto Sans Mono (татарские тексты)
-
-- Авторы: The Noto Project Authors, © 2018.
-- Источник: https://github.com/notofonts/noto-fonts/tree/main/unhinted/ttf/NotoSansMono
-- Лицензия: SIL Open Font License 1.1; полный текст — `src/assets/NotoSansMono-LICENSE.txt`.
-- Локально поставляется `src/assets/NotoSansMono-Regular.ttf`; применяется только к татарским
-  транскрипциям и переводам. Внешних запросов для загрузки шрифта нет.
 
 ## Шрифт: Kazan Basma Mushaf Normal
 

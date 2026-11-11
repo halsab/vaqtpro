@@ -18,6 +18,7 @@ export interface CityCatalogService {
     longitude: number,
     maxDistanceKm: number,
     localOnly?: boolean,
+    language?: string,
   ) => Promise<Result<City | null, DataFailure>>
   cancelSearch?: () => void
   cancelNearest?: () => void

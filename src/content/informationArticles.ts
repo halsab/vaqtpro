@@ -74,7 +74,7 @@ ${version ? `\nВерсия ${markdownText(version)}.\n` : ''}
 - Онлайн-поиск мест: [GeoNames Web Services](https://www.geonames.org/export/geonames-search.html), поиск класса населённых мест P по всем странам; данные [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 - Небольшой офлайн-список мест: GeoNames (CC BY 4.0).
 - Граница Татарстана: © участники [OpenStreetMap](https://www.openstreetmap.org/copyright) через geoBoundaries (ODbL).
-- Шрифт: Old Timey Mono — © 2024 Darren Embry, [SIL Open Font License 1.1](${import.meta.env.BASE_URL}old-timey-mono-license.txt).
+- Шрифт интерфейса: PT Mono — ParaType, [SIL Open Font License 1.1](${import.meta.env.BASE_URL}PTMono-OFL.txt).
 - Арабский шрифт: Kazan Basma Mushaf Normal — автор Muhammet Abay, © 2021.
 
 [Все источники и лицензии](https://github.com/halsab/vaqtpro/blob/main/THIRD_PARTY_NOTICES.md).`

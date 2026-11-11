@@ -393,7 +393,7 @@ export function App({
     cancelInteractive: cancelInteractiveGps,
     selectLocality, selectCity: selectPresetCity, selectRecent, invalidate: invalidateLocation } = usePlaceSelection(
     services, locations, onPlaceChosen, persistPlace,
-    startupSnapshot ? { place: startupSnapshot.place, source: startupSnapshot.selectionSource } : undefined,
+    startupSnapshot ? { place: startupSnapshot.place, source: startupSnapshot.selectionSource } : undefined, locale,
   )
   const closeLocationDialog = useCallback(() => {
     cancelInteractiveGps()
@@ -765,7 +765,9 @@ export function App({
     saveSettings({ fastingMode: next })
   }
   const homeLocationLabel = homePlaceLabel(place, t('locationUnknown'))
-  const sourcePlaceLabel = compactPlaceLabel(place?.name || t('selectPlace'), locale)
+  const sourcePlaceLabel = place?.selection === 'gps'
+    ? homeLocationLabel
+    : compactPlaceLabel(place?.name || t('selectPlace'), locale)
   const locationTime = place && getUtcOffset(currentTime, place.timeZone) !== getUtcOffset(currentTime, deviceTimeZone)
     ? getZonedTime(currentTime, place.timeZone)
     : undefined
