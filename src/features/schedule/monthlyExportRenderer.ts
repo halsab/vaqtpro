@@ -54,7 +54,7 @@ function seasonFor(month: string): Season {
   return 'autumn'
 }
 
-function createLayout(view: MonthlyExportView, measure: (text: string, size: number) => number): DrawCommand[] {
+export function createLayout(view: MonthlyExportView, measure: (text: string, size: number) => number): DrawCommand[] {
   const columns = Array.from({ length: 8 }, (_, index) => PAGE.inset + (index + 0.5) * 22.5)
   const monthX = PAGE.width - PAGE.inset
   const monthTitleX = monthX + MONTH_TITLE_RIGHT_OFFSET
@@ -86,8 +86,7 @@ function createLayout(view: MonthlyExportView, measure: (text: string, size: num
     commands.push({ type: 'text', text: day, x: columns[0] ?? 26, y: y + 4.8, size: 10.5, tone: 'primary', align: 'center' })
     for (const [eventIndex, event] of row.times.entries()) {
       const x = columns[eventIndex + 1] ?? 0
-      const text = event.value === '—' ? '—' : `${event.estimated ? '≈ ' : ''}${event.value}`
-      commands.push({ type: 'text', text, x, y: y + 4.8, size: 10.5, tone: event.value === '—' || event.estimated ? 'secondary' : 'primary', align: 'center' })
+      commands.push({ type: 'text', text: event.value, x, y: y + 4.8, size: 10.5, tone: event.value === '—' ? 'secondary' : 'primary', align: 'center' })
     }
   }
 
