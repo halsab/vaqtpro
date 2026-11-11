@@ -15,6 +15,7 @@ test('Ramadan dhikr pages support narrow layout, keyboard navigation and browser
   const buttonWidths = await dhikrButtons.evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width))
   expect(buttonWidths.every(width => width >= 44)).toBe(true)
   await expect(article.locator('.markdown-article h1')).toHaveText('رمضان')
+  await expect.poll(() => article.locator('.markdown-article h1 .arabic-run').evaluate(element => getComputedStyle(element).fontSize)).toBe('28px')
 
   await dhikrButtons.first().focus()
   await page.keyboard.press('Enter')

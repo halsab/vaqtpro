@@ -3,6 +3,7 @@ import type { CalendarPreferences } from '../domain/calendar'
 import { ActionButton } from './controls'
 import { useLocalization } from '../localization'
 import { formatLocalizedCalendarDate, formatLocalizedHijriDate } from '../localization/calendar'
+import { markArabicText } from './ArabicText'
 
 export function AppHeader({ locationButtonRef, locationLabel, locationTime, selectedDate, calendarPreferences, onOpenLocation, onOpenDate }: {
   locationButtonRef: RefObject<HTMLButtonElement | null>
@@ -20,11 +21,11 @@ export function AppHeader({ locationButtonRef, locationLabel, locationTime, sele
   return <>
     <ActionButton ref={locationButtonRef} id="home-location" className="home-location" onClick={onOpenLocation}
       aria-label={locationTime ? `${locationLabel} ${locationTime}` : undefined}>
-      <span className="home-location-name">{locationLabel}</span>
+      <span className="home-location-name">{markArabicText(locationLabel)}</span>
       {locationTime ? <span className="home-location-time">{locationTime}</span> : null}
     </ActionButton>
     <ActionButton id="home-date" aria-label={t('chooseDate')} aria-describedby={fullHijriDate ? 'home-date-description' : 'home-date-value'} onClick={onOpenDate}>
-      <time id="home-date-value" dateTime={selectedDate} aria-hidden={fullHijriDate ? 'true' : undefined}>{formatLocalizedCalendarDate(selectedDate, calendarPreferences, locale)}</time>
+      <time id="home-date-value" dateTime={selectedDate} aria-hidden={fullHijriDate ? 'true' : undefined}>{markArabicText(formatLocalizedCalendarDate(selectedDate, calendarPreferences, locale))}</time>
       {fullHijriDate ? <span id="home-date-description" className="sr-only">{fullHijriDate}</span> : null}
     </ActionButton>
   </>

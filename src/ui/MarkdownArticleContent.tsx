@@ -1,28 +1,13 @@
 import { Children, cloneElement, isValidElement, type ReactNode } from 'react'
 import Markdown, { defaultUrlTransform } from 'react-markdown'
+import { markArabicText } from './ArabicText'
 
 const ALLOWED_ELEMENTS = ['h1', 'h2', 'p', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'a']
-const ARABIC_RUN = /(?=\p{Script=Arabic})\p{Letter}(?:[\p{Script=Arabic}\p{Mark}\u0640\u200C-\u200F\u060C\u061B\u061F\u06D4\u066A-\u066D]|[ \u00a0]+(?=(?=\p{Script=Arabic})\p{Letter}))*/gu
-
-function markArabicText(text: string): ReactNode {
-  const output: ReactNode[] = []
-  let offset = 0
-  for (const match of text.matchAll(ARABIC_RUN)) {
-    const index = match.index
-    if (index > offset) output.push(text.slice(offset, index))
-    output.push(<span className="markdown-arabic" dir="rtl" lang="ar" key={`ar-${index}`}>{match[0]}</span>)
-    offset = index + match[0].length
-  }
-  if (!output.length) return text
-  if (offset < text.length) output.push(text.slice(offset))
-  return <>{output}</>
-}
-
 function markArabicChildren(children: ReactNode): ReactNode {
   return Children.map(children, child => {
-    if (typeof child === 'string') return markArabicText(child)
+    if (typeof child === 'string') return markArabicText(child, 'markdown-arabic')
     if (!isValidElement<{ children?: ReactNode; className?: string }>(child)) return child
-    if (child.type === 'span' && child.props.className === 'markdown-arabic') return child
+    if (child.type === 'span' && child.props.className?.split(/\s+/).includes('arabic-run')) return child
     if (child.props.children === undefined) return child
     return cloneElement(child, {}, markArabicChildren(child.props.children))
   })
