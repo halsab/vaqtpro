@@ -18,9 +18,11 @@ function flatText(children: ReactNode): string {
     : isValidElement<{ children?: ReactNode }>(child) ? flatText(child.props.children) : '').join('')
 }
 
-const ARABIC_LEADING = /^\s*(?=\p{Script=Arabic})\p{Letter}/u
+const ARABIC_LETTER = /\p{Script=Arabic}/u
 function blockDirection(children: ReactNode): 'rtl' | undefined {
-  return ARABIC_LEADING.test(flatText(children)) ? 'rtl' : undefined
+  // The entire block must contain only Arabic-script letters. Mixed text follows the UI locale.
+  const letters = flatText(children).match(/\p{Letter}/gu)
+  return letters?.every(letter => ARABIC_LETTER.test(letter)) ? 'rtl' : undefined
 }
 
 export function MarkdownArticleContent({ content }: { content: string }) {

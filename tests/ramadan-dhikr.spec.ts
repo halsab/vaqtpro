@@ -14,8 +14,24 @@ test('Ramadan dhikr pages support narrow layout, keyboard navigation and browser
   await expect(dhikrButtons).toHaveCount(3)
   const buttonWidths = await dhikrButtons.evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width))
   expect(buttonWidths.every(width => width >= 44)).toBe(true)
-  await expect(article.locator('.markdown-article h1')).toHaveText('رمضان')
-  await expect.poll(() => article.locator('.markdown-article h1 .arabic-run').evaluate(element => getComputedStyle(element).fontSize)).toBe('28px')
+  const heading = article.locator('.markdown-article h1')
+  await expect(heading).toHaveText('رمضان')
+  await expect(heading).toHaveAttribute('dir', 'rtl')
+  await expect.poll(() => heading.evaluate(element => getComputedStyle(element).direction)).toBe('rtl')
+  await expect.poll(() => heading.locator('.arabic-run').evaluate(element => getComputedStyle(element).fontSize)).toBe('28px')
+  await expect.poll(() => heading.evaluate(element => {
+    const arabic = element.querySelector('.arabic-run')
+    return arabic !== null && Math.abs(arabic.getBoundingClientRect().right - element.getBoundingClientRect().right) <= 2
+  })).toBe(true)
+
+  const mixedParagraph = article.locator('.markdown-article p').filter({ hasText: 'месяц обязательного поста' }).first()
+  await expect(mixedParagraph).toContainText('رمضان')
+  await expect(mixedParagraph).not.toHaveAttribute('dir', 'rtl')
+  await expect.poll(() => mixedParagraph.evaluate(element => getComputedStyle(element).direction)).toBe('ltr')
+  await expect.poll(() => mixedParagraph.evaluate(element => {
+    const arabic = element.querySelector('.arabic-run')
+    return arabic !== null && Math.abs(arabic.getBoundingClientRect().left - element.getBoundingClientRect().left) <= 2
+  })).toBe(true)
 
   await dhikrButtons.first().focus()
   await page.keyboard.press('Enter')
