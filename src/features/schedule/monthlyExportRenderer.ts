@@ -4,7 +4,7 @@ import springPattern from '../../../public/seasonal-patterns/vaqtpro-spring-tran
 import summerPattern from '../../../public/seasonal-patterns/vaqtpro-summer-transparent-seamless.png?url'
 import autumnPattern from '../../../public/seasonal-patterns/vaqtpro-autumn-transparent-seamless.png?url'
 import winterPattern from '../../../public/seasonal-patterns/vaqtpro-winter-transparent-seamless.png?url'
-import fontUrl from '../../assets/OldTimeyMono.ttf?url'
+import fontUrl from '../../assets/PTMono-Regular.ttf?url'
 import type { MonthlyExportView } from './monthlyExportModel'
 
 const MM_TO_PT = 72 / 25.4
@@ -54,7 +54,7 @@ function seasonFor(month: string): Season {
   return 'autumn'
 }
 
-function createLayout(view: MonthlyExportView, measure: (text: string, size: number) => number): DrawCommand[] {
+export function createLayout(view: MonthlyExportView, measure: (text: string, size: number) => number): DrawCommand[] {
   const columns = Array.from({ length: 8 }, (_, index) => PAGE.inset + (index + 0.5) * 22.5)
   const monthX = PAGE.width - PAGE.inset
   const monthTitleX = monthX + MONTH_TITLE_RIGHT_OFFSET
@@ -86,8 +86,7 @@ function createLayout(view: MonthlyExportView, measure: (text: string, size: num
     commands.push({ type: 'text', text: day, x: columns[0] ?? 26, y: y + 4.8, size: 10.5, tone: 'primary', align: 'center' })
     for (const [eventIndex, event] of row.times.entries()) {
       const x = columns[eventIndex + 1] ?? 0
-      const text = event.value === '—' ? '—' : `${event.estimated ? '≈ ' : ''}${event.value}`
-      commands.push({ type: 'text', text, x, y: y + 4.8, size: 10.5, tone: event.value === '—' || event.estimated ? 'secondary' : 'primary', align: 'center' })
+      commands.push({ type: 'text', text: event.value, x, y: y + 4.8, size: 10.5, tone: event.value === '—' ? 'secondary' : 'primary', align: 'center' })
     }
   }
 
@@ -188,8 +187,8 @@ async function loadAssets(month: string): Promise<ExportAssets> {
 export async function renderMonthlyPdf(view: MonthlyExportView, month: string, filename: string): Promise<File> {
   const assets = await loadAssets(month)
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
-  pdf.addFileToVFS('OldTimeyMono.ttf', bytesToBase64(assets.fontBytes))
-  pdf.addFont('OldTimeyMono.ttf', 'MonthlyExportMono', 'normal')
+  pdf.addFileToVFS('PTMono-Regular.ttf', bytesToBase64(assets.fontBytes))
+  pdf.addFont('PTMono-Regular.ttf', 'MonthlyExportMono', 'normal')
   pdf.setFont('MonthlyExportMono', 'normal')
   pdf.setFontSize(10.5)
   const commands = createLayout(view, (text, size) => pdf.getTextWidth(text) * MM_TO_PT * (size / 10.5))

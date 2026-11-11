@@ -1,9 +1,18 @@
 @font-face {
-  font-family: 'Old Timey Mono';
-  src: url('../assets/OldTimeyMono.ttf') format('truetype');
+  font-family: 'PT Mono';
+  src: url('../assets/PTMono-Regular.ttf') format('truetype');
   font-style: normal;
   font-weight: 400;
   font-display: swap;
+}
+
+@font-face {
+  font-family: 'PT Mono';
+  src: url('../assets/PTMono-Tatar.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  unicode-range: U+04A2-04A3, U+04AE-04AF, U+04B6-04B7, U+04BA-04BB, U+04D8-04D9, U+04E8-04E9;
 }
 
 @font-face {
@@ -14,23 +23,15 @@
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Noto Sans Mono Tatar';
-  src: url('../assets/NotoSansMono-Regular.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
 :lang(ar) { font-family: 'Kazan Basma Mushaf', serif !important; }
 
 :root {
   color-scheme: light;
-  font-family: 'Old Timey Mono', monospace;
-  --font-footnote: 400 0.875rem/1.5 'Old Timey Mono', monospace;
-  --font-body: 400 1rem/1.4 'Old Timey Mono', monospace;
-  --font-emphasis: 400 1.125rem/1.4 'Old Timey Mono', monospace;
-  --font-title: 400 1.25rem/1.3 'Old Timey Mono', monospace;
+  font-family: 'PT Mono', 'Kazan Basma Mushaf', monospace;
+  --font-footnote: 400 0.875rem/1.5 'PT Mono', 'Kazan Basma Mushaf', monospace;
+  --font-body: 400 1rem/1.4 'PT Mono', 'Kazan Basma Mushaf', monospace;
+  --font-emphasis: 400 1.125rem/1.4 'PT Mono', 'Kazan Basma Mushaf', monospace;
+  --font-title: 400 1.25rem/1.3 'PT Mono', 'Kazan Basma Mushaf', monospace;
   --background-primary: #000000;
   --app-shell-background: var(--background-primary);
   --background-secondary: #f2f2ee;

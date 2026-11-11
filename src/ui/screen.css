@@ -17,7 +17,7 @@ html, body { background: var(--app-shell-background); color: var(--text-primary)
   .app-bottom-surface { display: block; position: fixed; bottom: 0; left: 0; width: 100%; height: var(--content-inset); background: var(--background-secondary); pointer-events: none; z-index: 1; }
 }
 .app-layout:has(.prayer-month-content) + .app-bottom-surface { background: transparent; }
-body { font-family: 'Old Timey Mono', monospace; font-weight: 400; font-synthesis: none; -webkit-font-smoothing: antialiased; }
+body { font-family: 'PT Mono', 'Kazan Basma Mushaf', monospace; font-weight: 400; font-synthesis: none; -webkit-font-smoothing: antialiased; }
 button, input, select, textarea { font-family: inherit; letter-spacing: 0; }
 .app-layout {
   --app-safe-area-top: max(0px, env(safe-area-inset-top, 0px));
@@ -216,7 +216,6 @@ html[data-input='pointer'] .select-field { outline: none; }
 .prayer-month-table tbody .prayer-month-date { position: sticky; left: 0; z-index: 2; font-weight: 400; }
 .prayer-month-table .prayer-month-date::after, .prayer-month-table .prayer-month-date-heading::after { content: ''; position: absolute; z-index: 1; inset-block: 0; inset-inline-end: 0; width: 1px; background: var(--text-secondary); opacity: .45; pointer-events: none; }
 .prayer-month-time { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
-.prayer-month-estimated { color: var(--text-secondary); font: var(--font-footnote); }
 @media (max-width: 390px) {
   .prayer-month-table th, .prayer-month-table td { padding-inline: 4px; }
   .prayer-month-table tr > :nth-child(-n + 2) { padding-inline: 7px; }
@@ -243,11 +242,14 @@ html[data-input='pointer'] .select-field { outline: none; }
 .qibla-rose { position: absolute; inset: 0; transform: rotate(var(--qibla-rose-angle, 0deg)); }
 .qibla-dial:not([data-live='true']) .qibla-rose { visibility: hidden; }
 .qibla-cardinal { position: absolute; z-index: 1; color: var(--text-secondary); font: var(--font-footnote); line-height: 1; }
-.qibla-cardinal-north { top: 8px; left: 50%; transform: translateX(-50%); }
-.qibla-cardinal-east { top: 50%; right: 8px; transform: translateY(-50%); }
-.qibla-cardinal-south { bottom: 8px; left: 50%; transform: translateX(-50%); }
-.qibla-cardinal-west { top: 50%; left: 8px; transform: translateY(-50%); }
-.qibla-forward-marker { position: absolute; z-index: 3; top: 0; left: 50%; width: 9px; height: 9px; border: 2px solid var(--background-primary); border-radius: 50%; background: var(--accent-countdown); transform: translate(-50%, -50%); }
+.qibla-cardinal-north { top: 8px; left: 50%; transform: translateX(-50%) rotate(0deg); }
+.qibla-cardinal-east { top: 50%; right: 8px; transform: translateY(-50%) rotate(90deg); }
+.qibla-cardinal-south { bottom: 8px; left: 50%; transform: translateX(-50%) rotate(180deg); }
+.qibla-cardinal-west { top: 50%; left: 8px; transform: translateY(-50%) rotate(-90deg); }
+.qibla-forward-marker { position: absolute; z-index: 3; top: 0; left: 50%; width: 9px; height: 9px; border: 2px solid var(--background-primary); border-radius: 50%; background: var(--text-secondary); transform: translate(-50%, -50%); }
+.qibla-target-marker { position: absolute; z-index: 4; inset: 0; border-radius: 50%; opacity: 0; visibility: hidden; transform: rotate(var(--qibla-angle, 0deg)); }
+.qibla-target-marker::before { position: absolute; top: -5px; left: 50%; width: 12px; height: 12px; border: 2px solid var(--background-primary); border-radius: 50%; background: var(--accent-countdown); content: ''; transform: translateX(-50%); }
+.qibla-target-marker[data-visible='true'] { opacity: 1; visibility: visible; }
 .qibla-pointer { position: absolute; z-index: 2; top: 50%; left: 50%; width: 8px; height: 42%; border-radius: 5px; background: var(--text-primary); opacity: 0; visibility: hidden; transform: translate(-50%, -100%) rotate(var(--qibla-angle, 0deg)); transform-origin: 50% 100%; }
 .qibla-pointer[data-visible='true'] { opacity: 1; visibility: visible; }
 .qibla-pointer::before { position: absolute; top: -20px; left: 50%; width: 0; height: 0; border-right: 13px solid transparent; border-bottom: 24px solid var(--text-primary); border-left: 13px solid transparent; content: ''; transform: translateX(-50%); }
@@ -374,7 +376,6 @@ button.religious-event-banner:active { background: var(--text-primary); color: v
 .markdown-article h1 { font: var(--font-title); color: var(--text-primary); }
 .markdown-article h2 { font: var(--font-emphasis); color: var(--text-primary); }
 .markdown-article p, .markdown-article li, .markdown-article blockquote { font: var(--font-body); }
-.recitation-article .recitation-tatar { font-family: 'Noto Sans Mono Tatar', monospace; }
 .markdown-article strong { font-weight: 700; font-synthesis: weight; }
 .markdown-article ul, .markdown-article ol { margin-bottom: 0; padding-left: 1.5em; }
 .markdown-article li + li { margin-top: 8px; }

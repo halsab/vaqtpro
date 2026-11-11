@@ -292,6 +292,7 @@ export function createCityCatalogService(dependencies: {
     url.searchParams.set('lng', String(longitude))
     url.searchParams.set('radius', String(maxDistanceKm))
     url.searchParams.set('maxRows', String(MAX_RESULTS))
+    url.searchParams.set('lang', 'ru')
     url.searchParams.set('style', 'FULL')
     url.searchParams.set('username', geonamesUsername.trim())
     const controller = new AbortController()

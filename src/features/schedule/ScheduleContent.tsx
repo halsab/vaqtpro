@@ -22,10 +22,6 @@ const COUNTDOWN: Record<CalculatedPrayerKey, Parameters<ReturnType<typeof useLoc
   zenith: 'countdownZenith', dhuhr: 'countdownDhuhr', asr: 'countdownAsr', maghrib: 'countdownMaghrib', isha: 'countdownIsha',
 }
 
-function estimated(event: ResolvedScheduleEvent, schedules: DisplaySchedule[]): boolean {
-  return schedules.some(day => day.date === event.scheduleDate && day.estimatedPrayers.includes(event.key))
-}
-
 function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
   schedule: DisplaySchedule; current: ResolvedScheduleEvent | null; now: Date; live: boolean; calendarPreferences: CalendarPreferences
 }) {
@@ -39,8 +35,7 @@ function PrayerSchedule({ schedule, current, now, live, calendarPreferences }: {
         <div className="event-name"><span>{t(SCHEDULE_EVENT_LABEL_KEYS[event.key])}</span>
           {event.dayOffset ? <small className="event-day">{formatLocalizedCalendarFullDate(event.date, calendarPreferences, locale)}</small> : null}
         </div>
-        <time dateTime={new Date(event.instant).toISOString()}>{estimated(event, [schedule])
-          ? <span aria-label={t('estimatedTime')}>{t('estimatedApproximation')} </span> : null}{event.time}</time>
+        <time dateTime={new Date(event.instant).toISOString()}>{event.time}</time>
       </li>
     })}
   </ol>
@@ -127,7 +122,6 @@ export function ScheduleContent({ schedule, schedules, scheduleLoading, schedule
             {live && fastingModeEnabled && timeZone ? <FastingCard events={fastingScheduleEvents} preferences={fastingMode}
               selectedDate={selectedDate} today={today} timeZone={timeZone} correction={calendarPreferences.correction}
               hijriSupported={hijriSupported} now={now} {...(onOpenFasting ? { onOpen: onOpenFasting } : {})} /> : null}
-            {schedule.estimatedPrayers.length > 0 ? <p className="note screen-space">{t('estimatedByHighLatitude')}</p> : null}
             {live && !next ? <p className="note screen-space">{t('nextEventUnavailable')}</p> : null}
           </>}
     {notice}

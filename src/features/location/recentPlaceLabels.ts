@@ -2,10 +2,11 @@ import { compactPlaceLabel, getCountryLabel } from '../../domain/countryLabels'
 import type { Place } from '../../domain/place'
 import type { SupportedLocale } from '../../localization/locale'
 import { formatCoordinates } from './locationState'
+import { localizedGeographicName } from '../../localization/geographicNames'
 
 /** The exact primary text used for manually selected recent places. */
 export function recentManualTitle(place: Place, locale: SupportedLocale): string {
-  if (place.id.startsWith('geonames:')) return place.cityName?.trim() || place.name
+  if (place.id.startsWith('geonames:')) return localizedGeographicName(place.cityId, place.cityName?.trim() || place.name, locale)
   if (place.id.startsWith('locality:')) return place.name
   return compactPlaceLabel(place.name, locale)
 }

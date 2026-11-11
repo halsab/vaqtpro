@@ -13,39 +13,28 @@ export function RecitationArticle({ title, content, articleClassName, arabicClas
   articleClassName?: string
   arabicClassName?: string
 }) {
-  const { t } = useLocalization()
-  const { tatar, russian } = splitTranslations(content.translation)
+  const { locale, t } = useLocalization()
+  const translation = selectTranslation(content.translation, locale)
   return <article className={`markdown-article recitation-article${articleClassName ? ` ${articleClassName}` : ''}`}>
     <h1>{title}</h1>
     <h2>{t('ramadanDhikrArabic')}</h2>
     <p className={`recitation-arabic${arabicClassName ? ` ${arabicClassName}` : ''}`} dir="rtl" lang="ar">{content.arabic}</p>
     <h2>{t('ramadanDhikrTranscription')}</h2>
     <p lang="tt-Cyrl" className="recitation-tatar">{content.transcription}</p>
-    {tatar === null ? null : <>
-      <h2 lang="tt-Cyrl" className="recitation-tatar">Мәгънәсе</h2>
-      <p lang="tt-Cyrl" className="recitation-tatar">{tatar}</p>
-    </>}
-    <h2>{t('ramadanDhikrTranslation')}</h2>
-    <p lang="ru">{russian}</p>
+    {translation ? <><h2 lang={translation.locale}>{t('ramadanDhikrTranslation')}</h2>
+      <p lang={translation.locale}>{translation.text}</p></> : null}
   </article>
 }
 
 /** Present the source's Tatar and Russian sections without altering its wording. */
-function splitTranslations(source: string): { tatar: string | null; russian: string } {
+export function selectTranslation(source: string, locale: string): { locale: 'ru' | 'tt-Cyrl'; text: string } | null {
   const russianLabel = 'Перевод: '
   const tatarLabel = 'Мәгънәсе: '
-  const separator = '\n\n' + russianLabel
-  if (source.startsWith(tatarLabel)) {
-    const boundary = source.indexOf(separator)
-    if (boundary !== -1) {
-      return {
-        tatar: source.slice(tatarLabel.length, boundary),
-        russian: source.slice(boundary + separator.length),
-      }
-    }
-  }
-  return {
-    tatar: null,
-    russian: source.startsWith(russianLabel) ? source.slice(russianLabel.length) : source,
-  }
+  const tatarStart = source.indexOf(tatarLabel)
+  const russianStart = source.indexOf(russianLabel)
+  const tatar = tatarStart < 0 ? null : source.slice(tatarStart + tatarLabel.length, russianStart > tatarStart ? russianStart : undefined).trim()
+  const russian = russianStart < 0 ? null : source.slice(russianStart + russianLabel.length).trim()
+  if (locale === 'ru' && russian) return { locale: 'ru', text: russian }
+  if (locale === 'tt' && tatar) return { locale: 'tt-Cyrl', text: tatar }
+  return null
 }

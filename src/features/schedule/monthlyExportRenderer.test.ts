@@ -1,13 +1,27 @@
 import { expect, it, vi } from 'vitest'
 
 import type { MonthlyExportView } from './monthlyExportModel'
-import { prepareMonthlyPdf } from './monthlyExportRenderer'
+import { createLayout, prepareMonthlyPdf } from './monthlyExportRenderer'
 
 const view: MonthlyExportView = {
   month: '2026-10', monthTitle: 'Октябрь 2026', location: 'Казань',
   headers: ['День', 'Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша'],
   brandSubtitle: 'Времена намаза', sourcePrefix: 'Источник: ', sourceUrl: 'https://vaqt.pro', rows: [],
 }
+
+it('keeps estimated prayer times plain in the exported PDF layout', () => {
+  const summerView: MonthlyExportView = {
+    ...view,
+    month: '2026-06',
+    rows: [{ date: '2026-06-15', day: '15', weekday: 'пн', times: [
+      { value: '02:10', estimated: true },
+      ...Array.from({ length: 6 }, () => ({ value: '12:34', estimated: false })),
+    ] }],
+  }
+  const commands = createLayout(summerView, () => 0)
+  expect(commands).toContainEqual(expect.objectContaining({ type: 'text', text: '02:10', tone: 'primary' }))
+  expect(commands.some(command => command.type === 'text' && command.text.includes('≈'))).toBe(false)
+})
 
 it('generates only a PDF with the current month/location and caches the result', async () => {
   const renderer = vi.fn((_view: MonthlyExportView, _month: string, filename: string) =>
