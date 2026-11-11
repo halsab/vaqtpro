@@ -30,7 +30,7 @@ test('Arabic Markdown uses the bundled Mushaf font on narrow screens in both the
   await expect.poll(() => arabic.first().evaluate(element => getComputedStyle(element).fontFamily)).toContain('Kazan Basma Mushaf')
   await expect.poll(() => arabic.first().evaluate(element => {
     const size = parseFloat(getComputedStyle(element).fontSize)
-    const parentSize = parseFloat(getComputedStyle(element.parentElement!).fontSize)
+    const parentSize = parseFloat(getComputedStyle(element.parentElement ?? element).fontSize)
     return size - parentSize
   })).toBe(8)
   await expect.poll(() => arabic.first().evaluate(element => {
@@ -45,7 +45,7 @@ test('Arabic Markdown uses the bundled Mushaf font on narrow screens in both the
     await expect.poll(() => arabic.first().evaluate(element => getComputedStyle(element).fontFamily)).toContain('Kazan Basma Mushaf')
     await expect.poll(() => arabic.first().evaluate(element => {
       const size = parseFloat(getComputedStyle(element).fontSize)
-      const parentSize = parseFloat(getComputedStyle(element.parentElement!).fontSize)
+      const parentSize = parseFloat(getComputedStyle(element.parentElement ?? element).fontSize)
       return size - parentSize
     })).toBe(8)
     await expect.poll(() => page.evaluate(() => document.fonts.check('24px "Kazan Basma Mushaf"'))).toBe(true)
