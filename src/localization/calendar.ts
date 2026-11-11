@@ -4,7 +4,7 @@ import {
   type CalendarPreferences,
 } from '../domain/calendar'
 import { formatLocaleDate } from './formatters'
-import { translate, type MessageKey, type Translator } from './messages'
+import type { MessageKey, Translator } from './messages'
 import type { SupportedLocale } from './locale'
 
 const GREGORIAN_MONTH_KEYS = [
@@ -35,7 +35,7 @@ export function formatLocalizedCalendarDate(
     return formatLocaleDate(date, locale, { day: 'numeric', month: 'long' })
   }
   const parts = calendarDateFromCivil(date, 'hijri', preferences.correction)
-  const month = formatLocalizedHijriMonth(parts.month, locale, true)
+  const month = formatLocalizedHijriMonth(parts.month)
   return month ? `${parts.day} \u2068${month}\u2069` : String(parts.day)
 }
 
@@ -48,17 +48,16 @@ export function formatLocalizedCalendarFullDate(
     return formatLocaleDate(date, locale, { day: 'numeric', month: 'long' })
   }
   const parts = calendarDateFromCivil(date, 'hijri', preferences.correction)
-  const month = formatLocalizedHijriMonth(parts.month, locale)
+  const month = formatLocalizedHijriMonth(parts.month)
   return month ? `${parts.day} \u2068${month}\u2069` : String(parts.day)
 }
 
 export function formatLocalizedHijriDate(
   date: string,
   preferences: CalendarPreferences,
-  locale: SupportedLocale = 'ru',
 ): string {
   const parts = calendarDateFromCivil(date, 'hijri', preferences.correction)
-  const month = formatLocalizedHijriMonth(parts.month, locale)
+  const month = formatLocalizedHijriMonth(parts.month)
   return month ? `${parts.day} \u2068${month}\u2069 ${parts.year}` : `${parts.day} ${parts.year}`
 }
 
@@ -92,14 +91,6 @@ export function formatLocalizedGregorianNightRange(
   return `${previous.day}–${target.day} ${target.month} ${target.year}`
 }
 
-export function formatLocalizedHijriMonth(
-  month: number,
-  locale: SupportedLocale = 'ru',
-  compact = false,
-): string {
-  void locale
-  const name = HIJRI_MONTH_NAMES_ARABIC[month - 1]
-  if (!name) return ''
-  if (!compact || name.length <= 9) return name
-  return name
+export function formatLocalizedHijriMonth(month: number): string {
+  return HIJRI_MONTH_NAMES_ARABIC[month - 1] ?? ''
 }

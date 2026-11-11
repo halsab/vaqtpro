@@ -11,7 +11,7 @@ export function formatReligiousEventOccurrenceDate(occurrence: ReligiousEventOcc
   const gregorian = occurrence.kind === 'night'
     ? formatLocalizedGregorianNightRange(occurrence.civilDate, addDays(occurrence.civilDate, -1), locale)
     : formatLocalizedGregorianDate(occurrence.civilDate, locale)
-  const hijriMonth = formatLocalizedHijriMonth(occurrence.hijriDate.month, locale)
+  const hijriMonth = formatLocalizedHijriMonth(occurrence.hijriDate.month)
   const hijri = `${occurrence.hijriDate.day} \u2068${hijriMonth}\u2069 ${occurrence.hijriDate.year}`
   return `${gregorian} · ${hijri}`
 }

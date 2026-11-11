@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { selectTranslation } from './RecitationArticle'
+import { selectTranslation } from './recitationTranslations'
 
 const source = 'Мәгънәсе: татарча\n\nПеревод: по-русски'
 

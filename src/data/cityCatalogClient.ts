@@ -276,7 +276,7 @@ export function createCityCatalogService(dependencies: {
     }
   }
 
-  const findNearest = async (latitude: number, longitude: number, maxDistanceKm: number, localOnly = false): Promise<Result<City | null, DataFailure>> => {
+  const findNearest = async (latitude: number, longitude: number, maxDistanceKm: number, localOnly = false, language = 'ru'): Promise<Result<City | null, DataFailure>> => {
     if (!validNearestQuery(latitude, longitude, maxDistanceKm)) return failure({ kind: 'data', reason: 'invalid' })
     const offlineNearest = async (): Promise<Result<City | null, DataFailure>> => {
       const loaded = await load()
@@ -292,7 +292,7 @@ export function createCityCatalogService(dependencies: {
     url.searchParams.set('lng', String(longitude))
     url.searchParams.set('radius', String(maxDistanceKm))
     url.searchParams.set('maxRows', String(MAX_RESULTS))
-    url.searchParams.set('lang', 'ru')
+    url.searchParams.set('lang', language)
     url.searchParams.set('style', 'FULL')
     url.searchParams.set('username', geonamesUsername.trim())
     const controller = new AbortController()

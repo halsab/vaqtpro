@@ -134,7 +134,6 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
   const session = useRef<ReturnType<typeof createOrientationSession> | null>(null)
   const traceRef = useRef<QiblaDiagnosticTrace | null>(null)
   const pointerRef = useRef<HTMLSpanElement>(null)
-  const targetRef = useRef<HTMLSpanElement>(null)
   const roseRef = useRef<HTMLDivElement>(null)
   const frameRequest = useRef<number | null>(null)
   const pendingPointerAngle = useRef(0)
@@ -185,7 +184,6 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
     const handle = window.requestAnimationFrame(() => {
       if (frameRequest.current === handle) frameRequest.current = null
       if (pointerRef.current) pointerRef.current.style.setProperty('--qibla-angle', `${pendingPointerAngle.current}deg`)
-      if (targetRef.current) targetRef.current.style.setProperty('--qibla-angle', `${pendingPointerAngle.current}deg`)
       if (roseRef.current) roseRef.current.style.setProperty('--qibla-rose-angle', `${pendingNorthRotation.current}deg`)
     })
     frameRequest.current = handle
@@ -508,8 +506,6 @@ export function QiblaScreen({ place, onBack }: { place: Place | null; onBack: ()
           <span className="qibla-cardinal qibla-cardinal-south">{t('qiblaSouth')}</span>
           <span className="qibla-cardinal qibla-cardinal-west">{t('qiblaWest')}</span>
         </div>
-        <span className="qibla-forward-marker" aria-hidden="true" />
-        <span ref={targetRef} className="qibla-target-marker" data-visible={pointerVisible || undefined} aria-hidden="true" />
         <span ref={pointerRef} className="qibla-pointer" data-visible={pointerVisible || undefined} aria-hidden="true" />
         <span className="qibla-center" aria-hidden="true" />
       </div>

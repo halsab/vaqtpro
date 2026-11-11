@@ -73,7 +73,6 @@ import { useSystemAppearance } from './ui/useSystemAppearance'
 import { setExecutionQuiescence } from './platform/executionGate'
 import { deferredModuleReloadUrl, deferredModuleRetryUrl } from './platform/deferredModuleRecovery'
 import { setLanguagePreference, useLocalization } from './localization'
-import { localizedGeographicName } from './localization/geographicNames'
 import { PROFILE_LABEL_KEYS } from './ui/calculationLabels'
 import { scheduleContextKey } from './domain/scheduleContext'
 import {
@@ -394,7 +393,7 @@ export function App({
     cancelInteractive: cancelInteractiveGps,
     selectLocality, selectCity: selectPresetCity, selectRecent, invalidate: invalidateLocation } = usePlaceSelection(
     services, locations, onPlaceChosen, persistPlace,
-    startupSnapshot ? { place: startupSnapshot.place, source: startupSnapshot.selectionSource } : undefined,
+    startupSnapshot ? { place: startupSnapshot.place, source: startupSnapshot.selectionSource } : undefined, locale,
   )
   const closeLocationDialog = useCallback(() => {
     cancelInteractiveGps()
@@ -765,7 +764,7 @@ export function App({
     setFastingMode(next)
     saveSettings({ fastingMode: next })
   }
-  const homeLocationLabel = localizedGeographicName(place?.cityId, homePlaceLabel(place, t('locationUnknown')), locale)
+  const homeLocationLabel = homePlaceLabel(place, t('locationUnknown'))
   const sourcePlaceLabel = compactPlaceLabel(place?.name || t('selectPlace'), locale)
   const locationTime = place && getUtcOffset(currentTime, place.timeZone) !== getUtcOffset(currentTime, deviceTimeZone)
     ? getZonedTime(currentTime, place.timeZone)

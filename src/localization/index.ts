@@ -2,7 +2,6 @@ export * from './locale'
 export * from './formatters'
 export * from './countdown'
 export * from './messages'
-export * from './geographicNames'
 
 import { useMemo } from 'react'
 import { createTranslator } from './messages'

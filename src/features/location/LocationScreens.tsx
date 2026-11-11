@@ -11,7 +11,6 @@ import { formatAccuracy, formatCoordinates, geolocationFailureMessage, nameLooku
 import { useLocalization } from '../../localization'
 import type { Translator } from '../../localization/messages'
 import type { SupportedLocale } from '../../localization/locale'
-import { localizedGeographicName } from '../../localization/geographicNames'
 import { localizedCityLabel, localizedCityRegion } from '../../localization/place'
 import { getUtcOffset } from '../../domain/locationTime'
 import { isSameRecentPlace } from '../../domain/recentPlaces'
@@ -63,8 +62,8 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
       <p className="note">{t('locationPrayerTimesIntro')}</p>
     </div> : null}
     {place ? <div className="location-current"><p className="screen-title">{gpsPlace
-      ? place.nearbyCity ? t('nearestPlace', { name: localizedGeographicName(place.nearbyCity.id, place.nearbyCity.cityName || place.nearbyCity.name, locale) }) : t('nearestPlaceUnknown')
-      : compactPlaceLabel(localizedGeographicName(place.cityId, place.cityName || place.name, locale), locale)}</p>
+      ? place.nearbyCity ? t('nearestPlace', { name: place.nearbyCity.cityName || place.nearbyCity.name }) : t('nearestPlaceUnknown')
+      : compactPlaceLabel(place.cityName || place.name, locale)}</p>
       {gpsPlace ? <><p className="note location-coordinates">{formatCoordinates(place.latitude, place.longitude)}</p><p className="note">{formatAccuracy(place.accuracy, locale)}</p></>
         : place.region ? <p className="note">{place.region.name}</p> : null}
       <div className="location-timezone" aria-label={t('timezone')}>
@@ -84,7 +83,7 @@ export function LocationScreen({ place, activePlace, recentPlaces, onBack, onSea
         if (item.selection === 'gps') {
           // Название nearby city — только подпись снимка, координаты остаются исходными GPS.
           const cityName = item.nearbyCity && item.nearbyCity.distanceKm <= 25
-            ? localizedGeographicName(item.nearbyCity.id, item.nearbyCity.cityName?.trim() || item.nearbyCity.name.trim(), locale)
+            ? item.nearbyCity.cityName?.trim() || item.nearbyCity.name.trim()
             : ''
           const title = cityName ? t('recentGpsCity', { name: cityName }) : t('recentPoint')
           const coordinates = formatCoordinates(item.latitude, item.longitude)
@@ -120,6 +119,8 @@ interface SearchCompletion { query: string; data: CitySearchResult | null; faile
 
 export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelSearch, onSearchCities, onBack, onSelectLocality, onSelectCity, notice }: SearchScreenProps) {
   const { locale, t } = useLocalization()
+  const localeRef = useRef(locale)
+  useEffect(() => { localeRef.current = locale }, [locale])
   const [text, setText] = useState('')
   const [completion, setCompletion] = useState<SearchCompletion | null>(null)
   const [retry, setRetry] = useState(0)
@@ -133,12 +134,12 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
     if (!query) return
     let active = true
     const timer = setTimeout(() => {
-      void onSearchCities(query, locale).then(result => {
+      void onSearchCities(query, localeRef.current).then(result => {
         if (active) setCompletion({ query, data: result.ok ? result.value : null, failed: !result.ok })
       }).catch(() => { if (active) setCompletion({ query, data: null, failed: true }) })
     }, 350)
     return () => { active = false; clearTimeout(timer) }
-  }, [query, onSearchCities, locale, retry])
+  }, [query, onSearchCities, retry])
   const localities = useMemo(() => query ? locations.filter(item => item.name.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru'))) : [], [locations, query])
   const ready = completion?.query === query ? completion : null
   const pending = query.length >= 2 && !ready
@@ -197,7 +198,7 @@ export function SearchScreen({ locations, catalogStatus, onLoadCities, onCancelS
         const sameLabel = cities.some(other => other.id !== city.id && localizedCityLabel(other, false, locale, t) === localizedCityLabel(city, false, locale, t))
         const entityContext = [city.admin2Name, localizedCityRegion(city, t), getCountryLabel(city.countryCode, locale), cityFeatureLabel(city, t)].filter(Boolean).join(', ')
         const nearby = city.nearbyMajorCity
-        const cityName = localizedGeographicName(city.id, city.name, locale)
+        const cityName = city.name
         return <li key={city.id}><ActionRow className="city-result" aria-label={`${localizedCityLabel({ ...city, name: cityName }, sameLabel, locale, t)}, ${cityFeatureLabel(city, t)}`} title={cityName}
           secondary={<span className="note">{entityContext}{sameLabel ? ` · ${city.id}` : ''}</span>}
           onClick={() => onSelectCity(city)} />

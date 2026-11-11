@@ -6,7 +6,6 @@ import { calculatePrayerSchedule } from '../../domain/prayerCalculation'
 import type { ScheduleContext } from '../../domain/scheduleContext'
 import { PROFILE_LABEL_KEYS } from '../../ui/calculationLabels'
 import { useLocalization } from '../../localization'
-import { localizedGeographicName } from '../../localization/geographicNames'
 import { deferServiceWorkerReload } from '../../platform/serviceWorkerUpdate'
 import { ActionButton } from '../../ui/controls'
 import { BackButton, Screen } from '../../ui/Screen'
@@ -65,7 +64,7 @@ export function PrayerMonthScreen({ place, context, scheduleError, selectedDate,
     t('weekdayWednesdayShort'), t('weekdayThursdayShort'), t('weekdayFridayShort'), t('weekdaySaturdayShort')]
   const exportSnapshot = useMemo(() => context ? {
     month: month.slice(0, 7),
-    location: localizedGeographicName(place?.cityId, homePlaceLabel(place, t('locationUnknown')), locale),
+    location: homePlaceLabel(place, t('locationUnknown')),
     rows: monthSchedules,
   } : null, [context, month, monthSchedules, place, t])
   const error = scheduleError?.code === 'unsupported-profile'

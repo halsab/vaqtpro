@@ -15,7 +15,7 @@ export function AppHeader({ locationButtonRef, locationLabel, locationTime, sele
 }) {
   const { locale, t } = useLocalization()
   const fullHijriDate = calendarPreferences.calendar === 'hijri'
-    ? formatLocalizedHijriDate(selectedDate, calendarPreferences, locale)
+    ? formatLocalizedHijriDate(selectedDate, calendarPreferences)
     : null
   return <>
     <ActionButton ref={locationButtonRef} id="home-location" className="home-location" onClick={onOpenLocation}

@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createOrientationSession, eulerScreenTopHeading, hasRememberedOrientationGrant, quaternionScreenTopHeading } from './qiblaOrientation'
+import type { OrientationReading } from './qiblaOrientation'
 
 describe('Qibla orientation geometry', () => {
+
+  it('compensates screen top exactly once at all right-angle rotations for Euler and quaternion readings', () => {
+    for (const angle of [0, 90, 180, 270]) {
+      expect(eulerScreenTopHeading({ alpha: 0, beta: 0, gamma: 0, screenAngle: angle }))
+        .toMatchObject({ kind: 'heading', heading: angle })
+      expect(quaternionScreenTopHeading([0, 0, 0, 1], angle))
+        .toMatchObject({ kind: 'heading', heading: angle })
+    }
+  })
 
   it('derives a flat cardinal heading from the full Z-X-Y Euler transform', () => {
     expect(eulerScreenTopHeading({ alpha: 0, beta: 0, gamma: 0, screenAngle: 0 })).toMatchObject({ heading: 0 })
@@ -140,7 +150,7 @@ describe('Qibla orientation browser adapters', () => {
     vi.stubGlobal('DeviceOrientationEvent', Object.assign(class extends Event {}, { requestPermission }))
     let screenChange: (() => void) | undefined
     const orientation = {
-      angle: 90,
+      angle: 0,
       addEventListener: vi.fn((_type: string, listener: () => void) => { screenChange = listener }),
       removeEventListener: vi.fn(),
     }
@@ -155,16 +165,49 @@ describe('Qibla orientation browser adapters', () => {
       webkitCompassHeading: 359, webkitCompassAccuracy: 8 })
     window.dispatchEvent(event)
     expect(reports.at(-1)?.status).toBe('live-unverified')
-    expect(reports.at(-1)?.reading?.headingMagneticDegrees).toBe(89)
+    expect(reports.at(-1)?.reading?.headingMagneticDegrees).toBe(359)
     expect(reports.at(-1)?.reading?.northReference).toBe('magnetic')
     expect(reports.at(-1)?.reading?.accuracyDegrees).toBe(8)
-    expect(reports.at(-1)?.reading?.screenAngle).toBe(90)
+    expect(reports.at(-1)?.reading?.screenAngle).toBe(0)
     window.dispatchEvent(Object.assign(new Event('deviceorientation'), { alpha: null, beta: null, gamma: null, absolute: false }))
     expect(reports.at(-1)?.status).toBe('live-unverified')
-    orientation.angle = 180
-    screenChange?.()
-    expect(reports.at(-1)?.reading?.headingMagneticDegrees).toBe(179)
-    expect(reports.at(-1)?.reading?.screenAngle).toBe(180)
+    for (const angle of [90, 180, 270]) {
+      orientation.angle = angle
+      screenChange?.()
+      expect(reports.at(-1)?.reading?.headingMagneticDegrees).toBe((359 + angle) % 360)
+      expect(reports.at(-1)?.reading?.screenAngle).toBe(angle)
+    }
+    session.stop()
+  })
+
+  it('reprojects the latest absolute quaternion after each screen rotation without a new sensor sample', async () => {
+    const instances: { quaternion: Float32Array | null; onreading: (() => void) | null; onerror: (() => void) | null }[] = []
+    class MockAbsoluteOrientationSensor {
+      quaternion: Float32Array | null = new Float32Array([0, 0, 0, 1])
+      onreading: (() => void) | null = null
+      onerror: (() => void) | null = null
+      start() {}
+      stop() {}
+      constructor() { instances.push(this) }
+    }
+    vi.stubGlobal('AbsoluteOrientationSensor', MockAbsoluteOrientationSensor)
+    let screenChange: (() => void) | undefined
+    const orientation = {
+      angle: 0,
+      addEventListener: vi.fn((_type: string, listener: () => void) => { screenChange = listener }),
+      removeEventListener: vi.fn(),
+    }
+    Object.defineProperty(window, 'screen', { configurable: true, value: { orientation } })
+    const readings: OrientationReading[] = []
+    const session = createOrientationSession(window, (_status, reading) => { if (reading) readings.push(reading) })
+    await session.enableFromGesture()
+    instances[0]?.onreading?.()
+    expect(readings.at(-1)?.headingMagneticDegrees).toBe(0)
+    for (const angle of [90, 180, 270]) {
+      orientation.angle = angle
+      screenChange?.()
+      expect(readings.at(-1)).toMatchObject({ headingMagneticDegrees: angle, screenAngle: angle })
+    }
     session.stop()
   })
 

@@ -13,6 +13,7 @@ import type { GeolocationFailure } from '../../domain/errors'
 import type { Result } from '../../domain/result'
 import type { Locality } from '../../domain/types'
 import { translate } from '../../localization'
+import type { SupportedLocale } from '../../localization/locale'
 import type { Coordinates, GeolocationPermission, PositionAccuracy } from '../../platform/browser'
 import { geolocationFailureMessage, isLowAccuracy, preferredGeolocationFailure, type GpsUiState, type NameLookupState } from './locationState'
 
@@ -29,8 +30,10 @@ interface PlaceSelectionServices {
 
 export function usePlaceSelection(services: PlaceSelectionServices, locations: Locality[], onChosen: () => void,
   persist: (choice: LocationChoice, change?: PlacePersistenceChange) => void,
-  initial?: { place: Place; source: LocationSelectionSource }) {
+  initial?: { place: Place; source: LocationSelectionSource }, locale: SupportedLocale = 'ru') {
   const [place, setPlace] = useState<Place | null>(() => initial?.place ?? null)
+  const localeRef = useRef(locale)
+  useEffect(() => { localeRef.current = locale }, [locale])
   const [source, setSource] = useState<LocationSelectionSource>(() => initial?.source ?? 'default')
   const [notice, setNotice] = useState<string | null>(null)
   const [gpsState, setGpsState] = useState<GpsUiState>({ status: 'idle' })
@@ -137,7 +140,7 @@ export function usePlaceSelection(services: PlaceSelectionServices, locations: L
       setNameLookupState('loading')
       // Интерактивный запрос может загрузить только вычисленный spatial package; фон остаётся local-only.
       try {
-        const result = await services.cities.findNearest(next.latitude, next.longitude, 25, !interactive)
+        const result = await services.cities.findNearest(next.latitude, next.longitude, 25, !interactive, localeRef.current)
         if (operation !== epoch.current || revision !== lookupRevision) return
         if (!result.ok) {
           setNameLookupState(result.error.reason === 'offline' ? 'offline' : 'failed')

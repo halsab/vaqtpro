@@ -64,7 +64,7 @@ VaqtPro включает данные, шрифт и программные за
 
 - Автор: ParaType Ltd., © 2011.
 - Источник: https://github.com/google/fonts/tree/main/ofl/ptmono
-- Файлы: `src/assets/PTMono-Regular.ttf` (`PTM55FT.ttf`) и официальный текстовый subset `src/assets/PTMono-Tatar.ttf` для шести дополнительных букв татарской кириллицы.
+- Файл: `src/assets/PTMono-Regular.ttf` (`PTM55FT.ttf`); полный файл содержит все шесть дополнительных букв татарской кириллицы.
 - Лицензия: SIL Open Font License 1.1; полный текст — `public/PTMono-OFL.txt`.
 - Шрифт используется без изменений.
 

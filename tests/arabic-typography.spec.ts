@@ -10,7 +10,11 @@ test('Arabic Markdown uses the bundled Mushaf font on narrow screens in both the
 
   const article = page.getByRole('region', { name: 'День Ашура' })
   const arabic = article.locator('.markdown-arabic')
-  await expect(arabic).toHaveCount(6)
+  const hijriMonth = arabic.filter({ hasText: 'محرم' }).first()
+  await expect(hijriMonth).toContainText('محرم')
+  await expect(hijriMonth).toHaveAttribute('lang', 'ar')
+  await expect(hijriMonth).toHaveAttribute('dir', 'rtl')
+  await expect.poll(() => hijriMonth.evaluate(element => getComputedStyle(element).fontFamily)).toContain('Kazan Basma Mushaf')
   await expect(arabic.first()).toHaveAttribute('lang', 'ar')
   await expect(arabic.first()).toHaveAttribute('dir', 'rtl')
   await expect.poll(() => arabic.first().evaluate(element => getComputedStyle(element).fontFamily)).toContain('Kazan Basma Mushaf')

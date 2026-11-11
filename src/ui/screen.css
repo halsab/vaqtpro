@@ -246,10 +246,6 @@ html[data-input='pointer'] .select-field { outline: none; }
 .qibla-cardinal-east { top: 50%; right: 8px; transform: translateY(-50%) rotate(90deg); }
 .qibla-cardinal-south { bottom: 8px; left: 50%; transform: translateX(-50%) rotate(180deg); }
 .qibla-cardinal-west { top: 50%; left: 8px; transform: translateY(-50%) rotate(-90deg); }
-.qibla-forward-marker { position: absolute; z-index: 3; top: 0; left: 50%; width: 9px; height: 9px; border: 2px solid var(--background-primary); border-radius: 50%; background: var(--text-secondary); transform: translate(-50%, -50%); }
-.qibla-target-marker { position: absolute; z-index: 4; inset: 0; border-radius: 50%; opacity: 0; visibility: hidden; transform: rotate(var(--qibla-angle, 0deg)); }
-.qibla-target-marker::before { position: absolute; top: -5px; left: 50%; width: 12px; height: 12px; border: 2px solid var(--background-primary); border-radius: 50%; background: var(--accent-countdown); content: ''; transform: translateX(-50%); }
-.qibla-target-marker[data-visible='true'] { opacity: 1; visibility: visible; }
 .qibla-pointer { position: absolute; z-index: 2; top: 50%; left: 50%; width: 8px; height: 42%; border-radius: 5px; background: var(--text-primary); opacity: 0; visibility: hidden; transform: translate(-50%, -100%) rotate(var(--qibla-angle, 0deg)); transform-origin: 50% 100%; }
 .qibla-pointer[data-visible='true'] { opacity: 1; visibility: visible; }
 .qibla-pointer::before { position: absolute; top: -20px; left: 50%; width: 0; height: 0; border-right: 13px solid transparent; border-bottom: 24px solid var(--text-primary); border-left: 13px solid transparent; content: ''; transform: translateX(-50%); }

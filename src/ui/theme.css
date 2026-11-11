@@ -7,15 +7,6 @@
 }
 
 @font-face {
-  font-family: 'PT Mono';
-  src: url('../assets/PTMono-Tatar.ttf') format('truetype');
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  unicode-range: U+04A2-04A3, U+04AE-04AF, U+04B6-04B7, U+04BA-04BB, U+04D8-04D9, U+04E8-04E9;
-}
-
-@font-face {
   font-family: 'Kazan Basma Mushaf';
   src: url('../assets/KazanBasmaMushaf-Normal.ttf') format('truetype');
   font-style: normal;

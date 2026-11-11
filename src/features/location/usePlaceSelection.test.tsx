@@ -182,7 +182,7 @@ describe('one-shot GPS operations', () => {
     await act(async () => { h.precise.resolve(success(preciseFix)); await Promise.resolve() })
     await act(async () => { await pending })
     expect(h.services.cities.findNearest).toHaveBeenCalledTimes(1)
-    expect(h.services.cities.findNearest).toHaveBeenCalledWith(preciseFix.latitude, preciseFix.longitude, 25, false)
+    expect(h.services.cities.findNearest).toHaveBeenCalledWith(preciseFix.latitude, preciseFix.longitude, 25, false, 'ru')
     await act(async () => {
       h.lookup.resolve(success({ ...city, countryCode: 'CA', latitude: preciseFix.latitude, longitude: preciseFix.longitude }))
       await Promise.resolve()
