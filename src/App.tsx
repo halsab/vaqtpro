@@ -765,7 +765,9 @@ export function App({
     saveSettings({ fastingMode: next })
   }
   const homeLocationLabel = homePlaceLabel(place, t('locationUnknown'))
-  const sourcePlaceLabel = compactPlaceLabel(place?.name || t('selectPlace'), locale)
+  const sourcePlaceLabel = place?.selection === 'gps'
+    ? homeLocationLabel
+    : compactPlaceLabel(place?.name || t('selectPlace'), locale)
   const locationTime = place && getUtcOffset(currentTime, place.timeZone) !== getUtcOffset(currentTime, deviceTimeZone)
     ? getZonedTime(currentTime, place.timeZone)
     : undefined
