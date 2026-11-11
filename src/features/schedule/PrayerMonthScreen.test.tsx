@@ -42,7 +42,7 @@ function renderMonth() {
 
 
 
-it('matches Home event labels, order, instants, values, and estimation for every date', () => {
+it('matches Home event labels, order, instants, and values for every date', () => {
   renderMonth()
   const expectedKeys = ['fajr', 'sunrise', 'zenith', 'dhuhr', 'asr', 'maghrib', 'isha']
   const expectedHeadings = ['Дата', 'Фаджр', 'Восход', 'Зенит', 'Зухр', 'Аср', 'Магриб', 'Иша']
@@ -68,19 +68,30 @@ it('matches Home event labels, order, instants, values, and estimation for every
       expect(event.timeZone).toBe(context.timeZone)
       expect(time).toHaveAttribute('dateTime', new Date(event.instant).toISOString())
       expect(time).toHaveTextContent(event.time)
-      const approx = cell.querySelector('.prayer-month-estimated')
-      if (schedule.estimatedPrayers.includes(key)) {
-        expect(approx).toHaveAccessibleName('Приблизительное время')
-        expect(approx).toHaveTextContent('примерно')
-      } else {
-        expect(approx).toBeNull()
-      }
+      expect(cell.textContent).toBe(event.time)
+      expect(cell.querySelector('.prayer-month-estimated')).toBeNull()
     }
   }
 })
 
 
 
+
+it('shows plain clock times for estimated high-latitude prayers in summer', () => {
+  const date = '2026-06-15'
+  const schedule = originalCalculatePrayerSchedule(context.location, date, context.timeZone, context.settings)
+  expect(schedule.estimatedPrayers.length).toBeGreaterThan(0)
+  render(<PrayerMonthScreen place={place} context={context} scheduleError={null} selectedDate={date}
+    onBack={() => {}} onOpenLocation={() => {}} onRetrySchedule={onRetrySchedule} />)
+  const row = screen.getByRole('rowheader', { name: '15.06.2026' }).closest('tr')
+  if (!row) throw new Error('Missing summer date row')
+  const cells = within(row).getAllByRole('cell')
+  for (const [index, key] of PRAYER_MONTH_KEYS.entries()) {
+    expect(cells[index]?.textContent).toBe(schedule.entries[key].time)
+  }
+  expect(row).not.toHaveTextContent('примерно')
+  expect(within(row).queryByLabelText('Приблизительное время')).not.toBeInTheDocument()
+})
 
 it('switches between complete months without selecting dates in the table', async () => {
   renderMonth()
