@@ -1,0 +1,207 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart' as m;
+import 'package:vaqtpro/design_system/design_system.dart';
+
+void main() {
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('Material controls and confirmation on $platform', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      bool? result;
+      await tester.pumpWidget(
+        AppRoot(
+          title: 'Harness',
+          home: AppPage(
+            title: 'Tasks',
+            child: Builder(
+              builder: (context) => Column(
+                children: [
+                  const AppTextField(label: 'Task'),
+                  AppButton(
+                    label: 'Confirm',
+                    onPressed: () async {
+                      result = await confirmAction(
+                        context,
+                        title: 'Delete?',
+                        message: 'Confirm deletion',
+                        cancelLabel: 'Cancel',
+                        confirmLabel: 'Delete',
+                        destructive: true,
+                      );
+                    },
+                  ),
+                  AppSwitch(value: false, onChanged: (_) {}),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(m.MaterialApp), findsOneWidget);
+      expect(find.byType(m.TextField), findsOneWidget);
+      expect(find.byType(m.Switch), findsOneWidget);
+      await tester.tap(find.text('Confirm'));
+      await tester.pumpAndSettle();
+      expect(find.byType(m.AlertDialog), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(result, false);
+      expect(tester.takeException(), isNull);
+    });
+  }
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('system light/dark semantic colors on $platform', (
+      tester,
+    ) async {
+      debugDefaultTargetPlatformOverride = platform;
+      final dispatcher = tester.binding.platformDispatcher;
+      dispatcher.platformBrightnessTestValue = Brightness.light;
+      addTearDown(() {
+        dispatcher.clearPlatformBrightnessTestValue();
+        debugDefaultTargetPlatformOverride = null;
+      });
+      const seed = Color(0xFF2563EB);
+      expect(AppTokens.materialSeed, seed);
+      late BuildContext probe;
+      await tester.pumpWidget(
+        AppRoot(
+          title: 'Theme test',
+          home: AppPage(
+            title: 'Theme test',
+            child: Builder(
+              builder: (context) {
+                probe = context;
+                // Resolve theme roles in build, so the probe subscribes.
+                return Text(
+                  'Theme probe',
+                  style: AppTextStyles.body(context).copyWith(
+                    color: AppColors.text(context),
+                    backgroundColor: AppColors.background(context),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      List<Color> colors(BuildContext context) => [
+        AppColors.primary(context),
+        AppColors.background(context),
+        AppColors.surface(context),
+        AppColors.text(context),
+        AppColors.muted(context),
+        AppColors.error(context),
+        AppColors.divider(context),
+      ];
+      List<Color> expected(BuildContext context, Brightness brightness) {
+        final scheme = m.ColorScheme.fromSeed(
+          seedColor: seed,
+          brightness: brightness,
+        );
+        expect(m.Theme.of(context).brightness, brightness);
+        return [
+          scheme.primary,
+          scheme.surface,
+          scheme.surfaceContainerLow,
+          scheme.onSurface,
+          scheme.onSurfaceVariant,
+          scheme.error,
+          scheme.outlineVariant,
+        ];
+      }
+
+      await tester.pumpAndSettle();
+      final light = colors(probe);
+      expect(light, expected(probe, Brightness.light));
+      final lightText = tester.widget<Text>(find.text('Theme probe'));
+      expect(lightText.style?.color, light[3]);
+      dispatcher.platformBrightnessTestValue = Brightness.dark;
+      await tester.pumpAndSettle();
+      final dark = colors(probe);
+      expect(dark, expected(probe, Brightness.dark));
+      // Accent, background and readable foreground must actually change.
+      for (final index in [0, 1, 3]) {
+        expect(dark[index], isNot(light[index]));
+      }
+      final darkText = tester.widget<Text>(find.text('Theme probe'));
+      expect(darkText.style?.color, dark[3]);
+      expect(darkText.style?.backgroundColor, dark[1]);
+      dispatcher.platformBrightnessTestValue = Brightness.light;
+      await tester.pumpAndSettle();
+      expect(colors(probe), light);
+      expect(tester.takeException(), isNull);
+    });
+  }
+  test('window classes use exact shared thresholds', () {
+    expect(AppWindowClass.fromWidth(599), AppWindowClass.compact);
+    expect(AppWindowClass.fromWidth(600), AppWindowClass.medium);
+    expect(AppWindowClass.fromWidth(839), AppWindowClass.medium);
+    expect(AppWindowClass.fromWidth(840), AppWindowClass.expanded);
+  });
+
+  testWidgets('adaptive layout follows resize and retains shared state', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final selected = ValueNotifier<int>(0);
+    addTearDown(selected.dispose);
+    tester.view.physicalSize = const Size(360, 800);
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Adaptive',
+        home: m.Scaffold(
+          body: AppAdaptiveLayout(
+            builder: (context, windowClass, constraints) =>
+                ValueListenableBuilder<int>(
+                  valueListenable: selected,
+                  builder: (context, value, child) {
+                    final detail = Text('Selected: $value');
+                    final action = m.FilledButton(
+                      onPressed: () => selected.value = 1,
+                      child: const Text('Select'),
+                    );
+                    return Column(
+                      children: [
+                        Text(windowClass.name),
+                        if (windowClass == AppWindowClass.expanded)
+                          Row(children: [action, detail])
+                        else ...[
+                          action,
+                          detail,
+                        ],
+                      ],
+                    );
+                  },
+                ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select'));
+    await tester.pumpAndSettle();
+    for (final size in [
+      const Size(360, 800),
+      const Size(768, 1024),
+      const Size(1440, 900),
+      const Size(360, 800),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      expect(
+        find.text(AppWindowClass.fromWidth(size.width).name),
+        findsOneWidget,
+      );
+      expect(find.text('Selected: 1'), findsOneWidget);
+      expect(find.text('Select'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+}

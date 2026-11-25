@@ -1,0 +1,5 @@
+import 'package:flutter/foundation.dart';
+
+class @CLASS@ViewModel extends ChangeNotifier {
+  // Add only the state and actions required by the feature.
+}

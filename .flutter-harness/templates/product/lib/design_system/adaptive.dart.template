@@ -1,0 +1,39 @@
+import 'package:flutter/widgets.dart';
+
+import 'tokens.dart';
+
+/// Window classes are starting points, not device or platform identities.
+enum AppWindowClass {
+  compact,
+  medium,
+  expanded;
+
+  static AppWindowClass fromWidth(double width) =>
+      width < AppTokens.compactWidth
+      ? AppWindowClass.compact
+      : width < AppTokens.expandedWidth
+      ? AppWindowClass.medium
+      : AppWindowClass.expanded;
+}
+
+/// Use local constraints for pane/content layout, with window width as a
+/// fallback for an intentionally unbounded horizontal parent.
+class AppAdaptiveLayout extends StatelessWidget {
+  const AppAdaptiveLayout({super.key, required this.builder});
+
+  final Widget Function(
+    BuildContext context,
+    AppWindowClass windowClass,
+    BoxConstraints constraints,
+  ) builder;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.hasBoundedWidth
+          ? constraints.maxWidth
+          : MediaQuery.sizeOf(context).width;
+      return builder(context, AppWindowClass.fromWidth(width), constraints);
+    },
+  );
+}

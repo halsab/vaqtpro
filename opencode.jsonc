@@ -1,0 +1,477 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "openai/gpt-6-luna",
+  "default_agent": "build",
+  "agents": {
+    "build": {
+      "model": "openai/gpt-6-luna#medium"
+    },
+    "plan": {
+      "model": "openai/gpt-6-luna#high"
+    },
+    "architect": {
+      "description": "Read-only Luna High. For complex changes analyze product behavior, actual dependency/call graph, contracts, affected consumers, data/state risks, and produce independently verifiable slices with explicit dependencies and file ownership. Or diagnose one hard failure. Return a concise actionable plan; do not implement, publish or spawn children.",
+      "mode": "subagent",
+      "model": "openai/gpt-6-luna#high",
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git status *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git merge-base *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git show *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git log *",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "question",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "external_directory",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "dart_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "maestro_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "playwright_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "chrome-devtools_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "browser",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "reviewer": {
+      "description": "Perform ONE independent read-only review of the entire task diff and new task files. Use separate allowed Git commands (status, merge-base, diff) without shell chaining or substitution; use read for files. If full diff cannot be inspected, report OPEN, not PASSED. Findings need file, failure scenario, impact and evidence; no edits or repeated full reviews. For material UX changes open only the supplied actual runtime screenshots; compare to the task baseline if comparable. For focused tasks review the requested change and concrete regressions, not unrelated redesign preferences. Baseline is optional. Judge focused changes and new screens against request, actual result, supplied references if any and exact diff. Never infer before/after changes from historical images. Challenge superficial broad redesigns. Give VISUAL: PASS immediately before VERDICT: PASS only if visual acceptance is supported. For product defects report CHANGES_REQUIRED; for missing/unreadable evidence report BLOCKED, for technical failure ERROR. Use standard Material 3 component selection and visible selected state as material acceptance criteria. Static concepts are not runtime evidence.",
+      "mode": "subagent",
+      "model": "openai/gpt-6-luna#medium",
+      "permissions": [
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "shell",
+          "resource": "git status *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git diff *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git merge-base *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git show *",
+          "effect": "allow"
+        },
+        {
+          "action": "shell",
+          "resource": "git log *",
+          "effect": "allow"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "question",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "external_directory",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "dart_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "maestro_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "playwright_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "chrome-devtools_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "browser",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    },
+    "general": {
+      "model": "openai/gpt-6-luna#medium"
+    },
+    "explore": {
+      "model": "openai/gpt-6-luna#low"
+    },
+    "compaction": {
+      "model": "openai/gpt-6-luna#low"
+    },
+    "title": {
+      "model": "openai/gpt-6-luna#low"
+    },
+    "summary": {
+      "model": "openai/gpt-6-luna#low"
+    },
+    "advisor": {
+      "description": "Optional focused architectural decision consultant. Sol Medium, at most one call per original task, only for a consequential difficult decision with a self-contained compact evidence packet. Compare viable options, side effects, invariants, decision and verification; return a concise answer or identify missing evidence. Never scan the repository, implement, run commands, delegate, review the whole task or request user input. Return control to Luna.",
+      "mode": "subagent",
+      "model": "openai/gpt-6.2-sol#medium",
+      "permissions": [
+        {
+          "action": "shell",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "subagent",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "question",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "external_directory",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "browser",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "dart_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "maestro_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "playwright_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "chrome-devtools_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "xcode_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "xcodebuild_*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "generate_image",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "webfetch",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "websearch",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "edit",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "grep",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "glob",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "list",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "skill",
+          "resource": "*",
+          "effect": "deny"
+        }
+      ]
+    }
+  },
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6-luna": {
+          "settings": {
+            "reasoningEffort": "medium"
+          }
+        },
+        "gpt-6.2-sol": {
+          "settings": {
+            "reasoningEffort": "medium"
+          }
+        }
+      }
+    }
+  },
+  "plugins": [
+    "-superpowers",
+    "-superpowers.*",
+    "-superpowers@git+https://github.com/obra/superpowers.git#v7.0.2"
+  ],
+  "mcp": {
+    "servers": {
+      "dart": {
+        "type": "local",
+        "command": [
+          "dart",
+          "mcp-server"
+        ],
+        "disabled": true
+      },
+      "maestro": {
+        "type": "local",
+        "command": [
+          "bash",
+          ".flutter-harness/bin/maestro.sh",
+          "mcp"
+        ],
+        "cwd": ".",
+        "disabled": true
+      },
+      "playwright": {
+        "type": "local",
+        "command": [
+          "npx",
+          "--yes",
+          "@playwright/mcp@0.0.86"
+        ],
+        "disabled": true
+      },
+      "chrome-devtools": {
+        "type": "local",
+        "command": [
+          "npx",
+          "--yes",
+          "chrome-devtools-mcp@1.13.0"
+        ],
+        "disabled": true
+      }
+    }
+  },
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "git worktree *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "git push *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "git push --force*",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "git push -f *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "gh pr merge *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "gh api *",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "gh release create *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "flutter pub publish *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "git reset --hard *",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "git clean -fd*",
+      "effect": "ask"
+    },
+    {
+      "action": "shell",
+      "resource": "rm -rf *",
+      "effect": "ask"
+    },
+    {
+      "action": "skill",
+      "resource": "brainstorming",
+      "effect": "deny"
+    },
+    {
+      "action": "skill",
+      "resource": "writing-plans",
+      "effect": "deny"
+    },
+    {
+      "action": "skill",
+      "resource": "executing-plans",
+      "effect": "deny"
+    },
+    {
+      "action": "skill",
+      "resource": "subagent-driven-development",
+      "effect": "deny"
+    },
+    {
+      "action": "skill",
+      "resource": "using-git-worktrees",
+      "effect": "deny"
+    },
+    {
+      "action": "skill",
+      "resource": "finishing-a-development-branch",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "gh pr create *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "gh pr ready *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "gh pr edit *",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "python3 .flutter-harness/bin/harness.py deliver",
+      "effect": "ask"
+    },
+    {
+      "action": "skill",
+      "resource": "*",
+      "effect": "deny"
+    }
+  ]
+}

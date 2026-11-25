@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="670" viewBox="0 0 860 670" role="img" aria-labelledby="title desc">
+<title id="title">Content priority in a Material-inspired appointment list</title>
+<desc id="desc">Two illustrative layouts with the same appointments. Left uses a large decorative introduction and redundant surfaces; right makes appointment content and actions prominent. Neither is a runtime screenshot.</desc>
+<rect width="860" height="670" fill="#e7eaf0"/>
+<g font-family="Arial, sans-serif" fill="#20242b">
+<text x="24" y="30" font-size="17" font-weight="bold">Illustrative comparison — not an application screenshot</text>
+<text x="24" y="56" font-size="14">Same user job, same data; different visual hierarchy.</text>
+<text x="24" y="86" font-size="16" font-weight="bold">A · Competing hierarchy</text><text x="454" y="86" font-size="16" font-weight="bold">B · Content priority</text>
+<g transform="translate(24 100)">
+<rect width="382" height="542" rx="16" fill="#f9f9ff"/>
+<text x="16" y="32" font-size="21" font-weight="bold">Appointments</text>
+<rect x="16" y="55" width="350" height="138" rx="20" fill="#d9e2ff"/>
+<text x="32" y="87" font-size="23" font-weight="bold">Make time for life</text>
+<text x="32" y="112" font-size="14">Plan your days with confidence.</text>
+<text x="32" y="158" font-size="25" font-weight="bold">3 upcoming</text>
+<rect x="16" y="204" width="350" height="48" rx="24" fill="#eceef6"/><text x="36" y="234" font-size="15">Search appointments</text>
+<rect x="16" y="264" width="350" height="42" rx="12" fill="#e3e6f0"/><text x="40" y="290" font-size="14">All</text><text x="160" y="290" font-size="14">Upcoming</text><text x="302" y="290" font-size="14">Sort</text>
+<text x="20" y="334" font-size="15" font-weight="bold">Today</text>
+<rect x="16" y="344" width="350" height="64" rx="14" fill="#edf0f9"/><text x="28" y="369" font-size="16" font-weight="bold">Dental checkup</text><text x="28" y="392" font-size="14">10:30 · Appointment</text><text x="320" y="380" font-size="18">···</text>
+<rect x="16" y="416" width="350" height="64" rx="14" fill="#edf0f9"/><text x="28" y="441" font-size="16" font-weight="bold">Haircut</text><text x="28" y="464" font-size="14">15:00 · Appointment</text><text x="320" y="452" font-size="18">···</text>
+<rect x="180" y="488" width="186" height="48" rx="16" fill="#315bb9"/><text x="273" y="518" font-size="15" fill="#fff" text-anchor="middle">+ New appointment</text>
+</g>
+<g transform="translate(454 100)">
+<rect width="382" height="542" rx="16" fill="#f9f9ff"/>
+<text x="16" y="32" font-size="21" font-weight="bold">Appointments</text>
+<g fill="none" stroke="#20242b" stroke-width="2.5" stroke-linecap="round"><circle cx="342" cy="24" r="7"/><path d="m347 30 7 7"/></g>
+<rect x="16" y="56" width="350" height="44" rx="22" fill="none" stroke="#777984"/><path d="M191 56v44" stroke="#777984"/><path d="M191 57v42H38a21 21 0 0 1 0-42Z" fill="#d9e2ff"/>
+<text x="104" y="83" font-size="15" text-anchor="middle">✓ All</text><text x="278" y="83" font-size="15" text-anchor="middle">Upcoming</text>
+<text x="16" y="131" font-size="14" fill="#555963">3 upcoming</text><text x="366" y="131" font-size="14" fill="#315bb9" text-anchor="end">Sort: by time</text>
+<text x="16" y="165" font-size="14" font-weight="bold">Today</text>
+<text x="16" y="203" font-size="17" font-weight="bold">10:30</text><text x="91" y="203" font-size="17">Dental checkup</text><text x="349" y="203" font-size="23" text-anchor="middle">⋮</text><path d="M16 222H366" stroke="#e0e2e9"/>
+<text x="16" y="256" font-size="17" font-weight="bold">15:00</text><text x="91" y="256" font-size="17">Haircut</text><text x="349" y="256" font-size="23" text-anchor="middle">⋮</text><path d="M16 275H366" stroke="#e0e2e9"/>
+<text x="16" y="310" font-size="14" font-weight="bold">Tomorrow</text>
+<text x="16" y="348" font-size="17" font-weight="bold">09:00</text><text x="91" y="348" font-size="17">Car service</text><text x="349" y="348" font-size="23" text-anchor="middle">⋮</text><path d="M16 367H366" stroke="#e0e2e9"/>
+<rect x="180" y="488" width="186" height="48" rx="16" fill="#315bb9"/><text x="273" y="518" font-size="15" fill="#fff" text-anchor="middle">+ New appointment</text>
+</g>
+</g>
+</svg>
