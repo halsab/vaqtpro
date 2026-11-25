@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "revision": "5a76120cb389614e66014749b3eb05e053b5e9fe",
+  "revision": "1026b2812591ad895717d2861313b1437c9e27b1",
   "files": {
     ".flutter-harness/PRODUCT.md": "7c080340e09c7c1d592c3013323106b93637fff018d31e9757df8b8cfba3bafd",
     ".flutter-harness/bin/check-product.py": "78057b22f5d477c4a525c0622fd956a1c476563013f49103132baa585dad4b1d",
@@ -10,9 +10,9 @@
     ".flutter-harness/bin/init-product.py": "99eb198579e277c2e571c76b2ee671ffe8514807da0064cfea0fef06656e9cd0",
     ".flutter-harness/bin/maestro.sh": "e9e4e10762bbc821440fdbe5703db23add0b78125502b6ef8721813a449c9220",
     ".flutter-harness/bin/session-usage.py": "85da4b17e8f3d1a50257ac7d673a577e3769b674a6a12423513cad69f6233031",
-    ".flutter-harness/bin/validate-opencode.py": "ddbc3e4d7e8f1b296b7cd27f0975be2a560cda1c9595bab6ae6dafadbf3c3c60",
+    ".flutter-harness/bin/validate-opencode.py": "b3b2aacf8b2e71d02048984e0e6371c463b4567fd89fb9b5c5b6bd2c261dfa11",
     ".flutter-harness/bin/web-preview.py": "0825e30f5c96bcb4eb2f1544c26b3cae63c5ed94384e78762ce2dd8550b73f42",
-    ".flutter-harness/config.json": "34aa1c282ced15e47aaadbff60390e375a6555511fd755035666c31622d21a6c",
+    ".flutter-harness/config.json": "50a38c17ed6df8017b2de667f811f28cde0c0986a1d12c9696e0b93a5ca72abe",
     ".flutter-harness/templates/product/BEHAVIOR.md": "e4afa7445ec7147c4c25632e96d819601d5cbd9d9b3407904103a099f29bab86",
     ".flutter-harness/templates/product/DESIGN.md": "186a6fa26796e48f341f1156261cf1ad6e877279ce76cd2152b2700bddd0652b",
     ".flutter-harness/templates/product/ORCHESTRATION.md": "f31d8416bbffeac256510c58a5a6e706181095ebb643b46afd0b74ab8c4ba15f",
@@ -32,11 +32,13 @@
     ".flutter-harness/templates/product/scaffold/view_model.dart.template": "5ef6b1221949fb51dc22c0f4c063f06782f52b19cfba5aa77c95369cf8fa32a7",
     ".flutter-harness/templates/product/smoke_test.dart.template": "59c64c3db9291c7dd5f4114119ce5221ca8c1fb8128d88c227e89d79c6507b96",
     ".github/workflows/flutter.yml": "e5f452c0cd2905a315522c9368be8246fd711532a740d82bc3fe2356d731a94b",
+    ".opencode/plugins/delivery-guard/build.md": "52f6ce9164863252a9c253c47ae9471d9696bc3b46fb19dafa503f110223bddc",
     ".opencode/plugins/delivery-guard/guard.mjs": "6f6ec7ae8a9afca00a9cdac79340eb2609402a31639a5d7b61a9232bc70b9c33",
-    ".opencode/plugins/delivery-guard/index.js": "af112169a1283ee2530d580fa567b8b22f75666e0423ead7bf667262e2868a2a",
+    ".opencode/plugins/delivery-guard/index.js": "3cf01fe697e5d711e785385753cbdbcfab67caf83b09a9bb8b6ab81600fe0749",
     ".opencode/plugins/delivery-guard/quality.mjs": "99e9d93ede8647038355baab97702040663f3d60070277cf23f381feb83ae8a1",
     ".opencode/plugins/delivery-guard/resources.mjs": "696aeb3232eaf9ae5276f7282ccf8f14660f213e7d06a518c2f752d2dbce87e2",
-    "opencode.jsonc": "fc6cd7d9449f1a72ffdd811f94cd066b15f0941a9783d30785137f70451af48a"
+    ".opencode/plugins/delivery-guard/scope.mjs": "4553e688390b614711010f7723fb25ff0109e6d49197ce27cdf156f4b8a16781",
+    "opencode.jsonc": "3e187fed0f0380c49db2fc44f4d04d572e745b5313dbd4924be919f382a1054a"
   },
-  "agents_block": "20ced77d585c4024eb72cadd9c967236109b6334df2c24a665684da9948bda38"
+  "agents_block": "30407f0a1407a79c30f1333f429676c4690897a2d62dd726b61fe60ae0ebe9eb"
 }

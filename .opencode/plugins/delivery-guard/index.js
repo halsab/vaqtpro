@@ -7,13 +7,15 @@ const exec = promisify(execFile);
 import { snapshot, inspect, taskIntent, recovery } from "./guard.mjs";
 import { registerQualityGate } from "./quality.mjs";
 import { registerResourceGuard } from "./resources.mjs";
+import { buildOnly } from "./scope.mjs";
 
 // Runs at normal OpenCode V2 completion, not on interrupted/failed executions.
 // Maximum two continuations, no privileged Git/GitHub write actions.
 export default Plugin.define({
   id: "flutter-harness-delivery",
-  async setup(ctx) {
-    const location = ctx.location.directory;
+  async setup(raw) {
+    const ctx = buildOnly(raw);
+    const location = raw.location.directory;
     if (!location) throw Error("Harness requires an explicit OpenCode working directory");
     const root = (await exec("git",["rev-parse","--show-toplevel"],{cwd:location,timeout:15000})).stdout.trim();
     const config = JSON.parse(await readFile(join(root, ".flutter-harness/config.json"), "utf8"));
@@ -22,7 +24,6 @@ export default Plugin.define({
     async function assertRevision() {
       await exec("python3",[join(root,".flutter-harness/bin/harness.py"),"revision","--expect",config.revision],{cwd:root,timeout:15000});
     }
-    await assertRevision();
     const key = (id) => "task/" + id;
     const directory = join(root, ".flutter-harness/work");
     async function record(id, stage, detail = {}) {
@@ -44,9 +45,11 @@ export default Plugin.define({
         return JSON.parse(stdout).checked===true;
       } catch { return false; }
     });
+    await ctx.session.hook("context", async (event) => {
+      const instructions = await readFile(join(root, ".opencode/plugins/delivery-guard/build.md"), "utf8");
+      event.system.push({type:"text", text:instructions});
+    });
     await ctx.session.hook("prompt", async (event) => {
-      const session = await ctx.session.get({ sessionID: event.sessionID });
-      if (session.parentID) return;
       await assertRevision();
       const previous = await ctx.storage.get(key(event.sessionID));
       if (previous?.active) return;

@@ -100,17 +100,26 @@ def validate(filename, profile):
                for name, agent in agents.items()), "only advisor may route outside Luna in supplied profile")
     ensure("OPEN" in agents["reviewer"].get("description", ""), "reviewer must report incomplete coverage as OPEN")
 
-    ensure(REQUIRED_SAFETY <= ruleset(data.get("permissions")), "missing safety permissions")
+    global_rules = data.get("permissions")
+    build_rules = agents["build"].get("permissions")
+    ensure(not any(action == "skill" or (action == "shell" and resource == "git worktree *")
+                   for action, resource, _ in ruleset(global_rules)),
+           "Harness workflow permissions must not apply to non-Build agents")
+    ensure(("shell", "git worktree *", "deny") in ruleset(build_rules), "Build must use ordinary branches")
+    ensure(("shell", "python3 .flutter-harness/bin/harness.py deliver", "deny") in ruleset(global_rules),
+           "non-Build agents must not bypass delivery gates")
+    effective_rules = global_rules + build_rules
+    ensure(REQUIRED_SAFETY <= ruleset(effective_rules), "missing safety permissions")
     for action, resource, expected in REQUIRED_SAFETY:
         if "*" in resource:
             probe = resource.replace("*", "sample")
         else:
             probe = resource
-        effective = [r["effect"] for r in data["permissions"] if fnmatch.fnmatchcase(action, r["action"]) and fnmatch.fnmatchcase(probe, r["resource"])]
+        effective = [r["effect"] for r in effective_rules if fnmatch.fnmatchcase(action, r["action"]) and fnmatch.fnmatchcase(probe, r["resource"])]
         ensure(effective and effective[-1] == expected, f"unsafe effective permission: {action} {probe}")
     disabled_skills = {("skill", name, "deny") for name in DISABLED_INTERACTIVE_SKILLS}
     ensure(
-        disabled_skills <= ruleset(data.get("permissions")),
+        disabled_skills <= ruleset(build_rules),
         "interactive Superpowers workflow skills must be hidden in the autonomous profile",
     )
 
