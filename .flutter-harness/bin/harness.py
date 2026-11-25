@@ -25,6 +25,39 @@ class Blocked(RuntimeError):
     pass
 
 
+class DeliveryBlocked(Blocked):
+    """A safe, actionable delivery failure; only known transient errors retry."""
+    def __init__(self, code, message, retryable=False, stage=None):
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+        self.stage = stage
+
+    def details(self):
+        return {"code": self.code, "message": str(self), "retryable": self.retryable}
+
+
+def remote_call(operation, fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except DeliveryBlocked:
+        raise
+    except subprocess.TimeoutExpired as exc:
+        raise DeliveryBlocked(operation + "_TIMEOUT",
+                              operation + " timed out; reconcile remote state", True) from exc
+    except Blocked as exc:
+        detail = str(exc).lower()
+        if (operation == "PR_CREATE" and "already exists" in detail) or re.search(
+                r"rate limit|http 429|http 5[0-9]{2}|temporary|temporarily|timed? out|timeout|connection (?:reset|refused|closed)|could not resolve host|network is unreachable|service unavailable|bad gateway|unexpected eof", detail):
+            raise DeliveryBlocked(operation + "_TRANSIENT",
+                                  operation + " temporarily unavailable; reconcile remote state", True) from exc
+        if re.search(r"authentication|not authenticated|not logged|permission denied|forbidden|http 40[13]|bad credentials|gh auth login|could not read username", detail):
+            raise DeliveryBlocked(operation + "_ACCESS",
+                                  operation + " denied; check GitHub authentication/permissions") from exc
+        raise DeliveryBlocked(operation + "_FAILED",
+                              operation + " failed; inspect local command output before retrying") from exc
+
+
 def require(ok, message):
     if not ok:
         raise Blocked(message)
@@ -354,27 +387,51 @@ def origin_repo(root):
     return match.group(1)
 
 
+def canonical_repo(root, origin):
+    """Resolve GitHub redirects without changing the user's local remote."""
+    raw = remote_call("REPO_RESOLVE", run, root, "gh", "repo", "view", origin,
+                      "--json", "nameWithOwner,id", capture=True, timeout=60)
+    try:
+        data = json.loads(raw)
+        name, repo_id = data["nameWithOwner"], data["id"]
+    except (ValueError, TypeError, KeyError) as exc:
+        raise DeliveryBlocked("REPO_RESPONSE", "Invalid GitHub repository response") from exc
+    if not (isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", name)
+            and isinstance(repo_id, str) and repo_id):
+        raise DeliveryBlocked("REPO_RESPONSE", "Invalid GitHub repository identity")
+    return name, repo_id
+
+
+def valid_pr_url(url, repo, number):
+    return (type(number) is int and number > 0 and isinstance(repo, str)
+            and isinstance(url, str)
+            and url.lower() == ("https://github.com/" + repo + "/pull/" + str(number)).lower())
+
+
 def pr_list(root, repo, name):
     data = json.loads(run(root, "gh", "pr", "list", "--repo", repo,
                           "--head", name, "--state", "open",
                           "--json", "number,baseRefName,headRefName,headRepositoryOwner,isCrossRepository,isDraft,headRefOid,state,url,title,body",
                           capture=True, timeout=60))
-    require(isinstance(data, list), "Invalid GitHub PR response")
+    if not isinstance(data, list) or not all(isinstance(p, dict) for p in data):
+        raise DeliveryBlocked("PR_RESPONSE", "Invalid GitHub PR response")
     own = [p for p in data if p.get("headRefName") == name and
-           not p.get("isCrossRepository") and
+           p.get("isCrossRepository") is False and
            (p.get("headRepositoryOwner") or {}).get("login", "").lower() ==
            repo.split("/")[0].lower()]
-    require(len(own) <= 1, "Multiple PRs for this branch")
+    if len(own) > 1:
+        raise DeliveryBlocked("PR_MULTIPLE", "Multiple PRs for this branch")
     return own[0] if own else None
 
 
 def validate_remote_pr(pr, repo, base, name, head):
-    require(pr and pr.get("state") == "OPEN" and pr.get("baseRefName") == base and
+    if not (pr and pr.get("state") == "OPEN" and pr.get("baseRefName") == base and
             pr.get("headRefName") == name and pr.get("headRefOid") == head and
-            not pr.get("isCrossRepository") and not pr.get("isDraft"),
-            "PR missing, draft, stale, closed, cross-repo or targets the wrong branch")
-    require(pr.get("url", "").lower().startswith("https://github.com/" + repo.lower() + "/pull/"),
-            "Unexpected PR URL")
+            pr.get("isCrossRepository") is False and pr.get("isDraft") is False):
+        raise DeliveryBlocked("PR_IDENTITY_MISMATCH",
+                              "PR missing, draft, stale, closed, cross-repo or targets the wrong branch")
+    if not valid_pr_url(pr.get("url"), repo, pr.get("number")):
+        raise DeliveryBlocked("PR_URL_MISMATCH", "Unexpected PR URL for canonical repository and PR number")
     return pr
 
 
@@ -383,14 +440,41 @@ def manifest_digest(manifest):
                                      ensure_ascii=False).encode()).hexdigest()
 
 
+def current_delivery_failure(root, c, name, digest, head, receipt):
+    """Return only a failure belonging to the exact current checked candidate."""
+    try:
+        state = read_json(work(root) / "delivery-state.json")
+        manifest = read_json(work(root) / "delivery.json")
+        expected = {"branch": name, "base": c["integration_branch"], "digest": digest,
+                    "head": head, "revision": c["revision"],
+                    "manifest_digest": manifest_digest(manifest), "checked_at": receipt.get("checked_at")}
+        if state.get("status") != "BLOCKED" or any(state.get(k) != v for k, v in expected.items()):
+            return None
+        if state.get("origin_repo") and state["origin_repo"].lower() != origin_repo(root).lower():
+            return None
+        error = state["error"]
+        if not (isinstance(error.get("code"), str) and isinstance(error.get("message"), str)
+                and isinstance(error.get("retryable"), bool)):
+            return None
+        return DeliveryBlocked(error["code"], error["message"], error["retryable"], state["stage"])
+    except (OSError, ValueError, KeyError, AttributeError, Blocked):
+        return None
+
+
 def completion(root, c):
     """Local evidence of an exact candidate previously verified against GitHub.
     No network call. Use verify for an explicit fresh remote read."""
     name = branch(root, c["integration_branch"])
-    require(not dirty(root), "Uncommitted work remains")
     digest = fingerprint(root)
     head = text(git(root, "rev-parse", "HEAD"))
-    receipt = read_json(work(root) / "check.json")
+    receipt_path = work(root) / "check.json"
+    if dirty(root) and not receipt_path.is_file():
+        raise Blocked("Uncommitted work remains")
+    receipt = read_json(receipt_path)
+    failure = current_delivery_failure(root, c, name, digest, head, receipt)
+    if failure and receipt.get("status") == "PASS" and receipt.get("digest") == digest:
+        raise failure
+    require(not dirty(root), "Uncommitted work remains")
     require(receipt.get("status") == "PASS" and receipt.get("digest") == digest,
             "Missing/stale standard check receipt")
     path = work(root) / "delivery-result.json"
@@ -399,20 +483,26 @@ def completion(root, c):
     manifest = read_json(work(root) / "delivery.json")
     require(all(result.get(k) == v for k, v in {
         "status": "PASS", "head": head, "digest": digest, "branch": name,
-        "base": c["integration_branch"], "repo": origin_repo(root), "revision":c["revision"],
+        "base": c["integration_branch"], "revision":c["revision"],
         "manifest_digest": manifest_digest(manifest), "checked_at": receipt.get("checked_at"),
     }.items()) and isinstance(result.get("delivered_at"), int),
             "Missing/stale delivery evidence; resume canonical deliver")
-    require(result.get("pr", "").lower().startswith("https://github.com/" + result["repo"].lower() + "/pull/"),
+    require(isinstance(result.get("repo_id"), str) and result["repo_id"] and
+            isinstance(result.get("origin_repo"), str) and isinstance(result.get("repo"), str) and
+            origin_repo(root).lower() in (result["origin_repo"].lower(), result["repo"].lower()),
+            "Missing/stale repository identity; resume canonical deliver")
+    require(valid_pr_url(result.get("pr"), result["repo"], result.get("pr_number")),
             "Invalid delivery PR URL")
     return result
 
 
 def verify(root, c):
     result = completion(root, c)
-    pr = validate_remote_pr(pr_list(root, result["repo"], result["branch"]),
-                            result["repo"], result["base"], result["branch"], result["head"])
-    require(pr["url"] == result["pr"], "Remote PR differs from delivery receipt")
+    repo, repo_id = canonical_repo(root, origin_repo(root))
+    require(repo_id == result["repo_id"], "Remote repository differs from delivery receipt")
+    pr = validate_remote_pr(remote_call("PR_LIST", pr_list, root, repo, result["branch"]),
+                            repo, result["base"], result["branch"], result["head"])
+    require(pr["number"] == result["pr_number"], "Remote PR differs from delivery receipt")
     output(status="PASS", pr=pr["url"], head=result["head"])
     return pr
 
@@ -464,14 +554,43 @@ def prepare_delivery(root,c,a):
 
 
 def deliver(root, c):
-    """Called only after the OpenCode policy gate and owner publication approval.
-    The receipt is workflow evidence, not an adversarial security boundary."""
+    """Called only after the OpenCode policy gate and owner publication approval."""
+    state = {}
+    try:
+        return _deliver(root, c, state)
+    except (Blocked, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as exc:
+        if state:
+            if isinstance(exc, DeliveryBlocked):
+                failure = exc
+            elif isinstance(exc, Blocked) and "\n" not in str(exc) and "exit=" not in str(exc):
+                failure = DeliveryBlocked("DELIVERY_INVARIANT", str(exc)[:240])
+            else:
+                failure = DeliveryBlocked("DELIVERY_LOCAL_ERROR",
+                                          "Delivery failed locally; inspect command output")
+            failed = {**state, "status": "BLOCKED", "error": failure.details()}
+            atomic_json(work(root) / "delivery-state.json", failed)
+            event(root, "delivery-failed", branch=state["branch"], digest=state["digest"],
+                  failed_stage=state["stage"], error=failure.details())
+            # Report the original exception in the terminal; recovery uses safe structured evidence.
+        raise
+
+
+def _deliver(root, c, state):
     name = branch(root, c["integration_branch"])
     receipt = read_json(work(root) / "check.json")
     digest = fingerprint(root)
     require(current_check(root,digest),
             "Missing/stale standard check receipt or check running; run check")
     manifest = delivery_manifest(root,c)
+    identity = {"branch": name, "base": c["integration_branch"], "digest": digest,
+                "revision": c["revision"], "manifest_digest": manifest_digest(manifest),
+                "checked_at": receipt.get("checked_at"), "head": text(git(root, "rev-parse", "HEAD"))}
+    def checkpoint(stage, **extra):
+        state.clear()
+        state.update({**identity, "stage": stage, **extra})
+        atomic_json(work(root) / "delivery-state.json", state)
+        event(root, stage, **{k: v for k, v in state.items() if k != "stage"})
+    checkpoint("delivery-started")
     visual = visual_evidence(root,manifest.get("visual_interaction") is True,emit=False) if manifest.get("visual_required") is True or manifest.get("visual_interaction") is True else None
     required_e2e = manifest.get("required_e2e", [])
     require(isinstance(required_e2e, list) and all(p in ("android", "ios", "web") for p in required_e2e), "Invalid required_e2e")
@@ -481,22 +600,25 @@ def deliver(root, c):
                 f"Missing/stale required {platform} E2E")
     files = manifest["files"]
     changed = dirty(root)
-    repo = origin_repo(root)
+    origin = origin_repo(root)
+    identity["origin_repo"] = origin
+    checkpoint("delivery-resolving")
+    repo, repo_id = canonical_repo(root, origin)
+    identity.update(repo=repo, repo_id=repo_id)
+    checkpoint("delivery-resolved")
     base = c["integration_branch"]
     # Refresh base before publishing; never merge/rebase implicitly.
-    fetch_base(root,base)
+    remote_call("GIT_FETCH", fetch_base, root, base)
     require(text(git(root, "merge-base", "HEAD", "origin/" + base)) ==
             text(git(root, "rev-parse", "origin/" + base)),
             "Integration branch advanced; reconcile and recheck")
     require(fingerprint(root) == digest, "Candidate changed before publication")
-    existing = pr_list(root, repo, name)
-    require(not existing or existing.get("baseRefName") == base,
-            "Existing PR targets another base")
-    identity = {"branch": name, "base": base, "repo": repo, "digest": digest, "revision":c["revision"],
-                "manifest_digest": manifest_digest(manifest)}
-    def checkpoint(stage, **extra):
-        atomic_json(work(root) / "delivery-state.json", {**identity, "stage": stage, **extra})
-        event(root, stage, **identity, **extra)
+    existing = remote_call("PR_LIST", pr_list, root, repo, name)
+    if existing:
+        if existing.get("baseRefName") != base:
+            raise DeliveryBlocked("PR_BASE_MISMATCH", "Existing PR targets another base")
+        if not valid_pr_url(existing.get("url"), repo, existing.get("number")):
+            raise DeliveryBlocked("PR_URL_MISMATCH", "Unexpected PR URL for canonical repository and PR number")
     checkpoint("delivery-validated")
     if changed:
         git(root, "--literal-pathspecs", "add", "-A", "--", *files)
@@ -512,6 +634,7 @@ def deliver(root, c):
     require(git(root, "diff", "--name-only", "origin/" + base, "HEAD"),
             "No task change to publish")
     head = text(git(root, "rev-parse", "HEAD"))
+    identity["head"] = head
     checkpoint("delivery-committed", head=head)
     body = work(root) / "pr-body.md"
     summary = ["", "", "## Harness evidence (generated)", f"- Harness revision: {c['revision']}", f"- Candidate: {digest}", "- Standard check: PASS"]
@@ -529,20 +652,23 @@ def deliver(root, c):
     # Recover a completed remote operation even if the previous process died
     # before writing its local receipt. Never republish an identical PR.
     if not existing or existing.get("headRefOid") != head:
-        git(root, "push", "-u", "origin", "HEAD:refs/heads/" + name)
+        remote_call("GIT_PUSH", git, root, "push", "-u", "origin", "HEAD:refs/heads/" + name)
     checkpoint("delivery-pushed", head=head)
     if not matching(existing):
         if existing:
             if (existing.get("title") != manifest["title"] or
                     (existing.get("body") or "").rstrip() != expected_body.rstrip()):
-                run(root, "gh", "pr", "edit", str(existing["number"]), "--repo", repo,
-                    "--title", manifest["title"], "--body-file", str(body))
+                remote_call("PR_EDIT", run, root, "gh", "pr", "edit", str(existing["number"]), "--repo", repo,
+                            "--title", manifest["title"], "--body-file", str(body), capture=True, timeout=60)
             if existing.get("isDraft"):
-                run(root, "gh", "pr", "ready", str(existing["number"]), "--repo", repo)
+                remote_call("PR_READY", run, root, "gh", "pr", "ready", str(existing["number"]), "--repo", repo,
+                            capture=True, timeout=60)
         else:
-            run(root, "gh", "pr", "create", "--repo", repo, "--base", base,
-                "--head", name, "--title", manifest["title"], "--body-file", str(body))
-        existing = pr_list(root, repo, name)
+            remote_call("PR_CREATE", run, root, "gh", "pr", "create", "--repo", repo, "--base", base,
+                        "--head", name, "--title", manifest["title"], "--body-file", str(body), capture=True, timeout=60)
+        existing = remote_call("PR_LIST", pr_list, root, repo, name)
+        if not existing:
+            raise DeliveryBlocked("PR_NOT_VISIBLE", "Published PR not yet visible; reconcile remote state", True)
     pr = validate_remote_pr(existing, repo, base, name, head)
     require(matching(pr), "Remote PR metadata differs from delivery manifest")
     checkpoint("delivery-remote-verified", head=head, pr=pr["url"])
@@ -550,7 +676,7 @@ def deliver(root, c):
             text(git(root, "rev-parse", "HEAD")) == head,
             "Candidate changed during delivery")
     result = {**identity, "status": "PASS", "head": head, "pr": pr["url"],
-              "checked_at": receipt.get("checked_at"), "delivered_at": int(time.time())}
+              "pr_number": pr["number"], "delivered_at": int(time.time())}
     atomic_json(work(root) / "delivery-result.json", result)
     checkpoint("delivery-complete", head=head, pr=pr["url"])
     output(**result)
@@ -1257,6 +1383,11 @@ def main():
                       reason=str(exc)[:240] if isinstance(exc, Blocked) and "\n" not in str(exc) and "exit=" not in str(exc) else "See local command log/terminal")
             except OSError:
                 pass
+        if a.command == "completion" and isinstance(exc, DeliveryBlocked):
+            output(status="BLOCKED", stage=exc.stage, error=exc.details())
+        if a.command == "deliver" and isinstance(exc, DeliveryBlocked) and isinstance(exc.__cause__, Blocked):
+            # Original command output stays in the local terminal, not shareable lifecycle evidence.
+            print("Local command: " + str(exc.__cause__), file=sys.stderr)
         print(f"BLOCKED: {exc}", file=sys.stderr)
         return 3
 
