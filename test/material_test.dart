@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart' as m;
 import 'package:vaqtpro/design_system/design_system.dart';
+import 'package:vaqtpro/features/prayer_times/screens/prayer_times_screen.dart';
 
 void main() {
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
@@ -142,6 +143,58 @@ void main() {
     expect(AppWindowClass.fromWidth(600), AppWindowClass.medium);
     expect(AppWindowClass.fromWidth(839), AppWindowClass.medium);
     expect(AppWindowClass.fromWidth(840), AppWindowClass.expanded);
+  });
+
+  testWidgets('prayer times show seven ordered rows without table headings', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const AppRoot(title: 'Vaqtpro', home: PrayerTimesScreen()),
+    );
+
+    const names = ['Фаджр', 'Шурук', 'Истива', 'Зухр', 'Аср', 'Магриб', 'Иша'];
+    final namePositions = [
+      for (final name in names) tester.getTopLeft(find.text(name)).dy,
+    ];
+    expect(namePositions, orderedEquals(namePositions.toList()..sort()));
+    expect(find.text('—'), findsNWidgets(7));
+    expect(find.text('Название'), findsNothing);
+    expect(find.text('Время'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('prayer times remain readable across window widths', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      const AppRoot(title: 'Vaqtpro', home: PrayerTimesScreen()),
+    );
+
+    for (final size in [
+      const Size(360, 800),
+      const Size(768, 1024),
+      const Size(1440, 900),
+      const Size(320, 600),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpAndSettle();
+      for (final name in [
+        'Фаджр',
+        'Шурук',
+        'Истива',
+        'Зухр',
+        'Аср',
+        'Магриб',
+        'Иша',
+      ]) {
+        expect(find.text(name), findsOneWidget);
+      }
+      expect(find.text('—'), findsNWidgets(7));
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('adaptive layout follows resize and retains shared state', (
