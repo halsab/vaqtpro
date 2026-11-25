@@ -9,6 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  adhan:
+    git:
+      url: https://github.com/halsab/adhan-dart.git
+      ref: 18530749f77863caf6dc6355b46aa0e539f67324
   material_ui: ^1.1.0
 
 dev_dependencies:
