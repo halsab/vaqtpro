@@ -22,3 +22,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: PTMono
+      fonts:
+        - asset: assets/fonts/PTMono-Regular.ttf

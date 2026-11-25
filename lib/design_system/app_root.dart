@@ -26,6 +26,7 @@ class AppRoot extends StatelessWidget {
     themeMode: m.ThemeMode.system,
     theme: m.ThemeData(
       colorScheme: m.ColorScheme.fromSeed(seedColor: AppTokens.materialSeed),
+      fontFamily: AppTokens.fontFamily,
       useMaterial3: true,
     ),
     darkTheme: m.ThemeData(
@@ -33,6 +34,7 @@ class AppRoot extends StatelessWidget {
         seedColor: AppTokens.materialSeed,
         brightness: Brightness.dark,
       ),
+      fontFamily: AppTokens.fontFamily,
       useMaterial3: true,
     ),
     home: home,
