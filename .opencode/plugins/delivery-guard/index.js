@@ -97,9 +97,9 @@ export default Plugin.define({
       if (evidence.phase === "waiting") return;
       const next = recovery(state, result, evidence);
       await saveSessions(id);
-      await record(id, next.stop ? "task-incomplete" : "task-recovery", {attempts:state.attempts, phase:evidence.phase, check:evidence.check});
+      await record(id, next.stop ? "task-incomplete" : "task-recovery", {attempts:state.attempts, phase:evidence.phase, check:evidence.check, deliveryError:result.deliveryError?.code, failedStage:result.deliveryError?.stage});
       if (next.stop) {
-        throw Error("Flutter Harness INCOMPLETE: " + next.reason + ". Recovery budget exhausted or no observable progress.");
+        throw Error("Flutter Harness INCOMPLETE: " + next.reason + (next.terminal ? ". Owner action required; no automatic retry." : ". Recovery budget exhausted or no observable progress."));
       }
       await ctx.storage.set(key(id), { ...state, attempts: state.attempts + 1, lastRecovery: next.fingerprint });
       await ctx.session.synthetic({ sessionID: id, text: next.prompt });

@@ -10,7 +10,14 @@ async function command(root, bin, args) {
     });
     return { ok: true, message: stdout.trim() };
   } catch (err) {
-    return { ok: false, message: String(err.stderr || err.message || err).slice(0, 500) };
+    let deliveryError;
+    try {
+      const data = JSON.parse(err.stdout || "");
+      if (data.status === "BLOCKED" && typeof data.stage === "string" &&
+          typeof data.error?.code === "string" && typeof data.error.message === "string" &&
+          typeof data.error.retryable === "boolean") deliveryError = {...data.error, stage:data.stage};
+    } catch { /* ordinary CLI error */ }
+    return { ok: false, message: String(err.stderr || err.message || err).slice(0, 500), deliveryError };
   }
 }
 export function taskIntent(text) {
@@ -48,19 +55,26 @@ export async function inspect(root, base, before, intent) {
   const current = await snapshot(root);
   if (!changed(before, current) && !intent) return { active:false, passed:true, reasons:[], current };
   const script = join(root, ".flutter-harness", "bin", "harness.py");
-  const pr = current.status || [base, "app", "main", "master", "develop", ""].includes(current.branch)
+  const pr = [base, "app", "main", "master", "develop", ""].includes(current.branch)
     ? {ok:false, message:"Finish local work and run canonical deliver"}
     : await command(root, "python3", [script, "completion"]);
-  return { ...decide(before, current, intent, pr.ok, pr.message, base), current };
+  return { ...decide(before, current, intent, pr.ok, pr.message, base), current, deliveryError:pr.deliveryError };
 }
 
 // A repeated idle with identical source/check/delivery state is not progress.
 // The first retry is allowed; a second needs a material change in evidence.
 export function recovery(state, result, quality) {
+  const deliveryError = quality.check === "passed" && quality.phase === "work" ? result.deliveryError : undefined;
   const reasons = [...result.reasons, quality.issue].filter(Boolean);
+  if (deliveryError) reasons.push(deliveryError.code + " at " + deliveryError.stage + ": " + deliveryError.message);
+  const missingCommittedManifest = quality.phase === "manifest" && result.current.status === "";
+  if (missingCommittedManifest) reasons.push("Committed candidate has no valid delivery manifest; restore the original manifest, do not regenerate acceptance flags.");
   const fingerprint = JSON.stringify([result.current, quality.digest, quality.visualDigest, quality.check, quality.phase, reasons]);
   const reason = reasons.join("; ");
-  if (quality.phase === "blocked" || state.attempts >= 2 || (state.attempts > 0 && state.lastRecovery === fingerprint)) {
+  if (quality.phase === "blocked" || missingCommittedManifest || (deliveryError && !deliveryError.retryable)) {
+    return { stop: true, reason, fingerprint, terminal:true };
+  }
+  if (state.attempts >= 2 || (state.attempts > 0 && state.lastRecovery === fingerprint)) {
     return { stop: true, reason, fingerprint };
   }
   const step = quality.phase === "check"
@@ -72,7 +86,7 @@ export function recovery(state, result, quality) {
     : quality.phase === "review"
       ? "Reuse the successful standard evidence for the unchanged candidate. Inspect the actual prior reviewer findings; fix confirmed defects. If a finding contradicts exact diff/evidence, one unchanged-input adjudication is allowed. Do not change source merely to obtain a new review key; do not retry an exhausted budget."
       : quality.check === "passed"
-        ? "The candidate is checked. If acceptance is complete, prepare delivery.json only if missing and invoke exactly python3 .flutter-harness/bin/harness.py deliver with owner approval. The CLI reconciles remote state and writes the receipt; do not run separate Git/PR probes, and do not repeat builds, tests or reviews."
+        ? "The candidate is checked and the manifest is valid. Preserve the existing delivery.json; invoke exactly python3 .flutter-harness/bin/harness.py deliver with owner approval. The CLI reconciles remote state and writes the receipt; do not run separate Git/PR probes, and do not repeat builds, tests or reviews."
         : "Resume the unfinished implementation or plan from current files. Run focused checks on missing behavior, then the required final check; do not publish incomplete work.";
   return { stop: false, reason, fingerprint, prompt:
     "[Flutter Harness recovery] " + reason + ". " + step +
