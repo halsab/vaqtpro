@@ -10,11 +10,18 @@ import '../features/location/models/geolocation_state.dart';
 import '../features/location/models/prayer_location.dart';
 import '../features/location/view_models/location_view_model.dart';
 import '../features/prayer_times/widgets/prayer_times_card.dart';
+import '../features/prayer_times/screens/settings_screen.dart';
+import '../features/prayer_times/view_models/calculation_profile_view_model.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.viewModel});
+  const HomeScreen({
+    super.key,
+    required this.viewModel,
+    this.calculationProfileViewModel,
+  });
 
   final LocationViewModel viewModel;
+  final CalculationProfileViewModel? calculationProfileViewModel;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -22,12 +29,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   LocationViewModel get viewModel => widget.viewModel;
+  late final CalculationProfileViewModel _calculationProfileViewModel;
+  CalculationProfileViewModel get calculationProfileViewModel =>
+      _calculationProfileViewModel;
 
   @override
   void initState() {
     super.initState();
+    _calculationProfileViewModel =
+        widget.calculationProfileViewModel ?? CalculationProfileViewModel();
     WidgetsBinding.instance.addObserver(this);
     unawaited(viewModel.initialize());
+    unawaited(calculationProfileViewModel.initialize());
   }
 
   @override
@@ -41,6 +54,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     viewModel.dispose();
+    calculationProfileViewModel.dispose();
     super.dispose();
   }
 
@@ -54,6 +68,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         titleContent: selected == null
             ? _defaultTitle(context)
             : _locationTitle(context, selected),
+        floatingActionButton: m.FloatingActionButton(
+          tooltip: 'Настройки',
+          onPressed: () => Navigator.of(context).push(
+            m.MaterialPageRoute<void>(
+              builder: (_) =>
+                  SettingsScreen(viewModel: calculationProfileViewModel),
+            ),
+          ),
+          child: const m.Icon(m.Icons.settings),
+        ),
         child: _buildBody(context),
       );
     },

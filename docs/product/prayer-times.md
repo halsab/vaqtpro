@@ -4,8 +4,9 @@
 
 Help the user identify and select a place quickly, then retain it between
 launches. This iteration implements device location, place search, recent
-places, favorites, and persistent selection only. Prayer-time calculation and
-display remain out of scope; never imply that placeholder values are real.
+places, favorites, persistent selection, and a saved calculation profile.
+Prayer-time calculation and display remain out of scope; never imply that
+placeholder values are real.
 
 ## State and rules
 
@@ -46,6 +47,15 @@ display remain out of scope; never imply that placeholder values are real.
   available.
 - The PWA caches its application shell and place catalog after the first
   successful online load; location search can then be reopened without network.
+- The home screen has a settings action. Settings is a full page containing
+  only the calculation-profile item. Editing opens a bottom sheet with the
+  calculation method, Asr madhab, and high-latitude rule. Save persists the
+  selections locally; dismissing without saving discards edits. The profile is
+  configuration only and does not yet affect the prayer-time card.
+- The default profile is Muslim World League, Shafi, and middle-of-the-night
+  high-latitude rule. If a stored profile is unreadable or unsupported, retain
+  these defaults. Method parameters come from the selected `adhan` preset;
+  manual angles and minute adjustments are not exposed.
 
 ## Layout and acceptance
 
@@ -73,3 +83,5 @@ text, narrow widths, and scrollable results.
   favorite are restored; selecting it again does not duplicate recents.
 - With a place selected, the prayer card still shows seven ordered rows with
   em dashes; this task does not calculate or fabricate prayer times.
+- The profile can be edited, saved, and restored after recreating the app state;
+  changing it leaves the prayer card values unchanged.

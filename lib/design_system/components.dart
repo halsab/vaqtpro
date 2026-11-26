@@ -14,11 +14,13 @@ class AppPage extends StatelessWidget {
     required this.child,
     this.titleContent,
     this.trailing,
+    this.floatingActionButton,
   });
   final String title;
   final Widget child;
   final Widget? titleContent;
   final Widget? trailing;
+  final Widget? floatingActionButton;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +40,7 @@ class AppPage extends StatelessWidget {
         actions: [?trailing],
       ),
       body: body,
+      floatingActionButton: floatingActionButton,
     );
   }
 }
