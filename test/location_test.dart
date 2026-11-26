@@ -585,12 +585,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(viewModel.favorites.single.name, 'Казань');
     expect(viewModel.selected, isNull);
+    expect(find.text('Казань — в избранном'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Убрать из избранного'));
+    await tester.pumpAndSettle();
+    expect(viewModel.favorites, isEmpty);
+    expect(find.text('Казань — удалено из избранного'), findsOneWidget);
 
     await tester.tap(find.byType(m.ListTile).first);
     await tester.pumpAndSettle();
     expect(viewModel.selected?.geonameId, '551487');
     expect(find.text('Выбрать местоположение'), findsNothing);
     expect(find.text('—'), findsNWidgets(7));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('favorite save failure uses a transient notice only', (
+    tester,
+  ) async {
+    final repository = _MemoryLocationRepository()..rejectWrites = true;
+    final viewModel = _viewModel(
+      repository: repository,
+      catalog: OfflinePlaceCatalogRepository(
+        places: [_place('551487', 'Казань')],
+      ),
+    );
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: viewModel),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выбрать вручную'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(m.TextField), 'Казань');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Добавить в избранное'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.favorites, isEmpty);
+    expect(viewModel.storageMessage, isNull);
+    expect(find.text('Не удалось обновить избранное'), findsOneWidget);
+    expect(
+      find.text('Не удалось сохранить изменения. Попробуйте ещё раз.'),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('coordinate-only automatic selection shows a transient notice', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: _FakeGeolocation()
+        ..coordinates = const DeviceCoordinates(55.123456, 49.987654),
+    );
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: viewModel),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Определить местоположение'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.selected?.latitude, 55.123456);
+    expect(find.text('55.123, 49.988'), findsOneWidget);
+    expect(find.text('Место сохранено по координатам'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

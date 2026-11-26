@@ -13,6 +13,8 @@ import '../repositories/offline_place_catalog_repository.dart';
 
 enum LocationLoadState { loading, ready, failed }
 
+enum FavoriteChangeResult { added, removed, failed }
+
 class LocationViewModel extends ChangeNotifier {
   LocationViewModel({
     required this._repository,
@@ -265,9 +267,20 @@ class LocationViewModel extends ChangeNotifier {
     await _commit((state) => state.select(location));
   }
 
-  Future<void> toggleFavorite(PrayerLocation location) async {
+  Future<FavoriteChangeResult> toggleFavorite(PrayerLocation location) async {
     storageMessage = null;
-    await _commit((state) => state.toggleFavorite(location));
+    var isFavorite = false;
+    final saved = await _commit((state) {
+      final next = state.toggleFavorite(location);
+      isFavorite = next.favorites.any(
+        (item) => item.identityKey == location.identityKey,
+      );
+      return next;
+    }, reportStorageError: false);
+    if (!saved) return FavoriteChangeResult.failed;
+    return isFavorite
+        ? FavoriteChangeResult.added
+        : FavoriteChangeResult.removed;
   }
 
   bool isFavorite(PrayerLocation location) =>
@@ -414,6 +427,7 @@ class LocationViewModel extends ChangeNotifier {
     SavedLocationState Function(SavedLocationState current) transition, {
     Duration? timeout,
     int? locationGeneration,
+    bool reportStorageError = true,
   }) {
     final completer = Completer<bool>();
     _activeWrites++;
@@ -441,8 +455,10 @@ class LocationViewModel extends ChangeNotifier {
           try {
             await _repository.save(_saved);
           } catch (_) {
-            storageMessage =
-                'Не удалось сохранить изменения. Попробуйте ещё раз.';
+            if (reportStorageError) {
+              storageMessage =
+                  'Не удалось сохранить изменения. Попробуйте ещё раз.';
+            }
           }
           completer.complete(false);
         } else {
@@ -451,7 +467,10 @@ class LocationViewModel extends ChangeNotifier {
           completer.complete(true);
         }
       } catch (error) {
-        storageMessage = 'Не удалось сохранить изменения. Попробуйте ещё раз.';
+        if (reportStorageError) {
+          storageMessage =
+              'Не удалось сохранить изменения. Попробуйте ещё раз.';
+        }
         if (error is TimeoutException) {
           completer.completeError(error);
         } else {
