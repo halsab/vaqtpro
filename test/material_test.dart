@@ -14,6 +14,43 @@ import 'package:vaqtpro/features/location/view_models/location_view_model.dart';
 import 'package:vaqtpro/features/prayer_times/widgets/prayer_times_card.dart';
 
 void main() {
+  testWidgets('filled location icon button keeps its shape while loading', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Harness',
+        home: const AppIconButton(
+          tooltip: 'Определить местоположение',
+          icon: m.Icon(m.Icons.my_location),
+          onPressed: null,
+          isLoading: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final iconButton = tester.widget<m.IconButton>(find.byType(m.IconButton));
+    final buttonStyle = iconButton.style!;
+    final colors = m.Theme.of(tester.element(find.byType(m.IconButton)))
+        .colorScheme;
+    expect(iconButton.onPressed, isNull);
+    expect(buttonStyle.shape!.resolve({}), isA<m.CircleBorder>());
+    expect(
+      buttonStyle.backgroundColor!.resolve({m.WidgetState.disabled}),
+      colors.primary,
+    );
+    expect(
+      buttonStyle.foregroundColor!.resolve({m.WidgetState.disabled}),
+      colors.onPrimary,
+    );
+    expect(
+      tester.getSize(find.byType(m.CircularProgressIndicator)),
+      const Size(24, 24),
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
     testWidgets('Material controls and confirmation on $platform', (
       tester,

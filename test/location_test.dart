@@ -236,6 +236,48 @@ void main() {
     expect(repository.state.selected?.geonameId, 'manual');
   });
 
+  test('permission timeout ends loading and ignores a late response', () async {
+    final geo = _FakeGeolocation()
+      ..pendingPermission = Completer<GeoPermissionState>();
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: geo,
+      locationOperationTimeout: const Duration(milliseconds: 10),
+    );
+    addTearDown(viewModel.dispose);
+    await viewModel.initialize();
+
+    expect(await viewModel.determineLocation(), isFalse);
+    expect(viewModel.isResolvingLocation, isFalse);
+    expect(viewModel.permissionMessage, contains('запрос разрешения'));
+
+    geo.pendingPermission!.complete(GeoPermissionState.granted);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.selected, isNull);
+    expect(viewModel.isResolvingLocation, isFalse);
+  });
+
+  test('closing picker cancels its pending location result', () async {
+    final geo = _FakeGeolocation()
+      ..pendingPermission = Completer<GeoPermissionState>();
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: geo,
+    );
+    addTearDown(viewModel.dispose);
+    await viewModel.initialize();
+
+    final detection = viewModel.determineLocation();
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.isResolvingLocation, isTrue);
+    viewModel.cancelLocationDetection();
+
+    expect(viewModel.isResolvingLocation, isFalse);
+    geo.pendingPermission!.complete(GeoPermissionState.granted);
+    expect(await detection, isFalse);
+    expect(viewModel.selected, isNull);
+  });
+
   test('failed location write preserves persisted selection, favorites and recents', () async {
     final previousPlatform = SharedPreferencesAsyncPlatform.instance;
     final preferences = _InMemoryPreferences();
@@ -574,11 +616,13 @@ LocationViewModel _viewModel({
   GeolocationRepository? geolocation,
   OfflinePlaceCatalogRepository? catalog,
   GeoNamesRepository? geonames,
+  Duration locationOperationTimeout = const Duration(seconds: 35),
 }) => LocationViewModel(
   repository: repository,
   geolocation: geolocation ?? _FakeGeolocation(),
   catalog: catalog ?? OfflinePlaceCatalogRepository(places: const []),
   geonames: geonames ?? _FakeGeoNames(),
+  locationOperationTimeout: locationOperationTimeout,
 );
 
 class _MemoryLocationRepository implements LocationRepository {

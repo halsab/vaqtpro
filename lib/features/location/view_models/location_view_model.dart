@@ -19,6 +19,7 @@ class LocationViewModel extends ChangeNotifier {
     required this._geolocation,
     required this._catalog,
     required this._geonames,
+    this.locationOperationTimeout = const Duration(seconds: 35),
   }) {
     _initializeTimeZones();
   }
@@ -27,6 +28,10 @@ class LocationViewModel extends ChangeNotifier {
   final GeolocationRepository _geolocation;
   final OfflinePlaceCatalogRepository _catalog;
   final GeoNamesRepository _geonames;
+  final Duration locationOperationTimeout;
+  static const bool _locationDiagnosticsEnabled = bool.fromEnvironment(
+    'LOCATION_DIAGNOSTICS',
+  );
 
   static bool _timeZonesInitialized = false;
   SavedLocationState _saved = const SavedLocationState();
@@ -133,16 +138,25 @@ class LocationViewModel extends ChangeNotifier {
 
     isResolvingLocation = true;
     notifyListeners();
+    final deadline = DateTime.now().add(locationOperationTimeout);
+    var step = 'сохранение состояния разрешения';
     try {
       _saved = _saved.markLocationPermissionAsked();
       try {
-        await _repository.save(_saved);
+        await _repository.save(_saved).timeout(_remaining(deadline));
+      } on TimeoutException {
+        rethrow;
       } catch (_) {
         storageMessage =
             'Не удалось сохранить состояние разрешения геолокации.';
       }
       if (generation != _locationGeneration) return false;
-      permission = await _geolocation.requestPermission();
+      step = 'запрос разрешения';
+      _locationDiagnostic('requesting permission');
+      permission = await _geolocation.requestPermission().timeout(
+        _remaining(deadline),
+      );
+      _locationDiagnostic('permission resolved: ${permission.name}');
       if (generation != _locationGeneration) return false;
       if (permission != GeoPermissionState.granted) {
         permissionMessage = switch (permission) {
@@ -155,13 +169,39 @@ class LocationViewModel extends ChangeNotifier {
         return false;
       }
 
-      final coordinates = await _geolocation.currentCoordinates();
+      step = 'получение координат';
+      _locationDiagnostic('requesting coordinates');
+      final coordinates = await _geolocation.currentCoordinates().timeout(
+        _remaining(deadline),
+      );
+      _locationDiagnostic(
+        'coordinates received: ${coordinates.latitude}, ${coordinates.longitude}',
+      );
       if (generation != _locationGeneration) return false;
-      final place = await _resolvePlace(coordinates);
+      step = 'определение населённого пункта';
+      final place = await _resolvePlace(coordinates)
+          .timeout(_remaining(deadline));
+      _locationDiagnostic('resolved place: ${place.displayName}');
       if (generation != _locationGeneration) return false;
-      return await _commit((state) => state.select(place));
+      step = 'сохранение места';
+      return await _commit(
+        (state) => state.select(place),
+        timeout: _remaining(deadline),
+        locationGeneration: generation,
+      );
+    } on TimeoutException {
+      if (generation == _locationGeneration) {
+        _locationDiagnostic('timed out at $step');
+        ++_locationGeneration;
+        permissionMessage =
+            'Не удалось завершить $step вовремя. Проверьте геолокацию устройства и попробуйте снова.';
+        isResolvingLocation = false;
+        notifyListeners();
+      }
+      return false;
     } catch (_) {
       if (generation == _locationGeneration) {
+        _locationDiagnostic('failed at $step');
         permissionMessage = 'Не удалось определить местоположение. Проверьте доступ и попробуйте ещё раз.';
       }
       return false;
@@ -171,6 +211,22 @@ class LocationViewModel extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  Duration _remaining(DateTime deadline) => deadline.difference(DateTime.now());
+
+  void _locationDiagnostic(String message) {
+    if (kDebugMode && _locationDiagnosticsEnabled) {
+      debugPrint('[location] $message');
+    }
+  }
+
+  void cancelLocationDetection() {
+    if (!isResolvingLocation) return;
+    ++_locationGeneration;
+    isResolvingLocation = false;
+    permissionMessage = null;
+    notifyListeners();
   }
 
   String get _permissionDeniedMessage => canOpenSettings
@@ -355,22 +411,52 @@ class LocationViewModel extends ChangeNotifier {
   }
 
   Future<bool> _commit(
-    SavedLocationState Function(SavedLocationState current) transition,
-  ) {
+    SavedLocationState Function(SavedLocationState current) transition, {
+    Duration? timeout,
+    int? locationGeneration,
+  }) {
     final completer = Completer<bool>();
     _activeWrites++;
     isSaving = true;
     notifyListeners();
     _saveQueue = _saveQueue.then((_) async {
+      if (locationGeneration != null &&
+          locationGeneration != _locationGeneration) {
+        completer.complete(false);
+        _activeWrites--;
+        isSaving = _activeWrites > 0;
+        notifyListeners();
+        return;
+      }
       final next = transition(_saved);
       try {
-        await _repository.save(next);
-        _saved = next;
-        storageMessage = null;
-        completer.complete(true);
-      } catch (_) {
+        final save = _repository.save(next);
+        if (timeout == null) {
+          await save;
+        } else {
+          await save.timeout(timeout);
+        }
+        if (locationGeneration != null &&
+            locationGeneration != _locationGeneration) {
+          try {
+            await _repository.save(_saved);
+          } catch (_) {
+            storageMessage =
+                'Не удалось сохранить изменения. Попробуйте ещё раз.';
+          }
+          completer.complete(false);
+        } else {
+          _saved = next;
+          storageMessage = null;
+          completer.complete(true);
+        }
+      } catch (error) {
         storageMessage = 'Не удалось сохранить изменения. Попробуйте ещё раз.';
-        completer.complete(false);
+        if (error is TimeoutException) {
+          completer.completeError(error);
+        } else {
+          completer.complete(false);
+        }
       } finally {
         _activeWrites--;
         isSaving = _activeWrites > 0;

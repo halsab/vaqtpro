@@ -73,17 +73,33 @@ class AppIconButton extends StatelessWidget {
   final bool isLoading;
 
   @override
-  Widget build(BuildContext context) => m.IconButton(
-    tooltip: tooltip,
-    onPressed: isLoading ? null : onPressed,
-    icon: isLoading
-        ? const SizedBox(
-            width: 20,
-            height: 20,
-            child: m.CircularProgressIndicator(strokeWidth: 2),
-          )
-        : icon,
-  );
+  Widget build(BuildContext context) {
+    final colors = m.Theme.of(context).colorScheme;
+    return m.IconButton.filled(
+      tooltip: tooltip,
+      onPressed: isLoading ? null : onPressed,
+      style: m.IconButton.styleFrom(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
+        disabledBackgroundColor: colors.primary,
+        disabledForegroundColor: colors.onPrimary,
+        minimumSize: const Size(48, 48),
+        fixedSize: const Size(48, 48),
+        iconSize: 24,
+        shape: const m.CircleBorder(),
+      ),
+      icon: isLoading
+          ? SizedBox(
+              width: 24,
+              height: 24,
+              child: m.CircularProgressIndicator(
+                color: colors.onPrimary,
+                strokeWidth: 2,
+              ),
+            )
+          : icon,
+    );
+  }
 }
 
 class AppTextField extends StatelessWidget {
