@@ -621,7 +621,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final recentHeadingTop = tester.getTopLeft(find.text('Недавние')).dy;
-      await tester.tap(find.byTooltip('Добавить в избранное'));
+      await tester.tap(find.byTooltip('Добавить в избранное').first);
       await tester.pumpAndSettle();
 
       expect(

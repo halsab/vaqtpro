@@ -76,10 +76,19 @@ void main() {
       );
       expect(tester.getSize(shortSurface).width, 368);
       final scheme = m.Theme.of(context).colorScheme;
-      expect(tester.widget<m.Material>(shortSurface).color, scheme.surfaceContainerLow);
-      expect(tester.widget<Text>(find.text(shortMessage)).style?.color, scheme.onSurface);
+      expect(
+        tester.widget<m.Material>(shortSurface).color,
+        scheme.surfaceContainerLow,
+      );
+      expect(
+        tester.widget<Text>(find.text(shortMessage)).style?.color,
+        scheme.onSurface,
+      );
 
-      final longMessage = List.filled(12, 'A much longer notification').join(' ');
+      final longMessage = List.filled(
+        12,
+        'A much longer notification',
+      ).join(' ');
       InternalNotification.show(context, longMessage);
       await tester.pump(const Duration(milliseconds: 240));
       final longSurface = find.byKey(

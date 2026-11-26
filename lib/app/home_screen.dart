@@ -409,9 +409,7 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
             title: title,
             padding: EdgeInsets.fromLTRB(
               AppTokens.space16,
-              sectionChildren.isEmpty
-                  ? AppTokens.space8
-                  : AppTokens.space16,
+              sectionChildren.isEmpty ? AppTokens.space8 : AppTokens.space16,
               AppTokens.space16,
               AppTokens.space4,
             ),

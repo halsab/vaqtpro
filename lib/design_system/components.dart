@@ -368,7 +368,6 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
 
   @override
   Widget build(BuildContext context) {
-    final colors = m.Theme.of(context).colorScheme;
     final top = MediaQuery.paddingOf(context).top;
     return Positioned(
       top: top + AppTokens.space8,
@@ -395,10 +394,8 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
               onVerticalDragStart: (_) {},
               onVerticalDragUpdate: (details) {
                 setState(
-                  () => _dragOffset = math.min(
-                    0,
-                    details.delta.dy + _dragOffset,
-                  ),
+                  () =>
+                      _dragOffset = math.min(0, details.delta.dy + _dragOffset),
                 );
               },
               onVerticalDragEnd: (details) {
@@ -422,9 +419,8 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
                   ),
                   child: Text(
                     widget.message,
-                    style: m.Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.text(context),
-                    ),
+                    style: m.Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: AppColors.text(context)),
                   ),
                 ),
               ),
