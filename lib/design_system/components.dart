@@ -30,6 +30,7 @@ class AppPage extends StatelessWidget {
     );
     return m.Scaffold(
       appBar: m.AppBar(
+        centerTitle: false,
         title: titleContent ?? Text(title),
         actions: [?trailing],
       ),

@@ -430,6 +430,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('selected location button stays left-aligned in the app bar', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(
+        SavedLocationState(selected: _place('551487', 'Казань')),
+      ),
+    );
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: viewModel),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<m.AppBar>(find.byType(m.AppBar)).centerTitle, isFalse);
+    final locationButton = find.ancestor(
+      of: find.text('Казань'),
+      matching: find.byType(m.FilledButton),
+    );
+    expect(locationButton, findsOneWidget);
+    expect(
+      tester.getTopLeft(locationButton).dx,
+      lessThan(tester.getSize(find.byType(m.AppBar)).width / 2),
+    );
+  });
+
   testWidgets(
     'permanent denial promotes manual selection and explains settings',
     (tester) async {
