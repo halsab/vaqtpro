@@ -6,7 +6,7 @@ appId: com.tatar.vaqtpro
 - launchApp:
     clearState: true
     permissions:
-      location: allow
+      location: inuse
 - tapOn: "Определить местоположение"
 - extendedWaitUntil:
     visible: "Казань"
