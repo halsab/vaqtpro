@@ -70,6 +70,7 @@ class AppActionButton extends StatelessWidget {
     super.key,
     this.label,
     this.icon,
+    this.detail,
     required this.onPressed,
     this.tooltip,
     this.isLoading = false,
@@ -77,6 +78,7 @@ class AppActionButton extends StatelessWidget {
 
   final String? label;
   final Widget? icon;
+  final String? detail;
   final VoidCallback? onPressed;
   final String? tooltip;
   final bool isLoading;
@@ -126,6 +128,14 @@ class AppActionButton extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (detail != null) ...[
+                  const SizedBox(width: AppTokens.space8),
+                  Text(
+                    detail!,
+                    style: m.Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(color: colors.onPrimary),
+                  ),
+                ],
               ],
             ),
     );

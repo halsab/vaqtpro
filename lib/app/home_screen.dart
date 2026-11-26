@@ -110,10 +110,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final offset = viewModel.timezoneDifferenceLabel();
     return AppActionButton(
       onPressed: _openLocationPicker,
-      label: offset == null
-          ? location.displayName
-          : '${location.displayName} · $offset',
+      label: location.displayName,
       icon: const m.Icon(m.Icons.location_on),
+      detail: offset,
     );
   }
 
