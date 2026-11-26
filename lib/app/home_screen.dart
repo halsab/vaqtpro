@@ -156,37 +156,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               manualPrimary ? manualButton : detectButton,
               const SizedBox(height: AppTokens.space8),
               manualPrimary ? detectButton : manualButton,
-              if (viewModel.permissionMessage case final message?) ...[
-                const SizedBox(height: AppTokens.space16),
-                m.Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppTokens.space16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(message),
-                        if (viewModel.canOpenSettings) ...[
-                          const SizedBox(height: AppTokens.space8),
-                          m.TextButton(
-                            onPressed: () =>
-                                unawaited(viewModel.openSettings()),
-                            child: Text(
-                              viewModel.permission ==
-                                      GeoPermissionState.servicesDisabled
-                                  ? 'Открыть настройки геолокации'
-                                  : 'Открыть настройки приложения',
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              if (viewModel.storageMessage case final message?) ...[
-                const SizedBox(height: AppTokens.space12),
-                Text(message, textAlign: TextAlign.center),
-              ],
             ],
           ),
         ),
@@ -205,8 +174,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         viewModel: viewModel,
         onSelected: (location) async {
           await viewModel.selectLocation(location);
-          if (viewModel.storageMessage == null && context.mounted) {
+          if (!context.mounted) return;
+          if (viewModel.storageMessage == null) {
             Navigator.of(context).pop();
+          } else {
+            InternalNotification.show(
+              context,
+              'Не удалось сохранить место. Попробуйте ещё раз.',
+              type: NotificationType.error,
+            );
           }
         },
         onDetectLocation: () async {
@@ -222,10 +198,69 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<bool> _determineLocation() async {
     final saved = await viewModel.determineLocation();
-    if (saved && mounted && viewModel.selected?.name == null) {
-      InternalNotification.show(context, 'Место сохранено по координатам');
+    if (!mounted) return saved;
+    if (saved) {
+      if (viewModel.selected?.name == null) {
+        InternalNotification.show(
+          context,
+          'Место сохранено по координатам',
+          type: NotificationType.info,
+        );
+      } else {
+        InternalNotification.show(
+          context,
+          'Местоположение определено: ${viewModel.selected!.displayName}',
+          type: NotificationType.success,
+        );
+      }
+    } else if (viewModel.permission == GeoPermissionState.permanentlyDenied) {
+      await _showLocationPermissionDialog();
+    } else {
+      final message = viewModel.permission == GeoPermissionState.denied
+          ? 'Нет доступа к геолокации. Можно выбрать место вручную.'
+          : viewModel.permission == GeoPermissionState.servicesDisabled
+          ? 'Включите службы геолокации и попробуйте ещё раз.'
+          : viewModel.storageMessage ??
+                viewModel.permissionMessage ??
+                'Не удалось определить местоположение. Попробуйте ещё раз.';
+      InternalNotification.show(context, message, type: NotificationType.error);
     }
     return saved;
+  }
+
+  Future<void> _showLocationPermissionDialog() async {
+    final canOpenSettings = viewModel.canOpenSettings;
+    await m.showDialog<void>(
+      context: context,
+      builder: (dialogContext) => m.AlertDialog(
+        title: const Text('Нет доступа к геолокации'),
+        content: Text(
+          canOpenSettings
+              ? 'Доступ к геолокации запрещён. Разрешите его в настройках приложения, чтобы определить местоположение.'
+              : 'Доступ к геолокации запрещён. Разрешите его в настройках сайта браузера, чтобы определить местоположение.',
+        ),
+        actions: [
+          m.TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Отмена'),
+          ),
+          if (canOpenSettings)
+            m.TextButton(
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                final opened = await viewModel.openSettings();
+                if (!mounted || opened) return;
+                InternalNotification.show(
+                  context,
+                  'Не удалось открыть настройки. Разрешите доступ к геолокации вручную.',
+                  type: NotificationType.error,
+                );
+              },
+              child: const Text('Открыть настройки'),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -358,27 +393,7 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
   }
 
   Widget _buildResults(BuildContext context) {
-    final viewModel = widget.viewModel;
-    final messages = [?viewModel.permissionMessage, ?viewModel.storageMessage];
-    return Column(
-      children: [
-        for (final message in messages)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTokens.space16,
-              AppTokens.space4,
-              AppTokens.space16,
-              AppTokens.space8,
-            ),
-            child: Text(
-              message,
-              style: m.Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: m.Theme.of(context).colorScheme.error),
-            ),
-          ),
-        Expanded(child: _buildResultContent(context)),
-      ],
-    );
+    return Column(children: [Expanded(child: _buildResultContent(context))]);
   }
 
   Widget _buildResultContent(BuildContext context) {
@@ -492,7 +507,13 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
         '${place.displayName} — удалено из избранного',
       FavoriteChangeResult.failed => 'Не удалось обновить избранное',
     };
-    InternalNotification.show(context, message);
+    InternalNotification.show(
+      context,
+      message,
+      type: result == FavoriteChangeResult.failed
+          ? NotificationType.error
+          : NotificationType.success,
+    );
   }
 }
 

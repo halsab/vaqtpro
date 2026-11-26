@@ -531,7 +531,8 @@ void main() {
       final viewModel = _viewModel(
         repository: _MemoryLocationRepository(),
         geolocation: _FakeGeolocation()
-          ..permission = GeoPermissionState.permanentlyDenied,
+          ..permission = GeoPermissionState.permanentlyDenied
+          ..settingsOpened = false,
       );
       await tester.pumpWidget(
         AppRoot(
@@ -548,7 +549,15 @@ void main() {
         find.textContaining('Доступ к геолокации запрещён'),
         findsOneWidget,
       );
-      expect(find.text('Открыть настройки приложения'), findsOneWidget);
+      expect(find.text('Открыть настройки'), findsOneWidget);
+      await tester.tap(find.text('Открыть настройки'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Не удалось открыть настройки. Разрешите доступ к геолокации вручную.',
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
@@ -695,7 +704,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('location denial reason stays visible in the picker', (
+  testWidgets('named automatic selection shows a success notice', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: _FakeGeolocation()
+        ..coordinates = const DeviceCoordinates(0.18, 0),
+      catalog: OfflinePlaceCatalogRepository(places: [_place('1', 'Казань')]),
+    );
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: viewModel),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Определить местоположение'));
+    await tester.pumpAndSettle();
+
+    expect(viewModel.selected?.name, 'Казань');
+    expect(find.text('Успех'), findsOneWidget);
+    expect(find.text('Местоположение определено: Казань'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('location denial is shown as a transient notice in the picker', (
     tester,
   ) async {
     final viewModel = _viewModel(
@@ -714,8 +748,9 @@ void main() {
     await tester.tap(find.byTooltip('Определить местоположение'));
     await tester.pumpAndSettle();
 
+    expect(find.text('Ошибка'), findsOneWidget);
     expect(
-      find.textContaining('Нет доступа к геолокации').last,
+      find.text('Нет доступа к геолокации. Можно выбрать место вручную.'),
       findsOneWidget,
     );
     expect(find.byType(m.TextField), findsOneWidget);
@@ -769,6 +804,7 @@ class _FakeGeolocation implements GeolocationRepository {
   GeoPermissionState permission = GeoPermissionState.granted;
   DeviceCoordinates coordinates = const DeviceCoordinates(0.18, 0);
   int requestCount = 0;
+  bool settingsOpened = true;
   Completer<GeoPermissionState>? pendingPermission;
   Completer<DeviceCoordinates>? pendingCoordinates;
 
@@ -783,10 +819,10 @@ class _FakeGeolocation implements GeolocationRepository {
       pendingCoordinates?.future ?? Future.value(coordinates);
 
   @override
-  Future<bool> openApplicationSettings() async => true;
+  Future<bool> openApplicationSettings() async => settingsOpened;
 
   @override
-  Future<bool> openLocationSettings() async => true;
+  Future<bool> openLocationSettings() async => settingsOpened;
 
   @override
   Future<GeoPermissionState> requestPermission() async {
