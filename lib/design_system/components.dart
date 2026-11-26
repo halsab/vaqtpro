@@ -226,27 +226,39 @@ class AppStateMessage extends StatelessWidget {
 abstract final class InternalNotification {
   static _NotificationOverlay? _active;
 
-  static void show(BuildContext context, String message) {
+  static void show(
+    BuildContext context,
+    String message, {
+    NotificationType type = NotificationType.info,
+  }) {
     if (message.isEmpty) return;
     final overlay = Overlay.of(context, rootOverlay: true);
     if (_active case final active?) {
-      if (active.overlay == overlay && active.message == message) return;
+      if (active.overlay == overlay &&
+          active.message == message &&
+          active.type == type) {
+        return;
+      }
       active.dismiss();
     }
-    final notification = _NotificationOverlay(overlay, message);
+    final notification = _NotificationOverlay(overlay, message, type);
     _active = notification;
     notification.insert();
   }
 }
 
+enum NotificationType { info, success, error }
+
 class _NotificationOverlay {
-  _NotificationOverlay(this.overlay, this.message);
+  _NotificationOverlay(this.overlay, this.message, this.type);
   final OverlayState overlay;
   final String message;
+  final NotificationType type;
   bool _removed = false;
   late final OverlayEntry entry = OverlayEntry(
     builder: (_) => _InternalNotificationView(
       message: message,
+      type: type,
       onDismissed: () {
         if (InternalNotification._active == this) {
           InternalNotification._active = null;
@@ -271,10 +283,12 @@ class _NotificationOverlay {
 class _InternalNotificationView extends StatefulWidget {
   const _InternalNotificationView({
     required this.message,
+    required this.type,
     required this.onDismissed,
   });
 
   final String message;
+  final NotificationType type;
   final VoidCallback onDismissed;
 
   @override
@@ -368,6 +382,31 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
 
   @override
   Widget build(BuildContext context) {
+    final colors = m.Theme.of(context).colorScheme;
+    final successColors = m.ColorScheme.fromSeed(
+      seedColor: const Color(0xFF2E7D32),
+      brightness: colors.brightness,
+    );
+    final (background, titleColor, title, icon) = switch (widget.type) {
+      NotificationType.info => (
+        colors.primaryContainer,
+        colors.primary,
+        'Инфо',
+        m.Icons.info_outline,
+      ),
+      NotificationType.success => (
+        successColors.primaryContainer,
+        successColors.primary,
+        'Успех',
+        m.Icons.check_circle_outline,
+      ),
+      NotificationType.error => (
+        colors.errorContainer,
+        colors.error,
+        'Ошибка',
+        m.Icons.error_outline,
+      ),
+    };
     final top = MediaQuery.paddingOf(context).top;
     return Positioned(
       top: top + AppTokens.space8,
@@ -389,7 +428,7 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
           },
           child: Semantics(
             liveRegion: true,
-            label: widget.message,
+            label: '$title: ${widget.message}',
             child: GestureDetector(
               onVerticalDragStart: (_) {},
               onVerticalDragUpdate: (details) {
@@ -409,7 +448,7 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
               },
               child: m.Material(
                 key: const ValueKey('internal-notification-surface'),
-                color: AppColors.surface(context),
+                color: background,
                 elevation: 6,
                 borderRadius: BorderRadius.circular(AppTokens.radius),
                 child: Padding(
@@ -417,10 +456,34 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
                     horizontal: AppTokens.space16,
                     vertical: AppTokens.space12,
                   ),
-                  child: Text(
-                    widget.message,
-                    style: m.Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(color: AppColors.text(context)),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      m.Icon(icon, color: titleColor, size: 20),
+                      const SizedBox(width: AppTokens.space12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              title,
+                              style: m.Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    color: titleColor,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                            const SizedBox(height: AppTokens.space4),
+                            Text(
+                              widget.message,
+                              style: m.Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: colors.onSurface),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

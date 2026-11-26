@@ -235,19 +235,14 @@ class LocationViewModel extends ChangeNotifier {
       ? 'Доступ к геолокации запрещён. Включите его в настройках приложения или выберите место вручную.'
       : 'Доступ к геолокации запрещён. Разрешите его в настройках сайта в браузере или выберите место вручную.';
 
-  Future<void> openSettings() async {
-    var opened = false;
+  Future<bool> openSettings() async {
     try {
-      opened = permission == GeoPermissionState.servicesDisabled
-          ? await _geolocation.openLocationSettings()
-          : await _geolocation.openApplicationSettings();
+      if (permission == GeoPermissionState.servicesDisabled) {
+        return await _geolocation.openLocationSettings();
+      }
+      return await _geolocation.openApplicationSettings();
     } catch (_) {
-      opened = false;
-    }
-    if (!opened) {
-      permissionMessage =
-          'Откройте настройки разрешений для Vaqtpro и включите геолокацию.';
-      notifyListeners();
+      return false;
     }
   }
 

@@ -78,8 +78,9 @@ void main() {
       final scheme = m.Theme.of(context).colorScheme;
       expect(
         tester.widget<m.Material>(shortSurface).color,
-        scheme.surfaceContainerLow,
+        scheme.primaryContainer,
       );
+      expect(find.text('Инфо'), findsOneWidget);
       expect(
         tester.widget<Text>(find.text(shortMessage)).style?.color,
         scheme.onSurface,
@@ -98,11 +99,43 @@ void main() {
       expect(tester.getSize(longSurface).height, greaterThan(48));
       expect(
         tester.widget<m.Material>(longSurface).color,
-        m.Theme.of(context).colorScheme.surfaceContainerLow,
+        m.Theme.of(context).colorScheme.primaryContainer,
       );
       expect(
         tester.widget<Text>(find.text(longMessage)).style?.color,
         m.Theme.of(context).colorScheme.onSurface,
+      );
+
+      InternalNotification.show(
+        context,
+        'Location saved',
+        type: NotificationType.success,
+      );
+      await tester.pump(const Duration(milliseconds: 240));
+      final successColors = m.ColorScheme.fromSeed(
+        seedColor: const Color(0xFF2E7D32),
+        brightness: scheme.brightness,
+      );
+      expect(find.text('Успех'), findsOneWidget);
+      expect(
+        tester.widget<m.Material>(shortSurface).color,
+        successColors.primaryContainer,
+      );
+      expect(
+        tester.widget<Text>(find.text('Location saved')).style?.color,
+        scheme.onSurface,
+      );
+
+      InternalNotification.show(
+        context,
+        'Could not save',
+        type: NotificationType.error,
+      );
+      await tester.pump(const Duration(milliseconds: 240));
+      expect(find.text('Ошибка'), findsOneWidget);
+      expect(
+        tester.widget<m.Material>(shortSurface).color,
+        scheme.errorContainer,
       );
     }
 
