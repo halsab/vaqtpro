@@ -368,67 +368,59 @@ class _InternalNotificationViewState extends State<_InternalNotificationView>
 
   @override
   Widget build(BuildContext context) {
-    final colors = m.Theme.of(context).colorScheme;
     final top = MediaQuery.paddingOf(context).top;
     return Positioned(
       top: top + AppTokens.space8,
       left: AppTokens.space16,
       right: AppTokens.space16,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: (_) => _pauseTimer(),
-            onPointerUp: (_) => _resumeTimer(),
-            onPointerCancel: (_) => _resumeTimer(),
-            child: AnimatedBuilder(
-              animation: _animation,
-              builder: (context, child) {
-                final progress = _animation.value;
-                return Transform.translate(
-                  offset: Offset(0, _dragOffset + (1 - progress) * -80),
-                  child: Opacity(opacity: progress, child: child),
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (_) => _pauseTimer(),
+        onPointerUp: (_) => _resumeTimer(),
+        onPointerCancel: (_) => _resumeTimer(),
+        child: AnimatedBuilder(
+          animation: _animation,
+          builder: (context, child) {
+            final progress = _animation.value;
+            return Transform.translate(
+              offset: Offset(0, _dragOffset + (1 - progress) * -80),
+              child: Opacity(opacity: progress, child: child),
+            );
+          },
+          child: Semantics(
+            liveRegion: true,
+            label: widget.message,
+            child: GestureDetector(
+              onVerticalDragStart: (_) {},
+              onVerticalDragUpdate: (details) {
+                setState(
+                  () =>
+                      _dragOffset = math.min(0, details.delta.dy + _dragOffset),
                 );
               },
-              child: Semantics(
-                liveRegion: true,
-                label: widget.message,
-                child: GestureDetector(
-                  onVerticalDragStart: (_) {},
-                  onVerticalDragUpdate: (details) {
-                    setState(
-                      () => _dragOffset = math.min(
-                        0,
-                        details.delta.dy + _dragOffset,
-                      ),
-                    );
-                  },
-                  onVerticalDragEnd: (details) {
-                    if (_dragOffset < -36 ||
-                        details.velocity.pixelsPerSecond.dy < -300) {
-                      _dismiss();
-                    } else {
-                      setState(() => _dragOffset = 0);
-                      _resumeTimer();
-                    }
-                  },
-                  child: m.Material(
-                    color: colors.inverseSurface,
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(AppTokens.radius),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppTokens.space16,
-                        vertical: AppTokens.space12,
-                      ),
-                      child: Text(
-                        widget.message,
-                        style: m.Theme.of(context).textTheme.bodyMedium
-                            ?.copyWith(color: colors.onInverseSurface),
-                      ),
-                    ),
+              onVerticalDragEnd: (details) {
+                if (_dragOffset < -36 ||
+                    details.velocity.pixelsPerSecond.dy < -300) {
+                  _dismiss();
+                } else {
+                  setState(() => _dragOffset = 0);
+                  _resumeTimer();
+                }
+              },
+              child: m.Material(
+                key: const ValueKey('internal-notification-surface'),
+                color: AppColors.surface(context),
+                elevation: 6,
+                borderRadius: BorderRadius.circular(AppTokens.radius),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTokens.space16,
+                    vertical: AppTokens.space12,
+                  ),
+                  child: Text(
+                    widget.message,
+                    style: m.Theme.of(context).textTheme.bodyMedium
+                        ?.copyWith(color: AppColors.text(context)),
                   ),
                 ),
               ),

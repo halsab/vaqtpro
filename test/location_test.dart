@@ -600,6 +600,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'section heading keeps its position when recent becomes favorite',
+    (tester) async {
+      final kazan = _place('1', 'Казань');
+      final moscow = _place('2', 'Москва');
+      final viewModel = _viewModel(
+        repository: _MemoryLocationRepository(
+          SavedLocationState(selected: kazan, recents: [kazan, moscow]),
+        ),
+      );
+      await tester.pumpWidget(
+        AppRoot(
+          title: 'Vaqtpro',
+          home: HomeScreen(viewModel: viewModel),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Казань'));
+      await tester.pumpAndSettle();
+
+      final recentHeadingTop = tester.getTopLeft(find.text('Недавние')).dy;
+      await tester.tap(find.byTooltip('Добавить в избранное').first);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getTopLeft(find.text('Избранное')).dy,
+        closeTo(recentHeadingTop, 0.1),
+      );
+      expect(
+        tester.getTopLeft(find.text('Недавние')).dy -
+            tester.getBottomLeft(find.byType(m.ListTile).first).dy,
+        AppTokens.space16,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('favorite save failure uses a transient notice only', (
     tester,
   ) async {
