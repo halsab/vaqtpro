@@ -11,6 +11,7 @@ import '../features/location/models/prayer_location.dart';
 import '../features/location/view_models/location_view_model.dart';
 import '../features/prayer_times/widgets/prayer_times_card.dart';
 import '../features/prayer_times/screens/settings_screen.dart';
+import '../features/prayer_times/models/calculation_profile.dart';
 import '../features/prayer_times/services/prayer_times_calculator.dart';
 import '../features/prayer_times/view_models/calculation_profile_view_model.dart';
 
@@ -146,7 +147,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       countryCode: location.countryCode,
       regionCode: location.regionCode,
       timeZoneId: location.timeZoneId,
-      selection: _profileViewModel.selectionFor(location.identityKey),
+      configuration: _profileViewModel.configurationFor(
+        location.identityKey,
+        automaticProfile: prayerCalculationProfileForRegion(
+          location.countryCode,
+          location.regionCode,
+        ),
+      ),
     );
     return PrayerTimesCard(
       times: schedule?.entries.map((entry) => entry.time).toList(),

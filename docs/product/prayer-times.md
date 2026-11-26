@@ -69,10 +69,22 @@ calculation.
 - If sunrise or sunset does not occur, use Adhan Dart's nearest-latitude polar
   resolution and treat the resulting times as approximate. Use solar events
   without regional minute offsets to determine night length.
-- Settings offer “По месту”, “Татарстан”, “Россия”, and MWL. A manual choice
-  applies only to that saved place; choosing another place uses that place's
-  saved choice or its automatic profile. Choosing “По месту” clears the
-  override. The Russia label is simply “Россия”.
+- Settings provide automatic/manual mode. Automatic mode hides the editable
+  fields and shows the active profile, Asr rule, and “Высокие широты: По
+  профилю”. Without a selected place, the summary uses MWL; prayer times remain
+  unavailable until coordinates are selected.
+- Manual mode exposes all 14 profiles: the 12 Adhan methods except “Other”,
+  plus Татарстан and Россия, along with independent Asr and high-latitude
+  controls. Choosing a profile immediately replaces both controls with that
+  profile's defaults; either can then be changed without changing the profile.
+  High-latitude choices are “Середина ночи”, “Седьмая часть ночи”, “Угол
+  сумерек”, “По правилам профиля Татарстан”, and “По правилам профиля Россия”.
+- Settings apply immediately without a save button and remain associated with
+  each place. A manual configuration made before choosing a place is used as the
+  starter for places that have no saved configuration. Returning to automatic
+  mode preserves the manual values. Existing per-place regional overrides are
+  migrated to manual configurations; an older global method configuration is
+  retained as the unplaced starter without disabling automatic mode.
 - The centered seven-row Material 3 prayer card shows calculated times for the
   selected location without a scroll container. Without a selected place it
   remains uncalculated.
@@ -104,8 +116,14 @@ text, narrow widths, and scrollable results.
 - With a selected place, show seven ordered rows of calculated local times.
 - GeoNames `RU.73` selects Tatarstan; other `RU` places select Russia; unknown
   and non-RU countries select MWL.
-- Settings show the active automatic profile, profile overrides update times
-  immediately, persist across launches for the same place, and do not transfer
-  to a different place. “По месту” clears an override.
+- Automatic settings hide editable fields and show the active profile summary.
+  Manual settings are available with no selected place; switching mode or
+  changing any field applies immediately without a save action.
+- Selecting a manual profile sets its Asr and high-latitude defaults; editing
+  either field keeps the selected profile and applies the override to the
+  calculation.
+- Manual configuration persists across launches per place. A no-place manual
+  configuration acts as the starter for places without an existing config;
+  existing per-place configs take precedence.
 - A previously saved Kazan without `regionCode` is migrated from its GeoNames ID
   and selects the Tatarstan profile automatically.
