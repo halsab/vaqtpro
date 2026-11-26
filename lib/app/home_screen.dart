@@ -11,17 +11,12 @@ import '../features/location/models/prayer_location.dart';
 import '../features/location/view_models/location_view_model.dart';
 import '../features/prayer_times/widgets/prayer_times_card.dart';
 import '../features/prayer_times/screens/settings_screen.dart';
-import '../features/prayer_times/view_models/calculation_profile_view_model.dart';
+import '../features/prayer_times/services/prayer_times_calculator.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({
-    super.key,
-    required this.viewModel,
-    this.calculationProfileViewModel,
-  });
+  const HomeScreen({super.key, required this.viewModel});
 
   final LocationViewModel viewModel;
-  final CalculationProfileViewModel? calculationProfileViewModel;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -29,18 +24,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   LocationViewModel get viewModel => widget.viewModel;
-  late final CalculationProfileViewModel _calculationProfileViewModel;
-  CalculationProfileViewModel get calculationProfileViewModel =>
-      _calculationProfileViewModel;
+  final _prayerTimesCalculator = PrayerTimesCalculator();
 
   @override
   void initState() {
     super.initState();
-    _calculationProfileViewModel =
-        widget.calculationProfileViewModel ?? CalculationProfileViewModel();
     WidgetsBinding.instance.addObserver(this);
     unawaited(viewModel.initialize());
-    unawaited(calculationProfileViewModel.initialize());
   }
 
   @override
@@ -54,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     viewModel.dispose();
-    calculationProfileViewModel.dispose();
     super.dispose();
   }
 
@@ -73,8 +62,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           icon: const m.Icon(m.Icons.settings),
           onPressed: () => Navigator.of(context).push(
             m.MaterialPageRoute<void>(
-              builder: (_) =>
-                  SettingsScreen(viewModel: calculationProfileViewModel),
+              builder: (_) => SettingsScreen(
+                countryCode: selected?.countryCode,
+                regionCode: selected?.regionCode,
+              ),
             ),
           ),
         ),
@@ -132,8 +123,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       LocationLoadState.ready =>
         viewModel.selected == null
             ? _unknownLocationBody(context)
-            : const PrayerTimesCard(),
+            : _prayerTimesCard(viewModel.selected!),
     };
+  }
+
+  Widget _prayerTimesCard(PrayerLocation location) {
+    final schedule = _prayerTimesCalculator.calculate(
+      latitude: location.latitude,
+      longitude: location.longitude,
+      countryCode: location.countryCode,
+      regionCode: location.regionCode,
+      timeZoneId: location.timeZoneId,
+    );
+    return PrayerTimesCard(
+      times: schedule?.entries.map((entry) => entry.time).toList(),
+      isApproximate: schedule?.isApproximate ?? false,
+    );
   }
 
   Widget _unknownLocationBody(BuildContext context) {
