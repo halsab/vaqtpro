@@ -12,7 +12,6 @@ import 'package:vaqtpro/features/location/repositories/location_repository.dart'
 import 'package:vaqtpro/features/location/repositories/offline_place_catalog_repository.dart';
 import 'package:vaqtpro/features/location/view_models/location_view_model.dart';
 import 'package:vaqtpro/features/prayer_times/widgets/prayer_times_card.dart';
-import 'package:vaqtpro/features/prayer_times/view_models/calculation_profile_view_model.dart';
 
 void main() {
   testWidgets(
@@ -344,7 +343,8 @@ void main() {
       for (final name in names) tester.getTopLeft(find.text(name)).dy,
     ];
     expect(namePositions, orderedEquals(namePositions.toList()..sort()));
-    expect(find.text('—'), findsNWidgets(7));
+    expect(find.text('—'), findsNothing);
+    expect(find.textContaining(':'), findsNWidgets(7));
     expect(find.text('Название'), findsNothing);
     expect(find.text('Время'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -378,7 +378,8 @@ void main() {
       ]) {
         expect(find.text(name), findsOneWidget);
       }
-      expect(find.text('—'), findsNWidgets(7));
+      expect(find.text('—'), findsNothing);
+      expect(find.textContaining(':'), findsNWidgets(7));
       expect(tester.takeException(), isNull);
     }
   });
@@ -453,6 +454,8 @@ LocationViewModel _selectedLocationViewModel() => LocationViewModel(
         name: 'Казань',
         country: 'Россия',
         region: 'Республика Татарстан',
+        countryCode: 'RU',
+        regionCode: '73',
         latitude: 55.78874,
         longitude: 49.12214,
         timeZoneId: 'Europe/Moscow',
@@ -464,10 +467,7 @@ LocationViewModel _selectedLocationViewModel() => LocationViewModel(
   geonames: _FakeGeoNames(),
 );
 
-HomeScreen _homeScreen() => HomeScreen(
-  viewModel: _selectedLocationViewModel(),
-  calculationProfileViewModel: CalculationProfileViewModel(),
-);
+HomeScreen _homeScreen() => HomeScreen(viewModel: _selectedLocationViewModel());
 
 class _MemoryLocationRepository implements LocationRepository {
   _MemoryLocationRepository(this.state);

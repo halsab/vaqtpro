@@ -1,6 +1,28 @@
 import 'package:adhan/adhan.dart';
 
-/// User-selected inputs for a future prayer-time calculation.
+enum RegionalPrayerProfile { tatarstan, russia, muslimWorldLeague }
+
+RegionalPrayerProfile profileForRegion(
+  String? countryCode,
+  String? regionCode,
+) {
+  if (countryCode != 'RU') {
+    return RegionalPrayerProfile.muslimWorldLeague;
+  }
+  return regionCode == '73'
+      ? RegionalPrayerProfile.tatarstan
+      : RegionalPrayerProfile.russia;
+}
+
+String regionalPrayerProfileLabel(RegionalPrayerProfile profile) =>
+    switch (profile) {
+      RegionalPrayerProfile.tatarstan => 'ДУМ Республики Татарстан',
+      RegionalPrayerProfile.russia => 'ДУМ РФ (московский профиль)',
+      RegionalPrayerProfile.muslimWorldLeague => 'Всемирная мусульманская лига',
+    };
+
+/// Retained to read older saved settings while the location selects the
+/// effective regional profile.
 class CalculationProfile {
   const CalculationProfile({
     this.method = CalculationMethod.muslim_world_league,

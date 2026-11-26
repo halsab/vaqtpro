@@ -48,6 +48,7 @@ void main() {
 
       expect(loaded.selected?.geonameId, '2');
       expect(loaded.favorites.single.geonameId, '1');
+      expect(loaded.selected?.regionCode, '73');
       expect(loaded.recents.map((place) => place.geonameId), ['2', '1']);
       expect(loaded.hasAskedLocationPermission, isTrue);
     },
@@ -61,6 +62,8 @@ void main() {
     final matches = await catalog.search('Казань');
     expect(matches.first.name, 'Казань');
     expect(matches.first.region, 'Республика Татарстан');
+    expect(matches.first.countryCode, 'RU');
+    expect(matches.first.regionCode, '73');
     expect(matches.first.timeZoneId, 'Europe/Moscow');
   });
 
@@ -75,7 +78,7 @@ void main() {
           expect(request.url.queryParameters['featureClass'], 'P');
           expect(request.url.queryParameters['lang'], 'ru');
           return http.Response(
-            '{"geonames":[{"geonameId":551487,"name":"Казань","toponymName":"Kazan","lat":"55.78874","lng":"49.12214","countryCode":"RU","countryName":"Россия","adminName1":"Республика Татарстан","timezone":{"timeZoneId":"Europe/Moscow"}}]}',
+            '{"geonames":[{"geonameId":551487,"name":"Казань","toponymName":"Kazan","lat":"55.78874","lng":"49.12214","countryCode":"RU","countryName":"Россия","adminName1":"Республика Татарстан","adminCode1":"73","timezone":{"timeZoneId":"Europe/Moscow"}}]}',
             200,
             headers: {'content-type': 'application/json; charset=utf-8'},
           );
@@ -97,6 +100,7 @@ void main() {
       final nearby = await service.reverseGeocode(55.79, 49.12);
 
       expect(results.single.geonameId, '551487');
+      expect(results.single.regionCode, '73');
       expect(results.single.alternateNames, ['Kazan']);
       expect(nearby?.timeZoneId, 'Europe/Moscow');
     },
@@ -605,7 +609,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(viewModel.selected?.geonameId, '551487');
     expect(find.text('Выбрать местоположение'), findsNothing);
-    expect(find.text('—'), findsNWidgets(7));
+    expect(find.text('—'), findsNothing);
+    expect(find.textContaining(':'), findsNWidgets(7));
     expect(tester.takeException(), isNull);
   });
 
@@ -764,6 +769,7 @@ PrayerLocation _place(String id, String name) => PrayerLocation(
   name: name,
   region: 'Республика Татарстан',
   countryCode: 'RU',
+  regionCode: '73',
   country: 'Россия',
   latitude: 0,
   longitude: 0,

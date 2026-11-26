@@ -4,9 +4,8 @@
 
 Help the user identify and select a place quickly, then retain it between
 launches. This iteration implements device location, place search, recent
-places, favorites, persistent selection, and a saved calculation profile.
-Prayer-time calculation and display remain out of scope; never imply that
-placeholder values are real.
+places, favorites, persistent selection, and location-based prayer-time
+calculation.
 
 ## State and rules
 
@@ -23,7 +22,8 @@ placeholder values are real.
   retaining their full precision.
 - When a populated place is displayed, persist and use that place's coordinates
   and timezone, not the device's raw coordinates. A coordinate-only selection
-  retains its original coordinates and an optional known timezone.
+  retains its original coordinates and an optional known timezone. Retain the
+  GeoNames country and first-level region codes with each place.
 - Show the short place name in the app bar. Show the difference from the
   device's current timezone offset only when both offsets are known and differ.
   Tapping the place opens the selection sheet.
@@ -47,21 +47,33 @@ placeholder values are real.
   available.
 - The PWA caches its application shell and place catalog after the first
   successful online load; location search can then be reopened without network.
-- The home screen has a settings action. Settings is a full page containing
-  only the calculation-profile item. Editing opens a bottom sheet with the
-  calculation method, Asr madhab, and high-latitude rule. Save persists the
-  selections locally; dismissing without saving discards edits. The profile is
-  configuration only and does not yet affect the prayer-time card.
-- The default profile is Muslim World League, Shafi, and middle-of-the-night
-  high-latitude rule. If a stored profile is unreadable or unsupported, retain
-  these defaults. Method parameters come from the selected `adhan` preset;
-  manual angles and minute adjustments are not exposed.
+- Prayer times are calculated for the selected place and its timezone. Select
+  the Tatarstan profile only for GeoNames `countryCode=RU` and
+  `regionCode=73`; other Russian places use the Russia profile; places outside
+  Russia or with unknown country use MWL. Never infer Tatarstan from a localized
+  region name.
+- Tatarstan uses Fajr/Isha angles 18°/15°, Hanafi Asr, sunrise and sunset as
+  calculated by Adhan Dart, and Dhuhr at the later of local 12:00 or solar noon
+  +1 minute rounded up. If the 18° twilight is unavailable for a night, use
+  sunset +90 minutes for Isha and sunrise −120 minutes for the following Fajr.
+- Russia follows the Moscow DUM RF calendar parameters: Fajr/Isha 18°/15°,
+  standard Asr, sunrise −5 minutes, Dhuhr +5 minutes, and sunset +5 minutes.
+  For each selected night and prayer independently, if its angle is unreachable,
+  estimate Fajr at 30% of the night before sunrise or Isha at 25% after sunset.
+  Apply this in either hemisphere only on affected nights; do not use a fixed
+  latitude cutoff.
+- If sunrise or sunset does not occur, use Adhan Dart's nearest-latitude polar
+  resolution and treat the resulting times as approximate. Use solar events
+  without regional minute offsets to determine night length.
+- The settings page reports which location-based profile is active. The
+  existing centered seven-row Material 3 prayer card shows calculated times
+  for the selected location; without a selected place it remains uncalculated.
 
 ## Layout and acceptance
 
-Keep the existing centered seven-row Material 3 prayer card and em-dash values
-unchanged whenever a place is selected. With no place, center the two location
-actions and any permission explanation in the available body. The app-bar place
+Keep the existing centered seven-row Material 3 prayer card. With no place,
+center the two location actions and any permission explanation in the available
+body. The app-bar place
 name is a clearly actionable control. The bottom sheet uses a persistent search
 field, favorite stars, and an empty-query quick list; auto-focus search only
 when there are no favorites or recent places. Support keyboard insets, large
@@ -81,7 +93,8 @@ text, narrow widths, and scrollable results.
   results.
 - Select a place, favorite it, restart offline: the selected short name and
   favorite are restored; selecting it again does not duplicate recents.
-- With a place selected, the prayer card still shows seven ordered rows with
-  em dashes; this task does not calculate or fabricate prayer times.
-- The profile can be edited, saved, and restored after recreating the app state;
-  changing it leaves the prayer card values unchanged.
+- With a selected place, show seven ordered rows of calculated local times.
+- GeoNames `RU.73` selects Tatarstan; other `RU` places select Russia; unknown
+  and non-RU countries select MWL.
+- The prayer card and settings page use the same effective profile; changing the
+  selected place recalculates the times without requiring a profile toggle.

@@ -44,6 +44,7 @@ class OfflinePlaceCatalogRepository {
             latitude: (row[3] as num).toDouble(),
             longitude: (row[4] as num).toDouble(),
             countryCode: countryCode,
+            regionCode: adminCode,
             country: countryCode == 'RU'
                 ? 'Россия'
                 : countries[countryCode] ?? countryCode,

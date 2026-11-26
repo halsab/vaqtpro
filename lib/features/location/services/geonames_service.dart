@@ -104,6 +104,7 @@ class HttpGeoNamesService {
       name: name,
       region: row['adminName1']?.toString(),
       countryCode: row['countryCode']?.toString(),
+      regionCode: row['adminCode1']?.toString(),
       country: row['countryName']?.toString(),
       latitude: latitude,
       longitude: longitude,

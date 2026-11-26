@@ -8,6 +8,7 @@ class PrayerLocation {
     this.name,
     this.region,
     this.countryCode,
+    this.regionCode,
     this.country,
     this.timeZoneId,
     this.population = 0,
@@ -18,6 +19,9 @@ class PrayerLocation {
   final String? name;
   final String? region;
   final String? countryCode;
+
+  /// GeoNames adminCode1, e.g. "73" for the Republic of Tatarstan.
+  final String? regionCode;
   final String? country;
   final double latitude;
   final double longitude;
@@ -63,6 +67,7 @@ class PrayerLocation {
     name: name,
     region: regionName ?? region,
     countryCode: countryCode,
+    regionCode: regionCode,
     country: countryName ?? country,
     latitude: latitude,
     longitude: longitude,
@@ -76,6 +81,7 @@ class PrayerLocation {
     'name': name,
     'region': region,
     'countryCode': countryCode,
+    'regionCode': regionCode,
     'country': country,
     'latitude': latitude,
     'longitude': longitude,
@@ -89,6 +95,7 @@ class PrayerLocation {
     name: json['name'] as String?,
     region: json['region'] as String?,
     countryCode: json['countryCode'] as String?,
+    regionCode: json['regionCode'] as String?,
     country: json['country'] as String?,
     latitude: (json['latitude'] as num).toDouble(),
     longitude: (json['longitude'] as num).toDouble(),
