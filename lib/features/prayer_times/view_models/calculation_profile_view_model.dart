@@ -8,30 +8,63 @@ import '../models/calculation_profile.dart';
 class CalculationProfileViewModel extends ChangeNotifier {
   CalculationProfileViewModel([this._preferences]);
 
-  static const _storageKey = 'prayer_calculation_profile';
+  static const _storageKey = 'prayer_calculation_profile_overrides_v1';
   final SharedPreferencesAsync? _preferences;
-  CalculationProfile profile = const CalculationProfile();
+  final Map<String, CalculationProfileSelection> _overrides = {};
   bool isLoading = true;
+
+  CalculationProfileSelection selectionFor(String locationKey) =>
+      _overrides[locationKey] ?? CalculationProfileSelection.byLocation;
 
   Future<void> initialize() async {
     try {
       final encoded = await _preferences?.getString(_storageKey);
       if (encoded != null) {
-        profile = CalculationProfile.fromJson(
-          jsonDecode(encoded) as Map<String, dynamic>,
-        );
+        final values = jsonDecode(encoded) as Map<String, dynamic>;
+        _overrides
+          ..clear()
+          ..addEntries(
+            values.entries.map((entry) {
+              try {
+                return MapEntry(
+                  entry.key,
+                  CalculationProfileSelection.values.byName(
+                    entry.value as String,
+                  ),
+                );
+              } on Object {
+                return null;
+              }
+            }).whereType<MapEntry<String, CalculationProfileSelection>>(),
+          );
       }
     } on Object {
-      // Keep the defaults if a saved profile is missing or no longer valid.
+      _overrides.clear();
     }
     isLoading = false;
     notifyListeners();
   }
 
-  Future<bool> save(CalculationProfile value) async {
+  Future<bool> saveForLocation(
+    String locationKey,
+    CalculationProfileSelection selection,
+  ) async {
+    final updated = Map<String, CalculationProfileSelection>.from(_overrides);
+    if (selection == CalculationProfileSelection.byLocation) {
+      updated.remove(locationKey);
+    } else {
+      updated[locationKey] = selection;
+    }
     try {
-      await _preferences?.setString(_storageKey, jsonEncode(value.toJson()));
-      profile = value;
+      await _preferences?.setString(
+        _storageKey,
+        jsonEncode({
+          for (final entry in updated.entries) entry.key: entry.value.name,
+        }),
+      );
+      _overrides
+        ..clear()
+        ..addAll(updated);
       notifyListeners();
       return true;
     } on Object {

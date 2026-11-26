@@ -8,17 +8,21 @@ class PrayerTimesCard extends StatelessWidget {
     super.key,
     required this.times,
     this.isApproximate = false,
+    this.notice,
   });
 
   final List<DateTime?>? times;
   final bool isApproximate;
+  final String? notice;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => SingleChildScrollView(
-      padding: AppTokens.pagePadding,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: constraints.maxHeight),
+    builder: (context, constraints) {
+      final rowGap = notice != null || constraints.maxHeight < 520
+          ? AppTokens.space8
+          : AppTokens.space16;
+      return Padding(
+        padding: AppTokens.pagePadding,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
@@ -31,19 +35,20 @@ class PrayerTimesCard extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (isApproximate) ...[
+                    if (notice != null || isApproximate) ...[
                       Text(
-                        'Расчёт приблизительный',
+                        notice ?? 'Расчёт приблизительный',
+                        textAlign: TextAlign.center,
                         style: m.Theme.of(context).textTheme.bodySmall,
                       ),
-                      const SizedBox(height: AppTokens.space16),
+                      SizedBox(height: rowGap),
                     ],
                     for (
                       var index = 0;
                       index < _prayerNames.length;
                       index++
                     ) ...[
-                      if (index > 0) const SizedBox(height: AppTokens.space16),
+                      if (index > 0) SizedBox(height: rowGap),
                       _PrayerTimeRow(
                         name: _prayerNames[index],
                         time: times != null && index < times!.length
@@ -57,8 +62,8 @@ class PrayerTimesCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    ),
+      );
+    },
   );
 }
 

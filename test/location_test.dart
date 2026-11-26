@@ -54,6 +54,48 @@ void main() {
     },
   );
 
+  test(
+    'legacy saved Kazan is enriched with GeoNames region and timezone',
+    () async {
+      final legacyKazan = const PrayerLocation(
+        geonameId: '551487',
+        name: 'Казань',
+        countryCode: 'RU',
+        region: 'Республика Татарстан',
+        country: 'Россия',
+        latitude: 55.78874,
+        longitude: 49.12214,
+      );
+      final repository = _MemoryLocationRepository(
+        SavedLocationState().select(legacyKazan).toggleFavorite(legacyKazan),
+      );
+      final catalog = OfflinePlaceCatalogRepository(
+        places: [
+          const PrayerLocation(
+            geonameId: '551487',
+            name: 'Казань',
+            countryCode: 'RU',
+            regionCode: '73',
+            region: 'Республика Татарстан',
+            country: 'Россия',
+            latitude: 55.78874,
+            longitude: 49.12214,
+            timeZoneId: 'Europe/Moscow',
+          ),
+        ],
+      );
+      final viewModel = _viewModel(repository: repository, catalog: catalog);
+
+      await viewModel.initialize();
+
+      expect(viewModel.selected?.regionCode, '73');
+      expect(viewModel.selected?.timeZoneId, 'Europe/Moscow');
+      expect(viewModel.favorites.single.regionCode, '73');
+      expect(repository.state.selected?.regionCode, '73');
+      viewModel.dispose();
+    },
+  );
+
   test('offline GeoNames catalog contains Russian priority places', () async {
     final catalog = OfflinePlaceCatalogRepository(
       loadAsset: () =>
