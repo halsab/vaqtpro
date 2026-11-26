@@ -402,39 +402,43 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
           ),
         );
       }
+      final sectionChildren = <Widget>[];
+      void addHeading(String title) {
+        sectionChildren.add(
+          _SectionHeading(
+            title: title,
+            padding: EdgeInsets.fromLTRB(
+              AppTokens.space16,
+              sectionChildren.isEmpty
+                  ? AppTokens.space8
+                  : AppTokens.space16,
+              AppTokens.space16,
+              AppTokens.space4,
+            ),
+          ),
+        );
+      }
+
+      if (favorites.isNotEmpty) {
+        addHeading('Избранное');
+        sectionChildren.addAll([
+          for (final place in favorites) _placeTile(context, place),
+          if (viewModel.hasMoreFavorites)
+            m.TextButton(
+              onPressed: viewModel.showAllSavedFavorites,
+              child: Text('Все избранные (${viewModel.favorites.length})'),
+            ),
+        ]);
+      }
+      if (recents.isNotEmpty) {
+        addHeading('Недавние');
+        sectionChildren.addAll([
+          for (final place in recents) _placeTile(context, place),
+        ]);
+      }
       return ListView(
         padding: const EdgeInsets.symmetric(horizontal: AppTokens.space8),
-        children: [
-          if (favorites.isNotEmpty) ...[
-            _SectionHeading(
-              title: 'Избранное',
-              padding: const EdgeInsets.fromLTRB(
-                AppTokens.space16,
-                AppTokens.space8,
-                AppTokens.space16,
-                AppTokens.space4,
-              ),
-            ),
-            for (final place in favorites) _placeTile(context, place),
-            if (viewModel.hasMoreFavorites)
-              m.TextButton(
-                onPressed: viewModel.showAllSavedFavorites,
-                child: Text('Все избранные (${viewModel.favorites.length})'),
-              ),
-          ],
-          if (recents.isNotEmpty) ...[
-            _SectionHeading(
-              title: 'Недавние',
-              padding: const EdgeInsets.fromLTRB(
-                AppTokens.space16,
-                AppTokens.space16,
-                AppTokens.space16,
-                AppTokens.space4,
-              ),
-            ),
-            for (final place in recents) _placeTile(context, place),
-          ],
-        ],
+        children: sectionChildren,
       );
     }
 

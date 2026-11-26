@@ -43,6 +43,64 @@ void main() {
     },
   );
 
+  testWidgets('internal notifications fill width and follow both themes', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final dispatcher = tester.binding.platformDispatcher;
+    addTearDown(dispatcher.clearPlatformBrightnessTestValue);
+    late BuildContext context;
+
+    for (final brightness in [Brightness.light, Brightness.dark]) {
+      dispatcher.platformBrightnessTestValue = brightness;
+      await tester.pumpWidget(
+        AppRoot(
+          title: 'Notification',
+          home: Builder(
+            builder: (value) {
+              context = value;
+              return const Text('Home');
+            },
+          ),
+        ),
+      );
+      final shortMessage = 'Saved';
+      InternalNotification.show(context, shortMessage);
+      await tester.pump(const Duration(milliseconds: 240));
+
+      final shortSurface = find.byKey(
+        const ValueKey('internal-notification-surface'),
+      );
+      expect(tester.getSize(shortSurface).width, 368);
+      final scheme = m.Theme.of(context).colorScheme;
+      expect(tester.widget<m.Material>(shortSurface).color, scheme.surfaceContainerLow);
+      expect(tester.widget<Text>(find.text(shortMessage)).style?.color, scheme.onSurface);
+
+      final longMessage = List.filled(12, 'A much longer notification').join(' ');
+      InternalNotification.show(context, longMessage);
+      await tester.pump(const Duration(milliseconds: 240));
+      final longSurface = find.byKey(
+        const ValueKey('internal-notification-surface'),
+      );
+      expect(tester.getSize(longSurface).width, 368);
+      expect(tester.getSize(longSurface).height, greaterThan(48));
+      expect(
+        tester.widget<m.Material>(longSurface).color,
+        m.Theme.of(context).colorScheme.surfaceContainerLow,
+      );
+      expect(
+        tester.widget<Text>(find.text(longMessage)).style?.color,
+        m.Theme.of(context).colorScheme.onSurface,
+      );
+    }
+
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filled location icon button keeps its shape while loading', (
     tester,
   ) async {
