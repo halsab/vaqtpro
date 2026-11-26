@@ -1,0 +1,13 @@
+appId: com.tatar.vaqtpro
+---
+- setLocation:
+    latitude: 55.78874
+    longitude: 49.12214
+- launchApp:
+    clearState: true
+    permissions:
+      location: allow
+- tapOn: "Определить местоположение"
+- assertVisible:
+    text: "Казань"
+    timeout: 45000
