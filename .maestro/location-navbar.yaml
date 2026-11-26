@@ -6,7 +6,6 @@ appId: com.tatar.vaqtpro
 - inputText: "Казань"
 - hideKeyboard
 - tapOn:
-    text: "Казань"
-    index: 1
+    id: "location-result-551487"
 - assertVisible: "Казань"
 - assertNotVisible: "Выбрать местоположение"

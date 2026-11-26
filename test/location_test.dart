@@ -257,6 +257,29 @@ void main() {
     expect(viewModel.isResolvingLocation, isFalse);
   });
 
+  test(
+    'coordinate timeout ends loading and reports the failing step',
+    () async {
+      final geo = _FakeGeolocation()
+        ..pendingCoordinates = Completer<DeviceCoordinates>();
+      final viewModel = _viewModel(
+        repository: _MemoryLocationRepository(),
+        geolocation: geo,
+        locationOperationTimeout: const Duration(milliseconds: 10),
+      );
+      addTearDown(viewModel.dispose);
+      await viewModel.initialize();
+
+      expect(await viewModel.determineLocation(), isFalse);
+      expect(viewModel.isResolvingLocation, isFalse);
+      expect(viewModel.permissionMessage, contains('получение координат'));
+
+      geo.pendingCoordinates!.complete(const DeviceCoordinates(51.5, -0.12));
+      await Future<void>.delayed(Duration.zero);
+      expect(viewModel.selected, isNull);
+    },
+  );
+
   test('closing picker cancels its pending location result', () async {
     final geo = _FakeGeolocation()
       ..pendingPermission = Completer<GeoPermissionState>();
@@ -646,6 +669,7 @@ class _FakeGeolocation implements GeolocationRepository {
   DeviceCoordinates coordinates = const DeviceCoordinates(0.18, 0);
   int requestCount = 0;
   Completer<GeoPermissionState>? pendingPermission;
+  Completer<DeviceCoordinates>? pendingCoordinates;
 
   @override
   bool get supportsSettingsNavigation => true;
@@ -654,7 +678,8 @@ class _FakeGeolocation implements GeolocationRepository {
   Future<GeoPermissionState> checkPermission() async => permission;
 
   @override
-  Future<DeviceCoordinates> currentCoordinates() async => coordinates;
+  Future<DeviceCoordinates> currentCoordinates() =>
+      pendingCoordinates?.future ?? Future.value(coordinates);
 
   @override
   Future<bool> openApplicationSettings() async => true;

@@ -199,9 +199,9 @@ class LocationViewModel extends ChangeNotifier {
         notifyListeners();
       }
       return false;
-    } catch (_) {
+    } catch (error) {
       if (generation == _locationGeneration) {
-        _locationDiagnostic('failed at $step');
+        _locationDiagnostic('failed at $step: ${error.runtimeType} $error');
         permissionMessage = 'Не удалось определить местоположение. Проверьте доступ и попробуйте ещё раз.';
       }
       return false;

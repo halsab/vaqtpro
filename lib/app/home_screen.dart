@@ -217,7 +217,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         },
       ),
     );
-    viewModel.cancelLocationDetection();
+    if (mounted) viewModel.cancelLocationDetection();
   }
 }
 
@@ -453,7 +453,10 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
   Widget _placeTile(BuildContext context, PrayerLocation place) {
     final favorite = widget.viewModel.isFavorite(place);
     return m.ListTile(
-      title: Text(place.displayName),
+      title: m.Semantics(
+        identifier: 'location-result-${place.geonameId ?? 'coordinates'}',
+        child: Text(place.displayName),
+      ),
       subtitle: place.subtitle == null ? null : Text(place.subtitle!),
       onTap: () => widget.onSelected(place),
       trailing: m.IconButton(
