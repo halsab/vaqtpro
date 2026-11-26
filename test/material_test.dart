@@ -119,11 +119,23 @@ void main() {
       await tester.pumpAndSettle();
       final light = colors(probe);
       expect(light, expected(probe, Brightness.light));
+      expect(
+        m.Theme.of(probe).textTheme.bodyMedium?.fontFamily,
+        AppTokens.fontFamily,
+      );
+      expect(
+        m.Theme.of(probe).textTheme.titleLarge?.fontFamily,
+        AppTokens.fontFamily,
+      );
       final lightText = tester.widget<Text>(find.text('Theme probe'));
       expect(lightText.style?.color, light[3]);
       dispatcher.platformBrightnessTestValue = Brightness.dark;
       await tester.pumpAndSettle();
       final dark = colors(probe);
+      expect(
+        m.Theme.of(probe).textTheme.bodyMedium?.fontFamily,
+        AppTokens.fontFamily,
+      );
       expect(dark, expected(probe, Brightness.dark));
       // Accent, background and readable foreground must actually change.
       for (final index in [0, 1, 3]) {

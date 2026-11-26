@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 abstract final class AppTokens {
   // Material palette seed only, not a resolved UI color.
   static const materialSeed = Color(0xFF2563EB);
+  static const fontFamily = 'PTMono';
   static const space4 = 4.0;
   static const space8 = 8.0;
   static const space12 = 12.0;
