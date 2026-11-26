@@ -119,33 +119,26 @@ changes or new screens; user references are optional, no separate design-review 
 
 ## Visual acceptance and review
 
-For a material new screen, redesign, major navigation/flow or design-system
-change, inspect actual rendered screenshots of the changed screen(s), with
-representative content and the key changed state. For initial Material adoption
-or a shared theme change inspect light and dark on one representative runtime platform. Inspect another platform only for an
-actual platform-specific change or risk; inspect wide layout when affected.
-For substantial redesigns inspect the populated final screen and key changed
-interaction at a representative compact width in both themes; compare the
-baseline at comparable content and width if available. A single screenshot
-of an empty screen or a successful launch is insufficient. For isolated
-changes inspect only affected states and representative widths.
-Check narrow/large layouts and large text using fast widget assertions where
-meaningful, plus a representative desktop width if Web layout changes.
-Use actual local simulator/browser captures, not mockups or Ahem widget-test
-screenshots as proof of polished visual design. Save local previews under
-.flutter-harness/previews/ (ignored); include exact paths/viewport/platform
-in reviewer handoff and PR, attach screenshots when supported.
-Compare the actual rendered result with the selected direction, original
-request and behavior contract. Review hierarchy, spacing, discoverability, clipping, theme, states,
-platform behavior and reuse. Material hierarchy or interaction defects are
-not cosmetic preferences. One read-only reviewer covers correctness,
-architecture and UX, not three separate agents. If runtime visual review is
-unavailable, say BLOCKED for required visual acceptance, do not claim PASS.
-A screenshot is semantic review evidence, not an executable functional test.
-No routine visual/E2E checks for non-visual changes, no golden auto-approval.
-Required planned runtime evidence must pass the CLI before reviewer dispatch. Missing evidence is BLOCKED, not a product defect. For material visual tasks the same reviewer reports an explicit VISUAL: PASS
-before VERDICT: PASS only after opening actual runtime images and comparing
-them to the user job and baseline/target. Owner makes final aesthetic acceptance.
+Use the cheapest reliable proof of the requested outcome. For ordinary UI
+corrections (text, loader color, size, spacing, constraints) verify source;
+widget tests are appropriate for responsive constraints and state changes.
+Do not require a device launch or screenshot for a statically verifiable fact.
+
+For a material new screen, changed UX or substantial redesign, inspect the
+representative final runtime when cheaper evidence cannot establish the visual
+outcome. Do code review and fixes first. Use realistic populated content,
+hierarchy, accessible controls, long labels, clipping, state and actual
+interaction; test both themes, widths or another platform only when affected.
+A screenshot can support the assessment but does not prove functionality.
+Use only needed runtime checks, one affected target, no mandatory baseline or
+screenshot matrix. Do not repeat visual checks for source-verifiable corrections.
+
+Independent code review verifies the original request and concrete material
+defects. Explicit automated acceptance, when warranted, is separate at final
+delivery; use DESIGN.md and the selected current receipts. No code reviewer
+requires screenshots merely to admit review. If essential runtime evidence is
+missing, report the specific limitation and offer an approved draft rather
+than claiming full acceptance. Owner makes final aesthetic acceptance.
 
 ## Adoption and checks
 

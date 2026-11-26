@@ -290,7 +290,7 @@ def fetch_base(root,base):
     return text(git(root,"rev-parse","refs/remotes/origin/"+base))
 
 
-def begin(root, c, name):
+def begin(root, c, name, *, resume=False):
     base = c["integration_branch"]
     require(not name.startswith("-"), "Invalid branch")
     git(root, "check-ref-format", "--branch", name)
@@ -303,56 +303,24 @@ def begin(root, c, name):
     task_path = work(root)/"task.json"
     base_head = text(git(root,"rev-parse","origin/"+base))
     task = read_json(task_path) if task_path.is_file() else {}
-    if current == name and task:
+    if not resume and current == name and task:
         if all(task.get(k)==v for k,v in {"branch":name,"base_head":base_head,"revision":c["revision"]}.items()):
             output(status="PASS",branch=name,base=base,reused=True)
             return
     if current != name:
-        git(root, "switch", "-c", name, "origin/" + base)
-    if current != name or task.get("branch") != name:
+        if resume:
+            git(root, "switch", name)
+        else:
+            git(root, "switch", "-c", name, "origin/" + base)
+    actual_base = text(git(root, "merge-base", "HEAD", "origin/" + base))
+    require(resume or actual_base == base_head, "Feature branch does not contain current integration base")
+    installed_revision(root,c)
+    if resume or current != name or task.get("branch") != name:
         for filename in ("check.json","delivery.json","delivery-result.json","delivery-state.json","draft-result.json","runtime.json","visual-plan.json","visual-preflight.json","runtime-selection.json","sessions.json","baseline.json","check-attempt.json","check-progress.json","e2e-android.json","e2e-ios.json","e2e-web.json"):
             (work(root)/filename).unlink(missing_ok=True)
-    require(text(git(root, "merge-base", "HEAD", "origin/" + base)) ==
-            text(git(root, "rev-parse", "origin/" + base)),
-            "Feature branch does not contain current integration base")
-    installed_revision(root,c)
-    atomic_json(task_path,{"branch":name,"base_head":base_head,"revision":c["revision"],"baseline_digest":fingerprint(root),"started_at":int(time.time()*1000)})
+    atomic_json(task_path,{"branch":name,"base_head":actual_base,"revision":c["revision"],"baseline_digest":fingerprint(root),"started_at":int(time.time()*1000),"resumed":resume})
     event(root, "begin", branch=name, base=base)
     output(status="PASS", branch=name, base=base)
-
-
-def require_checkpoint(root,c):
-    """Bound the pending source/test diff at expensive verification boundaries.
-    No arbitrary commit quotas: small fixes may still go directly to delivery.
-    Large work must be preserved locally, without claiming acceptance.
-    """
-    task_path=work(root)/"task.json"
-    if not task_path.is_file():
-        return
-    task=read_json(task_path)
-    if (task.get("branch")!=text(git(root,"branch","--show-current")) or
-            task.get("revision")!=c["revision"] or
-            (work(root)/"delivery-state.json").exists()):
-        return
-    def measured(path):
-        return path.startswith(("lib/","test/","integration_test/")) or path=="pubspec.yaml"
-    pending=[p for p in dirty(root) if measured(p)]
-    if not pending:
-        return
-    lines=0
-    for row in paths(git(root,"diff","--no-renames","--numstat","-z","HEAD","--","lib","test","integration_test","pubspec.yaml")):
-        fields=row.split("\t",2)
-        if len(fields)==3:
-            lines+=401 if "-" in fields[:2] else int(fields[0])+int(fields[1])
-    for name in paths(git(root,"ls-files","--others","--exclude-standard","-z","--","lib","test","integration_test","pubspec.yaml")):
-        path=root/name
-        if path.is_symlink():
-            lines+=401
-        else:
-            data=path.read_bytes()
-            lines+=401 if b"\0" in data else data.count(b"\n")+(bool(data) and not data.endswith(b"\n"))
-    require(len(pending)<=8 and lines<=400,
-            f"Large uncommitted task slice ({len(pending)} source/test files, {lines} changed lines); inspect scope, run focused tests and checkpoint before expensive verification")
 
 
 def checkpoint_local(root, c, message):
@@ -363,9 +331,10 @@ def checkpoint_local(root, c, message):
             "Checkpoint requires current canonical begin")
     require(text(git(root, "merge-base", task["base_head"], "HEAD")) == task["base_head"],
             "Task base is not an ancestor")
-    require(not (work(root) / "delivery-state.json").exists() and
-            not (work(root) / "delivery-result.json").exists(),
-            "Delivery has started; preserve its manifest and resume delivery")
+    delivery_path = work(root) / "delivery-state.json"
+    require(not (work(root) / "delivery-result.json").exists() and
+            (not delivery_path.is_file() or read_json(delivery_path).get("status") == "BLOCKED"),
+            "Delivery is active or complete; preserve its manifest and resume delivery")
     require(message.strip(), "Nonempty checkpoint message required")
     files = dirty(root)
     require(files, "No task changes to checkpoint")
@@ -450,15 +419,28 @@ def check(root, c):
                 event(root, "check-reused", digest=digest)
                 output(status="PASS", digest=digest, reused=True, scope=prior.get("scope"), receipt=str(receipt_path))
                 return
+        path = folder/"check-attempt.json"
+        previous_attempt = read_json(path) if path.is_file() else {}
+        identity = {"digest":fingerprint(root),"environment":check_scope.environment(root)}
+        repeated = (previous_attempt.get("status") == "FAIL" and
+                    previous_attempt.get("failure_identity") == identity)
+        consecutive = previous_attempt.get("consecutive_failures",1) if repeated else 0
+        require(consecutive < 2,
+                "Same candidate and SDK/package environment failed twice; inspect check-attempt.json, repair the cause or preserve a draft. Do not repeat unchanged check.")
         attempt = {"status":"RUNNING","branch":text(git(root,"branch","--show-current")),
                    "revision":c["revision"],"started_at":int(time.time()*1000),"pid":os.getpid()}
-        path = folder/"check-attempt.json"
         atomic_json(path,attempt)
         try:
             check_candidate(root,c,attempt)
         except BaseException as exc:
             attempt.update(status="INTERRUPTED" if isinstance(exc,(KeyboardInterrupt,SystemExit)) else "FAIL",
                            error_type=type(exc).__name__,finished_at=int(time.time()*1000))
+            try:
+                failure_identity={"digest":fingerprint(root),"environment":check_scope.environment(root)}
+                attempt.update(failure_identity=failure_identity,
+                               consecutive_failures=consecutive+1 if failure_identity==identity else 1)
+            except (OSError,ValueError,Blocked,subprocess.TimeoutExpired):
+                pass
             atomic_json(path,attempt)
             raise
         attempt.update(status="PASS",finished_at=int(time.time()*1000))
@@ -689,14 +671,18 @@ def delivery_manifest(root,c):
 
 def prepare_delivery(root,c,a):
     name = branch(root,c["integration_branch"])
-    require_checkpoint(root,c)
     files = dirty(root)
     path = work(root)/"delivery.json"
-    if (work(root)/"delivery-state.json").is_file() and not files:
-        require(path.is_file(), "Restore original publication manifest")
-        delivery_manifest(root,c)
-        output(status="PASS", branch=name, reused=True)
-        return
+    state_path = work(root)/"delivery-state.json"
+    if state_path.is_file():
+        state = read_json(state_path)
+        if state.get("digest") == fingerprint(root):
+            require(path.is_file(), "Restore original publication manifest")
+            delivery_manifest(root,c)
+            output(status="PASS", branch=name, reused=True)
+            return
+        require(state.get("status") == "BLOCKED" and not (work(root)/"delivery-result.json").exists(),
+                "Cannot replace an active or completed publication manifest")
     if not files:
         task = read_json(work(root)/"task.json")
         require(task.get("branch") == name and task.get("revision") == c["revision"] and
@@ -709,14 +695,21 @@ def prepare_delivery(root,c,a):
                 "required_e2e":sorted(set(a.e2e))}
     path = work(root)/"delivery.json"
     previous = read_json(path) if path.is_file() else {}
-    # Never silently relax declared acceptance in a retry.
-    for k in ("review_required","visual_required","visual_interaction"):
-        manifest[k] = manifest[k] or previous.get(k) is True
-    old_e2e = previous.get("required_e2e",[])
-    if isinstance(old_e2e,list) and all(isinstance(p,str) and p in ("android","ios","web") for p in old_e2e):
-        manifest["required_e2e"] = sorted(set(manifest["required_e2e"]+old_e2e))
+    revision_reason = getattr(a, "revise_verification", None)
+    if revision_reason is not None:
+        require(revision_reason.strip(), "Explain why the selected verification plan was mistaken")
+        manifest["verification_revision_reason"] = revision_reason.strip()[:500]
+        event(root, "verification-plan-revised")
+    else:
+        for k in ("review_required","visual_required","visual_interaction"):
+            manifest[k] = manifest[k] or previous.get(k) is True
+        old_e2e = previous.get("required_e2e",[])
+        if isinstance(old_e2e,list) and all(isinstance(p,str) for p in old_e2e):
+            manifest["required_e2e"] = sorted(set(manifest["required_e2e"]+old_e2e))
     atomic_json(path,manifest)
     delivery_manifest(root,c)
+    if state_path.is_file():
+        state_path.unlink()  # changed candidate after a blocked attempt
     output(status="PASS",branch=name,files=files,required_e2e=manifest["required_e2e"],
            visual_required=manifest["visual_required"],visual_interaction=manifest["visual_interaction"])
 
@@ -766,10 +759,24 @@ def save_draft(root,c):
     pr = validate_remote_pr(remote_call("PR_LIST",pr_list,root,repo,name),repo,base,name,head,draft=True)
     require(not dirty(root) and fingerprint(root)==digest and text(git(root,"rev-parse","HEAD"))==head,
             "Candidate changed during draft backup")
-    result={"status":"DRAFT_SAVED","branch":name,"head":head,"digest":digest,"pr":pr["url"],"repo_id":repo_id}
+    result={"status":"DRAFT_SAVED","branch":name,"head":head,"digest":digest,"pr":pr["url"],
+            "repo_id":repo_id,"repo":repo,"pr_number":pr["number"],"saved_at":int(time.time()*1000)}
     atomic_json(work(root)/"draft-result.json",result)
     event(root,"draft-saved",**result)
     output(**result)
+
+
+def draft_completion(root,c):
+    """Verify local identity of an owner-approved, previously verified draft."""
+    receipt = read_json(work(root)/"draft-result.json")
+    name = branch(root,c["integration_branch"])
+    require(not dirty(root) and receipt.get("status") == "DRAFT_SAVED" and
+            receipt.get("branch") == name and receipt.get("digest") == fingerprint(root) and
+            receipt.get("head") == text(git(root,"rev-parse","HEAD")) and
+            isinstance(receipt.get("saved_at"),int) and
+            valid_pr_url(receipt.get("pr",""),receipt.get("repo",""),receipt.get("pr_number")),
+            "Missing or stale draft receipt")
+    return receipt
 
 
 def deliver(root, c):
@@ -830,9 +837,11 @@ def _deliver(root, c, state):
     base = c["integration_branch"]
     # Refresh base before publishing; never merge/rebase implicitly.
     remote_call("GIT_FETCH", fetch_base, root, base)
-    require(text(git(root, "merge-base", "HEAD", "origin/" + base)) ==
-            text(git(root, "rev-parse", "origin/" + base)),
-            "Integration branch advanced; reconcile and recheck")
+    # Opening a PR need not require the integration head to be unchanged.
+    task = read_json(work(root)/"task.json")
+    require(task.get("branch") == name and
+            text(git(root,"merge-base","HEAD",task["base_head"])) == task["base_head"],
+            "Task base is not an ancestor of the delivery branch")
     require(fingerprint(root) == digest, "Candidate changed before publication")
     existing = remote_call("PR_LIST", pr_list, root, repo, name)
     if existing:
@@ -852,7 +861,7 @@ def _deliver(root, c, state):
         git(root, "commit", "-m", manifest["message"])
     require(not dirty(root) and fingerprint(root) == digest,
             "Commit does not match checked working candidate")
-    require(git(root, "diff", "--name-only", "origin/" + base, "HEAD"),
+    require(git(root, "diff", "--name-only", task["base_head"], "HEAD"),
             "No task change to publish")
     head = text(git(root, "rev-parse", "HEAD"))
     identity["head"] = head
@@ -862,6 +871,8 @@ def _deliver(root, c, state):
     summary = ["", "", "## Harness evidence (generated)", f"- Harness revision: {c['revision']}", f"- Candidate: {digest}",
                f"- Local impact check: PASS ({scope.get('mode','legacy')} unit/widget scope; {scope.get('reason','standard receipt')})",
                "- Full suite: project PR CI (not asserted by local impact receipt)"]
+    if manifest.get("verification_revision_reason"):
+        summary.append("- Verification plan revised: " + " ".join(manifest["verification_revision_reason"].split()))
     if visual:
         summary.append(f"- Visual evidence: {visual['evidence_digest']}")
     for platform in required_e2e:
@@ -1047,10 +1058,7 @@ def launch_auto(root,c,only=None,fresh=False):
     task = read_json(task_path)
     require(task.get("branch")==text(git(root,"branch","--show-current")) and task.get("revision")==c["revision"],
             "Runtime task receipt is stale; begin on the correct branch")
-    if digest != task.get("baseline_digest"):
-        require_checkpoint(root,c)
-        require(current_check(root,digest),
-                "Run the canonical check on the changed candidate before building runtime")
+    # Development inspection is not acceptance; no forced check just to launch.
     unavailable = []
     for platform,target in ([pin] if pin else runtime_targets(root,c,only)):
         try:
@@ -1086,7 +1094,6 @@ def launch_auto(root,c,only=None,fresh=False):
 
 
 def launch(root,c,platform,device,*,preprobed=False,emit=True,force=False):
-    require_checkpoint(root,c)
     require(platform != "web" or c["profile"] == "mobile-web", "Web disabled")
     digest = fingerprint(root)
     scope = runtime_scope(root, platform)
@@ -1193,6 +1200,14 @@ def capture(root,platform,label,theme,viewport,settle=1.5,scenario=None,*,fixtur
     output(status="CAPTURED", path=str(image), digest=digest)
 
 
+def planned_themes(item):
+    themes = item.get("themes",["light"])
+    require(isinstance(themes,list) and themes and
+            all(t in ("light","dark") for t in themes) and len(themes)==len(set(themes)),
+            "Choose light, dark or both for a visual state")
+    return themes
+
+
 def capture_plan(root,c,refresh=()):
     """Execute an explicit, project-specific scripted plan, serially.
     No guessed taps, no destructive fixture creation, no model calls."""
@@ -1209,11 +1224,15 @@ def capture_plan(root,c,refresh=()):
                 and re.fullmatch(r"[a-zA-Z0-9_-]+",item["label"]) and item["label"] not in labels
                 and item.get("kind") in ("screen","interaction"),"Invalid or duplicate visual scenario")
         labels.add(item["label"])
+        planned_themes(item)
         scenario = item.get("scenario")
-        require(isinstance(scenario,str) and scenario,"Each batch state needs a project-local scripted scenario")
-        path = Path(scenario)
-        require(not path.is_absolute() and ".." not in path.parts and (root/path).is_file()
-                and not (root/path).is_symlink(),"Invalid batch scenario")
+        require(item["kind"] != "interaction" or isinstance(scenario,str) and scenario,
+                "Interaction state needs a project-local scripted scenario")
+        if scenario is not None:
+            require(isinstance(scenario,str) and scenario,"Invalid batch scenario")
+            path = Path(scenario)
+            require(not path.is_absolute() and ".." not in path.parts and (root/path).is_file()
+                    and not (root/path).is_symlink(),"Invalid batch scenario")
         require(platform!="web" or isinstance(item.get("viewport"),str) and re.fullmatch(r"\d+,\d+",item["viewport"]),
                 "Web batch scenario needs viewport")
         require(platform=="web" or item.get("viewport") is None,"Native capture dimensions are read from the image")
@@ -1226,17 +1245,17 @@ def capture_plan(root,c,refresh=()):
     folder = visual_folder(root, platform, digest)
     require(set(refresh)<=labels,"Unknown capture label in --refresh")
     for item in items:
-        for theme in ("light","dark"):
+        for theme in planned_themes(item):
             image=folder/(item["label"]+"-"+platform+"-"+theme+".png")
             expected={"visual_scope":scope,"label":item["label"],"platform":platform,"theme":theme,"target":runtime["device"],
-                      "viewport":item.get("viewport") if platform=="web" else None,"scenario":item["scenario"],
-                      "fixture":plan.get("fixture"),"scenario_sha256":hashlib.sha256((root/item["scenario"]).read_bytes()).hexdigest()}
+                      "viewport":item.get("viewport") if platform=="web" else None,"scenario":item.get("scenario"),
+                      "fixture":plan.get("fixture"),"scenario_sha256":hashlib.sha256((root/item["scenario"]).read_bytes()).hexdigest() if item.get("scenario") else None}
             if item["label"] not in refresh and reusable_capture(image,expected):
                 event(root,"visual-reused",platform=platform,label=item["label"],theme=theme,digest=digest)
                 continue
             require(runtime_matches(root,runtime,platform,digest), "Missing affected capture; launch current platform runtime")
             capture(root,platform,item["label"],theme,item.get("viewport") or "390,844",
-                    scenario=item["scenario"],fixture=plan.get("fixture"))
+                    scenario=item.get("scenario"),fixture=plan.get("fixture"))
     visual_evidence(root,any(x["kind"]=="interaction" for x in items))
 
 
@@ -1291,7 +1310,7 @@ def visual_evidence(root, require_interaction=False, *, emit=True):
     targets = set()
     for item in scenarios:
         pair = []
-        for theme in ("light", "dark"):
+        for theme in planned_themes(item):
             path = folder / (item["label"] + "-" + platform + "-" + theme + ".png")
             metadata = path.with_suffix(".json")
             require(path.is_file() and metadata.is_file(),
@@ -1307,7 +1326,7 @@ def visual_evidence(root, require_interaction=False, *, emit=True):
                     f"Stale or invalid capture: {path.name}")
             require(isinstance(receipt.get("digest"),str) and re.fullmatch(r"[0-9a-f]{64}",receipt["digest"]), "Missing original capture candidate")
             require(receipt.get("fixture")==plan["fixture"], "Capture fixture differs from plan: "+path.name)
-            require("scenario" not in item or receipt.get("scenario")==item["scenario"],
+            require(receipt.get("scenario")==item.get("scenario"),
                     "Capture scenario differs from planned state: "+path.name)
             if item.get("scenario"):
                 scenario=Path(item["scenario"])
@@ -1317,7 +1336,7 @@ def visual_evidence(root, require_interaction=False, *, emit=True):
                     "Interaction capture requires an executable Maestro/Playwright scenario, not manual UI navigation")
             targets.add(receipt["target"])
             pair.append({**receipt, "path": str(path)})
-        require(pair[0]["size"] == pair[1]["size"] and pair[0]["sha256"] != pair[1]["sha256"],
+        require(len(pair) == 1 or (pair[0]["size"] == pair[1]["size"] and pair[0]["sha256"] != pair[1]["sha256"]),
                 f"Theme pair must have equal dimensions and distinct image content: {item['label']}")
         captures.extend(pair)
     require(len(targets) == 1, "All planned evidence must use the same runtime target")
@@ -1342,7 +1361,8 @@ def visual_evidence(root, require_interaction=False, *, emit=True):
         require(image.is_file() and image.with_suffix(".json").is_file(), "Missing comparable baseline capture receipt")
         meta = read_json(image.with_suffix(".json"))
         data = image.read_bytes()
-        first = next(x for x in captures if x["label"] == next(s["label"] for s in scenarios if s["kind"]=="screen") and x["theme"]=="light")
+        first = next((x for x in captures if x["label"] == next(s["label"] for s in scenarios if s["kind"]=="screen") and x["theme"]=="light"),None)
+        require(first is not None,"A light baseline needs a comparable light final capture")
         require(all(meta.get(k)==v for k,v in {"digest":before,"label":label,"platform":platform,"theme":"light",
                 "sha256":hashlib.sha256(data).hexdigest(),"size":png_size(data),"viewport":first.get("viewport")}.items()) and
                 png_size(data)==first["size"] and (platform=="web" or meta.get("target")==target),
@@ -1388,7 +1408,7 @@ def e2e(root,platform,scenario,device):
     output(status="PASS", receipt=str(receipt))
 
 
-def usage(root, sessions, *, emit=True):
+def usage(root, sessions, *, emit=True, since_ms=None, until_ms=None):
     with tempfile.TemporaryDirectory() as tmp:
         exports = []
         for i, session in enumerate(sessions):
@@ -1396,7 +1416,12 @@ def usage(root, sessions, *, emit=True):
             path.write_bytes(run(root, "opencode", "session", "export", session,
                                  "--sanitize", capture=True, timeout=120))
             exports.append(str(path))
-        summary = json.loads(run(root, sys.executable, str(HERE / "session-usage.py"), "--json", *exports, capture=True))
+        flags = []
+        if since_ms is not None:
+            flags += ["--since-ms",str(since_ms)]
+        if until_ms is not None:
+            flags += ["--until-ms",str(until_ms)]
+        summary = json.loads(run(root, sys.executable, str(HERE / "session-usage.py"), "--json", *flags, *exports, capture=True))
         if emit:
             print(json.dumps(summary, indent=2))
         return summary
@@ -1454,6 +1479,17 @@ def diagnostics(root, sessions, *, local_only=False):
         except BlockingIOError:
             data["check_running"]=True
     data["events"]=events
+    task_start = next((x.get("at") for x in events if x.get("stage")=="task-start"),None)
+    task_end = next((x.get("at") for x in reversed(events) if x.get("stage") in ("task-complete","task-parked","task-not-started")),None)
+    since_ms = task_start if isinstance(task_start,int) else None
+    until_ms = (task_end if isinstance(task_end,int) else int(time.time()*1000)) if since_ms is not None else None
+    data["usage_scope"] = "task-window" if since_ms is not None else "session-cumulative"
+    data["task_elapsed_ms"] = max(0,until_ms-since_ms) if since_ms is not None else None
+    data["stage_counts"] = {}
+    for item in events:
+        stage = item.get("stage")
+        if isinstance(stage,str):
+            data["stage_counts"][stage] = data["stage_counts"].get(stage,0)+1
     reports=[]
     for item in events:
         if item.get("stage")!="check-run":
@@ -1479,7 +1515,7 @@ def diagnostics(root, sessions, *, local_only=False):
     atomic_json(target,data)
     if sessions and not local_only:
         try:
-            data["usage"]=usage(root,sessions,emit=False)
+            data["usage"]=usage(root,sessions,emit=False,since_ms=since_ms,until_ms=until_ms)
             data["usage_status"]="PASS"
         except (OSError,ValueError,KeyError,Blocked,subprocess.TimeoutExpired) as exc:
             data["usage_status"]="UNAVAILABLE"
@@ -1498,11 +1534,12 @@ def main():
     p.add_argument("--expect")
     p = sub.add_parser("begin")
     p.add_argument("branch")
+    p.add_argument("--resume",action="store_true",help="Deliberately resume an existing clean feature branch with fresh evidence")
     p = sub.add_parser("checkpoint", help="Save a local task slice without publication")
     p.add_argument("--message", required=True)
     p = sub.add_parser("lesson", help="Record a confirmed reusable Harness failure, never app details")
     p.add_argument("code", choices=sorted(reporter.SEMANTIC_CODES))
-    for cmd in ("check","ci","deliver","save-draft","review-recovery","verify","completion","status","fingerprint","stop-preview","adopt"):
+    for cmd in ("check","ci","deliver","save-draft","review-recovery","verify","completion","draft-completion","status","fingerprint","stop-preview","adopt"):
         sub.add_parser(cmd)
     p = sub.add_parser("capture-plan")
     p.add_argument("--refresh",action="append",default=[],help="Recapture both themes of an explicitly changed UI state")
@@ -1512,6 +1549,7 @@ def main():
     p.add_argument("--title", required=True)
     p.add_argument("--body", required=True)
     p.add_argument("--review", action="store_true")
+    p.add_argument("--revise-verification",help="Explain a mistaken verification plan before publication")
     p.add_argument("--visual", action="store_true")
     p.add_argument("--interaction", action="store_true")
     p.add_argument("--e2e", action="append", choices=("android","ios","web"), default=[])
@@ -1561,13 +1599,13 @@ def main():
         if a.command == "revision":
             output(**installed_revision(root,c,a.expect))
             return 0
-        if a.command in ("begin","checkpoint","check","ci","deliver","save-draft","review-recovery","verify","completion","launch","capture","capture-plan","prepare-delivery","validate-delivery","visual-evidence","e2e"):
+        if a.command in ("begin","checkpoint","check","ci","deliver","save-draft","review-recovery","verify","completion","draft-completion","launch","capture","capture-plan","prepare-delivery","validate-delivery","visual-evidence","e2e"):
             installed_revision(root,c)
         if a.command == "doctor":
             doctor(root, c, a.operation, a.only)
         elif a.command == "begin":
             reporter.retry(root)
-            begin(root, c, a.branch)
+            begin(root, c, a.branch, resume=a.resume)
         elif a.command == "checkpoint":
             checkpoint_local(root,c,a.message)
         elif a.command == "lesson":
@@ -1591,6 +1629,8 @@ def main():
             verify(root, c)
         elif a.command == "completion":
             output(**completion(root, c))
+        elif a.command == "draft-completion":
+            output(**draft_completion(root,c))
         elif a.command == "status":
             receipt = work(root) / "check.json"
             digest = fingerprint(root)
@@ -1624,9 +1664,11 @@ def main():
         elif a.command == "e2e":
             e2e(root, a.platform, a.scenario, a.device)
         elif a.command == "usage":
-            sessions = a.sessions or read_json(work(root)/"sessions.json")["sessions"]
+            meta = {} if a.sessions else read_json(work(root)/"sessions.json")
+            sessions = a.sessions or meta["sessions"]
             require(sessions, "No recorded sessions")
-            usage(root, sessions)
+            usage(root, sessions, since_ms=meta.get("started_at"),
+                  until_ms=meta.get("completed_at") or (int(time.time()*1000) if meta.get("started_at") else None))
         return 0
     except (Blocked, OSError, ValueError, KeyError, subprocess.TimeoutExpired) as exc:
         if a.command in ("begin", "checkpoint", "check", "deliver", "doctor", "launch", "capture", "capture-plan", "prepare-delivery", "validate-delivery", "visual-evidence", "e2e"):

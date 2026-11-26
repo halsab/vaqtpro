@@ -16,7 +16,17 @@ from pathlib import Path
 FIELDS = ("input", "output", "reasoning", "cache_read", "cache_write")
 
 
-def summarize(exports):
+def summarize(exports, since_ms=None, until_ms=None):
+    """Filter using observed times; never guess missing usage."""
+    windowed = since_ms is not None or until_ms is not None
+    def in_window(value):
+        return isinstance(value,int) and (since_ms is None or value>=since_ms) and (until_ms is None or value<=until_ms)
+    def message_time(message):
+        time = message.get("time") or {}
+        for key in ("created","started","completed"):
+            if isinstance(time.get(key),int):
+                return time[key]
+        return None
     result = {
         "sessions": 0,
         "assistant_messages": 0,
@@ -29,6 +39,8 @@ def summarize(exports):
         "synthetic_continuations": 0,
         "session_windows": [],
         "tool_duration_ms": 0,
+        "usage_scope": "task-window" if windowed else "session-cumulative",
+        "messages_without_task_time": 0,
     }
     models = defaultdict(lambda: {"messages": 0, **{name: 0 for name in FIELDS}})
     tools = Counter()
@@ -48,7 +60,16 @@ def summarize(exports):
         if isinstance(timing.get("created"), int) and isinstance(timing.get("idle", timing.get("updated")), int):
             result["session_windows"].append([timing["created"], timing.get("idle", timing.get("updated"))])
 
+        session_inside = in_window(timing.get("created")) and in_window(timing.get("idle",timing.get("updated")))
         for message in data.get("messages", []):
+            if windowed and not session_inside:
+                stamp = message_time(message)
+                if stamp is None:
+                    if message.get("type") in ("assistant","synthetic"):
+                        result["messages_without_task_time"] += 1
+                    continue
+                if not in_window(stamp):
+                    continue
             if message.get("type") == "synthetic":
                 result["synthetic_continuations"] += 1
             if message.get("type") != "assistant":
@@ -93,6 +114,7 @@ def summarize(exports):
                     if isinstance(timing.get("ran"), int) and isinstance(timing.get("completed"), int):
                         result["tool_duration_ms"] += max(0, timing["completed"] - timing["ran"])
 
+    result["usage_complete"] = result["messages_without_task_time"] == 0
     result["by_model"] = dict(sorted(models.items()))
     result["tool_calls"] = dict(sorted(tools.items()))
     result["provider_errors"] = dict(sorted(provider_errors.items()))
@@ -104,6 +126,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="+", help="JSON export files, or - for stdin")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable totals")
+    parser.add_argument("--since-ms",type=int,help="Include messages on or after this task boundary")
+    parser.add_argument("--until-ms",type=int,help="Include messages on or before this task boundary")
     args = parser.parse_args()
 
     if args.files.count("-") > 1:
@@ -113,7 +137,7 @@ def main():
             json.load(sys.stdin) if path == "-" else json.loads(Path(path).read_text(encoding="utf-8"))
             for path in args.files
         ]
-        summary = summarize(exports)
+        summary = summarize(exports, args.since_ms, args.until_ms)
     except (ValueError, OSError, TypeError, KeyError) as error:
         parser.error(str(error))
     if args.json:
@@ -121,6 +145,9 @@ def main():
         return
 
     print(f"Sessions: {summary['sessions']}; assistant messages: {summary['assistant_messages']}")
+    print("Usage scope: " + summary["usage_scope"])
+    if not summary["usage_complete"]:
+        print("PARTIAL: messages with unavailable task timestamps omitted: " + str(summary["messages_without_task_time"]))
     print("Token counters (raw OpenCode export, not USD or a guaranteed total):")
     print("  " + ", ".join(f"{key}={value}" for key, value in summary["usage"].items()))
     print("By agent/provider/model/variant:")

@@ -35,7 +35,7 @@ export default Plugin.define({
       await mkdir(directory, {recursive:true});
       const target = join(directory,"sessions.json");
       const tmp = target + ".tmp-" + id;
-      await writeFile(tmp, JSON.stringify({sessions:await resources.sessions(id,task),task:task?.id,started_at:task?.startedAt}));
+      await writeFile(tmp, JSON.stringify({sessions:await resources.sessions(id,task),task:task?.id,started_at:task?.startedAt,completed_at:task?.completedAt}));
       await rename(tmp,target);
     }
     let quality, lifecycle;
@@ -43,15 +43,16 @@ export default Plugin.define({
       return JSON.parse(await readFile(join(directory,name),"utf8"));
     }
     async function validateStart(task) {
-      if (!task.lastCompletedBranch) return "";
+      if (!task.lastCompletedBranch && !task.lastParkedBranch) return "";
       try {
         const begun=await readReceipt("task.json");
         const branch=(await exec("git",["branch","--show-current"],{cwd:root,timeout:15000})).stdout.trim();
         if (begun.branch!==branch || branch===task.lastCompletedBranch ||
+            (branch===task.lastParkedBranch && begun.resumed!==true) ||
             begun.revision!==config.revision || !Number.isInteger(begun.started_at) || begun.started_at<task.startedAt)
           throw Error("stale task");
         return "";
-      } catch { return "Start this new task with canonical begin on a fresh feature branch; do not reuse the delivered branch."; }
+      } catch { return "Start with canonical begin on a fresh branch, or explicitly resume a parked branch with begin --resume."; }
     }
     async function deliveryIdentity(task) {
       const why=await validateStart(task);
@@ -70,10 +71,17 @@ export default Plugin.define({
         return JSON.parse(stdout);
       } catch { return null; }
     }
+    async function draftCompletion() {
+      try {
+        await readReceipt("draft-result.json");
+        const {stdout}=await exec("python3",[join(root,".flutter-harness/bin/harness.py"),"draft-completion"],{cwd:root,timeout:15000});
+        return JSON.parse(stdout);
+      } catch { return null; }
+    }
     async function archive(task) {
       const target=join(directory,"history",task.id);
       await mkdir(target,{recursive:true});
-      for (const name of ["task.json","check.json","check-attempt.json","check-progress.json","delivery.json","delivery-state.json","delivery-result.json","sessions.json","visual-plan.json","visual-preflight.json","runtime.json","runtime-selection.json","baseline.json","e2e-ios.json","e2e-android.json","e2e-web.json"]) {
+      for (const name of ["task.json","check.json","check-attempt.json","check-progress.json","delivery.json","delivery-state.json","delivery-result.json","draft-result.json","sessions.json","visual-plan.json","visual-preflight.json","runtime.json","runtime-selection.json","baseline.json","e2e-ios.json","e2e-android.json","e2e-web.json"]) {
         try { await copyFile(join(directory,name),join(target,name)); }
         catch (err) { if (err.code!=="ENOENT") throw err; }
       }
@@ -84,10 +92,10 @@ export default Plugin.define({
         const {stdout}=await exec("python3",[join(root,".flutter-harness/bin/harness.py"),"status"],{cwd:root,timeout:15000});
         return JSON.parse(stdout).checked===true;
       } catch { return false; }
-    }, validateStart, (event,task)=>lifecycle.authorize(event,task));
+    }, validateStart, (event,task)=>lifecycle.authorize(event,task), (event,task)=>lifecycle.authorizeDraft(event,task));
     lifecycle=taskLifecycle(ctx,{assertRevision,snapshot:()=>snapshot(root),
       inspect:state=>inspect(root,base,state.baseline,state.intent),completion,deliveryIdentity,
-      quality,resources,record,saveSessions,archive,
+      quality,resources,record,saveSessions,archive,draftCompletion,
       lastBegin:async state=>{
         const events=(await readFile(join(directory,"lifecycle.jsonl"),"utf8")).split("\n").flatMap(line=>{try{return [JSON.parse(line)]}catch{return []}});
         return events.filter(e=>e.at>=state.startedAt && ["begin","begin-blocked"].includes(e.stage)).at(-1);

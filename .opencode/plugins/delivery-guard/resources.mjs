@@ -20,7 +20,9 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
   async function running(id, state) {
     const active = [];
     for (const c of state.children || []) {
-      const session = await ctx.session.get({ sessionID:c.id });
+      let session;
+      try { session = await ctx.session.get({ sessionID:c.id }); } catch { active.push({...c,unavailable:true}); continue; }
+      if (!session?.parentID) { active.push({...c,unavailable:true}); continue; }
       if (session.parentID !== id) throw Error("Unexpected child session ownership");
       if (!["succeeded","failed","canceled","cancelled","aborted"].includes(session.outcome)) active.push(c);
     }
@@ -30,7 +32,9 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
     return locked(id, async()=>{
       const state = await read(id);
       if ((state.pending || []).length) return "A child dispatch has not returned its actual session ID/outcome.";
-      if ((await running(id,state)).length) return "Wait for actual child session completion before delivery.";
+      const active=await running(id,state);
+      if (active.some(c=>c.unavailable)) return "A child dispatch cannot be reconciled; preserve work or park a draft.";
+      if (active.length) return "Wait for actual child session completion before delivery.";
       return "";
     });
   }
@@ -52,11 +56,11 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
       if (last?.key===key && lastOutcome==="CHANGES_REQUIRED" && attempts.length===1 && !last.dispute) return "";
       return "Harness: reviewer input unchanged; confirmed or unresolved findings must be fixed; no further unchanged-input review.";
     }
-    // Three substantive passes (initial plus two repairs), one technical
-    // recovery and one dispute remain finite. Never rerun identical evidence.
+    // Initial review plus one targeted repair; at most one extra technical
+    // recovery or adjudication. Never rerun accepted unchanged evidence.
     if (state.recoveryGranted?.key===key && !state.recoveryUsed) return "";
-    if (attempts.length >= 5) return "Harness: reviewer absolute attempt budget exhausted.";
-    if (outcomes.filter((x,i)=>!attempts[i].dispute && (x==="PASS" || x==="CHANGES_REQUIRED")).length >= 3)
+    if (attempts.length >= 3) return "Harness: reviewer absolute attempt budget exhausted.";
+    if (outcomes.filter((x,i)=>!attempts[i].dispute && (x==="PASS" || x==="CHANGES_REQUIRED")).length >= 2)
       return "Harness: substantive reviewer attempt budget exhausted.";
     if (outcomes.filter(x=>x==="BLOCKED" || x==="ERROR").length >= 2)
       return "Harness: technical reviewer recovery budget exhausted.";
@@ -169,15 +173,15 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
       const pending = (state.pending || []).find(x=>x.call===event.id);
       if (!pending) return;
       const childID = event.result?.output?.sessionID || event.result?.metadata?.sessionID;
-      // A completed dispatch without a session ID cannot prove completion.
-      if (event.status === "completed" && !childID) return;
+      // Missing ID is a technical failure, not a forever-pending dispatch.
+      // It cannot prove approval, but the bounded technical retry remains available.
       state.pending = state.pending.filter(x=>x.call!==event.id);
       if (pending.role === "reviewer") state.reviews = (state.reviews || []).map(x=>x.call===event.id?{...x,childID}:x);
       if (typeof childID === "string" && childID && !(state.children || []).some(x=>x.id===childID)) {
         state.children = [...(state.children || []),{id:childID,role:pending.role}];
       }
       await ctx.storage.set(key(id,task),state);
-      if (pending.role==="reviewer") await record(id,"review-returned",{call:event.id,child:childID || null,status:event.status});
+      if (pending.role==="reviewer") await record(id,"review-returned",{call:event.id,child:childID || null,status:childID?event.status:"missing-session-id"});
     });
   });
   return {

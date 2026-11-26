@@ -80,13 +80,13 @@ export function recovery(state, result, quality) {
     return { stop: true, reason, fingerprint };
   }
   const step = quality.phase === "begin"
-    ? "Start the new task with canonical begin on a fresh feature branch from the current integration base. Preserve previous delivered work; do not reuse its acceptance evidence."
+    ? "Start the new task with canonical begin on a fresh branch, or explicitly resume a parked branch with --resume. Preserve previous work; do not reuse its acceptance evidence."
     : quality.phase === "check"
-    ? "Diagnose the earliest failed or missing required check. If a large pending task slice blocks verification, inspect scope, run focused tests and checkpoint locally first. Otherwise inspect the actual error, make a focused fix, run the affected check then standard once. Do not ask for push approval before checks pass."
+    ? "Diagnose the earliest failed or missing required check. Inspect the actual error, make a focused fix and run the canonical impact check once. Do not repeat unchanged failures or ask for push approval before checks pass."
     : quality.phase === "manifest"
       ? "Prepare valid delivery manifest with CLI prepare-delivery; preserve risk flags and use explicit --e2e only for required platforms. Reuse current checks and evidence."
     : quality.phase === "visual"
-      ? "Run visual-evidence first to reuse unaffected captures. If missing, automate states with project-local Maestro/Playwright and capture-plan on the affected platform. Never ask the owner to operate ordinary UI. Reuse current standard checks. Do not dispatch a reviewer until visual-evidence passes."
+      ? "Complete only the explicitly selected final visual evidence after code review. Reuse valid captures; capture only missing required states/themes. A static correction needs no new screenshot. If the selected plan was mistaken, explicitly revise it before publication. Do not dispatch another reviewer merely because visual evidence changed."
     : quality.phase === "review"
       ? "Reuse the successful standard evidence for the unchanged candidate. Inspect the actual prior reviewer findings; fix confirmed defects. If a finding contradicts exact diff/evidence, one unchanged-input adjudication is allowed. Do not change source merely to obtain a new review key; do not retry an exhausted budget."
       : quality.check === "passed"
