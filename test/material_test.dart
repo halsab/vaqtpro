@@ -12,6 +12,7 @@ import 'package:vaqtpro/features/location/repositories/location_repository.dart'
 import 'package:vaqtpro/features/location/repositories/offline_place_catalog_repository.dart';
 import 'package:vaqtpro/features/location/view_models/location_view_model.dart';
 import 'package:vaqtpro/features/prayer_times/widgets/prayer_times_card.dart';
+import 'package:vaqtpro/features/prayer_times/view_models/calculation_profile_view_model.dart';
 
 void main() {
   testWidgets(
@@ -334,12 +335,7 @@ void main() {
   testWidgets('prayer times show seven ordered rows without table headings', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      AppRoot(
-        title: 'Vaqtpro',
-        home: HomeScreen(viewModel: _selectedLocationViewModel()),
-      ),
-    );
+    await tester.pumpWidget(AppRoot(title: 'Vaqtpro', home: _homeScreen()));
     await tester.pumpAndSettle();
 
     const names = ['Фаджр', 'Шурук', 'Истива', 'Зухр', 'Аср', 'Магриб', 'Иша'];
@@ -360,12 +356,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      AppRoot(
-        title: 'Vaqtpro',
-        home: HomeScreen(viewModel: _selectedLocationViewModel()),
-      ),
-    );
+    await tester.pumpWidget(AppRoot(title: 'Vaqtpro', home: _homeScreen()));
     await tester.pumpAndSettle();
 
     for (final size in [
@@ -471,6 +462,11 @@ LocationViewModel _selectedLocationViewModel() => LocationViewModel(
   geolocation: _FakeGeolocation(),
   catalog: OfflinePlaceCatalogRepository(places: const []),
   geonames: _FakeGeoNames(),
+);
+
+HomeScreen _homeScreen() => HomeScreen(
+  viewModel: _selectedLocationViewModel(),
+  calculationProfileViewModel: CalculationProfileViewModel(),
 );
 
 class _MemoryLocationRepository implements LocationRepository {
