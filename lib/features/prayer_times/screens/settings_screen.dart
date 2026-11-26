@@ -1,3 +1,4 @@
+import 'package:adhan/adhan.dart';
 import 'package:flutter/widgets.dart';
 import 'package:material_ui/material_ui.dart' as m;
 
@@ -24,90 +25,148 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: viewModel,
     builder: (context, _) {
-      final selection = locationKey == null
-          ? CalculationProfileSelection.byLocation
-          : viewModel.selectionFor(locationKey!);
-      final automaticProfile = regionalPrayerProfileLabel(
-        profileForRegion(countryCode, regionCode),
+      final automaticProfile = prayerCalculationProfileForRegion(
+        countryCode,
+        regionCode,
+      );
+      final configuration = viewModel.configurationFor(
+        locationKey,
+        automaticProfile: automaticProfile,
       );
       return AppPage(
         title: 'Настройки',
-        child: Padding(
+        child: ListView(
           padding: AppTokens.pagePadding,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              m.ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Профиль расчёта'),
-                subtitle: Text(
-                  calculationProfileSelectionLabel(
-                    selection,
-                    automaticProfileLabel: automaticProfile,
-                  ),
-                ),
-                trailing: locationKey == null
-                    ? null
-                    : const m.Icon(m.Icons.chevron_right),
-                onTap: locationKey == null || viewModel.isLoading
-                    ? null
-                    : () => _chooseProfile(context, selection),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppTokens.space8),
+              child: Text(
+                'Параметры расчета времени намаза',
+                style: m.Theme.of(context).textTheme.titleLarge,
               ),
-              if (locationKey == null)
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Сначала выберите место'),
-                ),
+            ),
+            m.SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: configuration.mode == PrayerCalculationMode.automatic,
+              title: Text(
+                configuration.mode == PrayerCalculationMode.automatic
+                    ? 'Автоматически'
+                    : 'Вручную',
+              ),
+              onChanged: viewModel.isLoading
+                  ? null
+                  : (automatic) => _update(
+                      context,
+                      configuration.copyWith(
+                        mode: automatic
+                            ? PrayerCalculationMode.automatic
+                            : PrayerCalculationMode.manual,
+                      ),
+                    ),
+            ),
+            if (configuration.mode == PrayerCalculationMode.automatic)
+              Padding(
+                padding: const EdgeInsets.only(top: AppTokens.space8),
+                child: Text(automaticProfileSummary(automaticProfile)),
+              )
+            else ...[
+              const SizedBox(height: AppTokens.space16),
+              _dropdown<PrayerCalculationProfile>(
+                label: 'Профиль расчёта',
+                value: configuration.profile,
+                items: PrayerCalculationProfile.values
+                    .map(
+                      (profile) => m.DropdownMenuItem(
+                        value: profile,
+                        child: Text(profile.label),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (profile) {
+                  if (profile != null) {
+                    _update(
+                      context,
+                      configuration
+                          .selectingProfile(profile)
+                          .copyWith(mode: PrayerCalculationMode.manual),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: AppTokens.space16),
+              _dropdown<Madhab>(
+                label: 'Правило расчёта Асра',
+                value: configuration.madhab,
+                items: Madhab.values
+                    .map(
+                      (madhab) => m.DropdownMenuItem(
+                        value: madhab,
+                        child: Text(madhabLabel(madhab)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (madhab) {
+                  if (madhab != null) {
+                    _update(context, configuration.copyWith(madhab: madhab));
+                  }
+                },
+              ),
+              const SizedBox(height: AppTokens.space16),
+              _dropdown<PrayerHighLatitudeRule>(
+                label: 'Правило для высоких широт',
+                value: configuration.highLatitudeRule,
+                items: PrayerHighLatitudeRule.values
+                    .map(
+                      (rule) => m.DropdownMenuItem(
+                        value: rule,
+                        child: Text(prayerHighLatitudeRuleLabel(rule)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (rule) {
+                  if (rule != null) {
+                    _update(
+                      context,
+                      configuration.copyWith(highLatitudeRule: rule),
+                    );
+                  }
+                },
+              ),
             ],
-          ),
+          ],
         ),
       );
     },
   );
 
-  Future<void> _chooseProfile(
+  Widget _dropdown<T>({
+    required String label,
+    required T value,
+    required List<m.DropdownMenuItem<T>> items,
+    required ValueChanged<T?> onChanged,
+  }) => m.DropdownButtonFormField<T>(
+    key: ValueKey((label, value)),
+    initialValue: value,
+    decoration: m.InputDecoration(
+      labelText: label,
+      border: const m.OutlineInputBorder(),
+    ),
+    items: items,
+    onChanged: onChanged,
+  );
+
+  Future<void> _update(
     BuildContext context,
-    CalculationProfileSelection selected,
+    PrayerCalculationConfiguration configuration,
   ) async {
-    final choices = CalculationProfileSelection.values;
-    final choice = await m.showModalBottomSheet<CalculationProfileSelection>(
-      context: context,
-      useSafeArea: true,
-      builder: (sheetContext) => ListView(
-        shrinkWrap: true,
-        padding: AppTokens.pagePadding,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppTokens.space8),
-            child: Text(
-              'Профиль расчёта',
-              style: m.Theme.of(sheetContext).textTheme.titleLarge,
-            ),
-          ),
-          for (final item in choices)
-            m.ListTile(
-              title: Text(
-                calculationProfileSelectionLabel(
-                  item,
-                  automaticProfileLabel: regionalPrayerProfileLabel(
-                    profileForRegion(countryCode, regionCode),
-                  ),
-                ),
-              ),
-              trailing: item == selected ? const m.Icon(m.Icons.check) : null,
-              onTap: () => Navigator.of(sheetContext).pop(item),
-            ),
-        ],
-      ),
-    );
-    if (choice == null || !context.mounted || locationKey == null) return;
-    if (!await viewModel.saveForLocation(locationKey!, choice) &&
-        context.mounted) {
-      InternalNotification.show(
-        context,
-        'Не удалось сохранить профиль расчёта',
-        type: NotificationType.error,
-      );
+    if (await viewModel.updateConfiguration(locationKey, configuration) ||
+        !context.mounted) {
+      return;
     }
+    InternalNotification.show(
+      context,
+      'Не удалось сохранить настройки расчёта',
+      type: NotificationType.error,
+    );
   }
 }

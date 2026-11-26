@@ -9,6 +9,8 @@ import '../models/calculation_profile.dart';
 
 typedef PrayerTimeEntry = ({String name, DateTime? time});
 
+enum RegionalPrayerProfile { tatarstan, russia, muslimWorldLeague }
+
 class PrayerTimesCalculator {
   PrayerTimesCalculator() {
     if (!_timeZonesInitialized) {
@@ -25,13 +27,29 @@ class PrayerTimesCalculator {
     required String? countryCode,
     required String? regionCode,
     required String? timeZoneId,
-    CalculationProfileSelection selection =
-        CalculationProfileSelection.byLocation,
+    PrayerCalculationConfiguration? configuration,
     DateTime? now,
   }) {
     try {
       final coordinates = Coordinates(latitude, longitude);
-      final profile = profileForSelection(countryCode, regionCode, selection);
+      final automaticProfile = prayerCalculationProfileForRegion(
+        countryCode,
+        regionCode,
+      );
+      final settings =
+          configuration ??
+          defaultsForProfile(automaticProfile)
+              .copyWith(mode: PrayerCalculationMode.automatic);
+      final profile = settings.mode == PrayerCalculationMode.automatic
+          ? automaticProfile
+          : settings.profile;
+      final defaults = defaultsForProfile(profile);
+      final madhab = settings.mode == PrayerCalculationMode.automatic
+          ? defaults.madhab
+          : settings.madhab;
+      final highLatitudeRule = settings.mode == PrayerCalculationMode.automatic
+          ? defaults.highLatitudeRule
+          : settings.highLatitudeRule;
       final zoneResult = _timeZone(timeZoneId, now: now);
       final zone = zoneResult.location;
       final localNow = now == null
@@ -39,7 +57,11 @@ class PrayerTimesCalculator {
           : timezone.TZDateTime.from(now, zone);
       final date = DateTime.utc(localNow.year, localNow.month, localNow.day);
 
-      final parameters = _parameters(profile);
+      final parameters = _parameters(
+        profile,
+        madhab: madhab,
+        highLatitudeRule: highLatitudeRule,
+      );
       final dateComponents = _dateComponents(coordinates, date, zone);
       final solar = SolarTime(dateComponents.toUtcMidnight(), coordinates);
       final times = _times(coordinates, dateComponents, parameters);
@@ -95,9 +117,7 @@ class PrayerTimesCalculator {
         18,
         afterTransit: false,
       );
-      final tatarstan = profile == RegionalPrayerProfile.tatarstan;
-      final hasPolarGap =
-          times.usedPolarResolution ||
+      final hasRawSolarGap =
           rawSunrise == null ||
           rawSunset == null ||
           previousSunset == null ||
@@ -106,26 +126,126 @@ class PrayerTimesCalculator {
       var fajr = times.fajr;
       var isha = times.isha;
       var usedRegionalFallback = false;
-      if (profile != RegionalPrayerProfile.muslimWorldLeague && !hasPolarGap) {
+      if (!hasRawSolarGap &&
+          (highLatitudeRule == PrayerHighLatitudeRule.profileTatarstan ||
+              highLatitudeRule == PrayerHighLatitudeRule.profileRussia)) {
         final sunrise = rawSunrise;
         final sunset = rawSunset;
-        if (tatarstan) {
-          // DUM RT switches both prayers for the night when the 18° twilight
-          // angle is not reached, even though the 15° Isha angle may be reached.
-          final no18DegreeFajr = rawFajr == null || previousIsha18 == null;
-          final no18DegreeIsha = rawIsha18 == null || nextFajr18 == null;
-          fajr = no18DegreeFajr
+        if (highLatitudeRule == PrayerHighLatitudeRule.profileTatarstan) {
+          final tatarstanProfile =
+              profile == PrayerCalculationProfile.tatarstan;
+          final fajrAngle = tatarstanProfile ? 18.0 : parameters.fajrAngle;
+          final ishaAngle = tatarstanProfile ? 18.0 : parameters.ishaAngle;
+          final currentFajr = tatarstanProfile
+              ? rawFajr
+              : fajrAngle > 0
+              ? _solarAngle(
+                  dateComponents,
+                  solar,
+                  fajrAngle,
+                  afterTransit: false,
+                )
+              : null;
+          final previousNightIsha = tatarstanProfile
+              ? previousIsha18
+              : ishaAngle > 0
+              ? _solarAngle(
+                  previousComponents,
+                  previousSolar,
+                  ishaAngle,
+                  afterTransit: true,
+                )
+              : null;
+          final currentIsha = tatarstanProfile
+              ? rawIsha18
+              : ishaAngle > 0
+              ? _solarAngle(
+                  dateComponents,
+                  solar,
+                  ishaAngle,
+                  afterTransit: true,
+                )
+              : null;
+          final nextNightFajr = tatarstanProfile
+              ? nextFajr18
+              : fajrAngle > 0
+              ? _solarAngle(
+                  nextComponents,
+                  nextSolar,
+                  fajrAngle,
+                  afterTransit: false,
+                )
+              : null;
+          final noFajr =
+              fajrAngle > 0 &&
+              (currentFajr == null || previousNightIsha == null);
+          final noIsha =
+              ishaAngle > 0 && (currentIsha == null || nextNightFajr == null);
+          fajr = noFajr
               ? _roundMinute(sunrise.subtract(const Duration(minutes: 120)))
-              : rawFajr;
-          isha = no18DegreeIsha
+              : currentFajr == null
+              ? times.fajr
+              : _adjustRawTime(currentFajr, parameters, fajr: true);
+          isha = noIsha
               ? _roundMinute(sunset.add(const Duration(minutes: 90)))
-              : rawIsha15 ?? times.isha;
-          usedRegionalFallback = no18DegreeFajr || no18DegreeIsha;
+              : ishaAngle == 0
+              ? times.isha
+              : _adjustRawTime(
+                  tatarstanProfile ? rawIsha15! : currentIsha!,
+                  parameters,
+                  fajr: false,
+                );
+          usedRegionalFallback = noFajr || noIsha;
         } else {
-          fajr =
-              rawFajr ?? _fractionBeforeSunrise(previousSunset, sunrise, 0.3);
-          isha = rawIsha15 ?? _fractionAfterSunset(sunset, nextSunrise, 0.25);
-          usedRegionalFallback = rawFajr == null || rawIsha15 == null;
+          final fajrAngle = parameters.fajrAngle;
+          final ishaAngle = parameters.ishaAngle;
+          final missingFajr = fajrAngle > 0
+              ? _solarAngle(
+                      dateComponents,
+                      solar,
+                      fajrAngle,
+                      afterTransit: false,
+                    ) ==
+                    null
+              : false;
+          final missingIsha = ishaAngle > 0
+              ? _solarAngle(
+                      dateComponents,
+                      solar,
+                      ishaAngle,
+                      afterTransit: true,
+                    ) ==
+                    null
+              : false;
+          final noFajr = missingFajr;
+          final noIsha = missingIsha;
+          if (noFajr) {
+            fajr = _fractionBeforeSunrise(previousSunset, sunrise, 0.3);
+          } else if (fajrAngle > 0) {
+            final raw = _solarAngle(
+              dateComponents,
+              solar,
+              fajrAngle,
+              afterTransit: false,
+            );
+            if (raw != null) {
+              fajr = _adjustRawTime(raw, parameters, fajr: true);
+            }
+          }
+          if (noIsha) {
+            isha = _fractionAfterSunset(sunset, nextSunrise, 0.25);
+          } else if (ishaAngle > 0) {
+            final raw = _solarAngle(
+              dateComponents,
+              solar,
+              ishaAngle,
+              afterTransit: true,
+            );
+            if (raw != null) {
+              isha = _adjustRawTime(raw, parameters, fajr: false);
+            }
+          }
+          usedRegionalFallback = noFajr || noIsha;
         }
       }
 
@@ -143,6 +263,11 @@ class PrayerTimesCalculator {
       ];
       return PrayerTimesSchedule(
         profile: profile,
+        regionalProfile: switch (profile) {
+          PrayerCalculationProfile.tatarstan => RegionalPrayerProfile.tatarstan,
+          PrayerCalculationProfile.russia => RegionalPrayerProfile.russia,
+          _ => RegionalPrayerProfile.muslimWorldLeague,
+        },
         entries: rows
             .map(
               (row) => (
@@ -155,10 +280,9 @@ class PrayerTimesCalculator {
             .toList(growable: false),
         isApproximate:
             zoneResult.isApproximate ||
-            (profile == RegionalPrayerProfile.muslimWorldLeague &&
-                times.isApproximate) ||
+            times.isApproximate ||
             times.usedPolarResolution ||
-            hasPolarGap ||
+            hasRawSolarGap ||
             usedRegionalFallback,
         notice: zoneResult.notice,
       );
@@ -167,28 +291,36 @@ class PrayerTimesCalculator {
     }
   }
 
-  CalculationParameters _parameters(RegionalPrayerProfile profile) {
-    if (profile == RegionalPrayerProfile.muslimWorldLeague) {
-      final mwl = CalculationMethod.muslim_world_league.getParameters();
-      return mwl.copyWith(
-        madhab: Madhab.shafi,
-        highLatitudeRule: HighLatitudeRule.middle_of_the_night,
-        methodAdjustments: mwl.methodAdjustments,
+  CalculationParameters _parameters(
+    PrayerCalculationProfile profile, {
+    required Madhab madhab,
+    required PrayerHighLatitudeRule highLatitudeRule,
+  }) {
+    final adhanHighLatitudeRule = switch (highLatitudeRule) {
+      PrayerHighLatitudeRule.middleOfTheNight ||
+      PrayerHighLatitudeRule.profileTatarstan ||
+      PrayerHighLatitudeRule.profileRussia =>
+        HighLatitudeRule.middle_of_the_night,
+      PrayerHighLatitudeRule.seventhOfTheNight =>
+        HighLatitudeRule.seventh_of_the_night,
+      PrayerHighLatitudeRule.twilightAngle => HighLatitudeRule.twilight_angle,
+    };
+    if (profile == PrayerCalculationProfile.tatarstan ||
+        profile == PrayerCalculationProfile.russia) {
+      return CalculationParameters(
+        method: CalculationMethod.other,
+        fajrAngle: 18,
+        ishaAngle: 15,
+        madhab: madhab,
+        highLatitudeRule: adhanHighLatitudeRule,
+        adjustments: profile == PrayerCalculationProfile.russia
+            ? const PrayerAdjustments(sunrise: -5, dhuhr: 5, maghrib: 5)
+            : const PrayerAdjustments(),
       );
     }
-    return CalculationParameters(
-      method: CalculationMethod.other,
-      fajrAngle: 18,
-      ishaAngle: 15,
-      madhab: profile == RegionalPrayerProfile.tatarstan
-          ? Madhab.hanafi
-          : Madhab.shafi,
-      // Regional prayer angles are resolved against raw solar events below.
-      // Do not let Adhan clamp a reachable angle to its high-latitude portion.
-      highLatitudeRule: HighLatitudeRule.middle_of_the_night,
-      adjustments: profile == RegionalPrayerProfile.russia
-          ? const PrayerAdjustments(sunrise: -5, dhuhr: 5, maghrib: 5)
-          : const PrayerAdjustments(),
+    return profile.calculationMethod!.getParameters().copyWith(
+      madhab: madhab,
+      highLatitudeRule: adhanHighLatitudeRule,
     );
   }
 
@@ -201,13 +333,13 @@ class PrayerTimesCalculator {
   }
 
   DateTime _dhuhr(
-    RegionalPrayerProfile profile,
+    PrayerCalculationProfile profile,
     DateTime calculatedDhuhr,
     DateTime rawTransit,
     DateTime localDate,
     timezone.Location zone,
   ) {
-    if (profile != RegionalPrayerProfile.tatarstan) return calculatedDhuhr;
+    if (profile != PrayerCalculationProfile.tatarstan) return calculatedDhuhr;
     final localThreshold = timezone.TZDateTime(
       zone,
       localDate.year,
@@ -271,7 +403,28 @@ class PrayerTimesCalculator {
   }) {
     final hours = solar.hourAngle(-angle, afterTransit);
     if (!hours.isFinite) return null;
-    return _roundMinute(_solarEvent(date, hours)!);
+    return _solarEvent(date, hours);
+  }
+
+  DateTime _adjustRawTime(
+    DateTime raw,
+    CalculationParameters parameters, {
+    required bool fajr,
+  }) {
+    final offset = fajr
+        ? parameters.adjustments.fajr + parameters.methodAdjustments.fajr
+        : parameters.adjustments.isha + parameters.methodAdjustments.isha;
+    final adjusted = raw.add(Duration(minutes: offset));
+    if (parameters.rounding == Rounding.none) return adjusted;
+    final seconds = (adjusted.millisecondsSinceEpoch / 1000).floor();
+    final minutes = seconds / 60;
+    final rounded = parameters.rounding == Rounding.up
+        ? minutes.ceil()
+        : (minutes + 0.5).floor();
+    return DateTime.fromMillisecondsSinceEpoch(
+      rounded * 60000,
+      isUtc: adjusted.isUtc,
+    );
   }
 
   DateTime? _solarEvent(DateComponents date, double hours) {
@@ -320,12 +473,14 @@ class PrayerTimesCalculator {
 class PrayerTimesSchedule {
   const PrayerTimesSchedule({
     required this.profile,
+    required this.regionalProfile,
     required this.entries,
     required this.isApproximate,
     this.notice,
   });
 
-  final RegionalPrayerProfile profile;
+  final PrayerCalculationProfile profile;
+  final RegionalPrayerProfile regionalProfile;
   final List<PrayerTimeEntry> entries;
   final bool isApproximate;
   final String? notice;
