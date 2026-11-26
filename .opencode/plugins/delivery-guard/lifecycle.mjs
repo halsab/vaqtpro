@@ -44,12 +44,34 @@ export function taskLifecycle(ctx, deps) {
     return true;
   }
 
+  // A task which never began and never changed the checkout has no delivery
+  // candidate to protect. Retire it as NOT_STARTED, never as a successful no-op.
+  // Keep the generation and all budgets for any actually begun/changed task.
+  async function unstarted(id,state,current,begin) {
+    return !state.begun && !state.deliveryAttempt && !begin &&
+      !changed(state.baseline,current) && !(await deps.resources.status(id)) &&
+      (!deps.resources.sessions || (await deps.resources.sessions(id,state)).length===1);
+  }
+
+  async function retireUnstarted(id,state,reason) {
+    const retired={...state,active:false,outcome:"NOT_STARTED",completedAt:Date.now()};
+    await set(id,retired);
+    await deps.record(id,"task-not-started",{reason,attempts:state.attempts});
+    await deps.saveSessions(id,retired);
+    await deps.quality.clear(id,state);
+    await deps.resources.clear(id,state);
+  }
+
   async function prompt(event) {
     const id=event.sessionID;
     return locked(id,async()=>{
       await deps.assertRevision();
       const previous=await get(id);
-      if (previous?.active && !(await finish(id,previous))) return;
+      if (previous?.active && !(await finish(id,previous))) {
+        // Explicit owner retry after a failed start. Never reset a begun task.
+        if (!previous.attempts || !(await unstarted(id,previous,await deps.snapshot(),await deps.lastBegin(previous)))) return;
+        await retireUnstarted(id,previous,"Owner retried an unchanged task that never began");
+      }
       const prior=await get(id);
       const state={id:randomUUID(),active:true,intent:taskIntent(event.prompt?.text),
         request:event.prompt?.text || "",baseline:await deps.snapshot(),startedAt:Date.now(),
@@ -86,16 +108,30 @@ export function taskLifecycle(ctx, deps) {
   async function idle(event) {
     const id=event.sessionID;
     return locked(id,async()=>{
-      const state=await get(id);
+      let state=await get(id);
       if (!state?.active || event.background?.some(work=>work.sessionID===id)) return;
       await deps.assertRevision();
       if (await finish(id,state)) return;
       const result=await deps.inspect(state);
       const begin=await deps.lastBegin(state);
+      if (begin?.stage==="begin" && !state.begun) {
+        state={...state,begun:true};
+        await set(id,state);
+      }
       if (begin?.stage==="begin-blocked" && /different Harness revision|Dirty checkout|Unsafe feature branch/.test(begin.reason || "")) {
         await deps.saveSessions(id,state);
         await deps.record(id,"task-incomplete",{phase:"prerequisite",reason:begin.reason});
         return; // An unfinished task keeps its budget.
+      }
+      // Do not demand checks/review/delivery from a task that has not begun.
+      if (state.intent && await unstarted(id,state,result.current,begin)) {
+        if (state.attempts) {
+          await retireUnstarted(id,state,"Build did not start the task after one explicit start reminder");
+          return;
+        }
+        await set(id,{...state,attempts:1});
+        await deps.record(id,"task-recovery",{attempts:0,phase:"begin",reason:"No task work recorded"});
+        return "[Flutter Harness start reminder] You are the selected root Build implementation agent, not Reviewer or Plan. Implement the owner's agreed task. First run canonical begin on a new feature branch; do not run check, review or deliver before starting. If an actual tool or permission prevents that, report the specific error. Do not ask the owner to switch to Build.";
       }
       // Read-only conversation is not an unfinished development task.
       if (!result.active && !begin && !state.deliveryAttempt && !state.attempts) {
