@@ -117,8 +117,10 @@ class LocationViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> determineLocation() async {
-    if (isResolvingLocation || loadState != LocationLoadState.ready) return;
+  Future<bool> determineLocation() async {
+    if (isResolvingLocation || loadState != LocationLoadState.ready) {
+      return false;
+    }
     final generation = ++_locationGeneration;
     permissionMessage = null;
     storageMessage = null;
@@ -126,7 +128,7 @@ class LocationViewModel extends ChangeNotifier {
     if (permission == GeoPermissionState.permanentlyDenied) {
       permissionMessage = _permissionDeniedMessage;
       notifyListeners();
-      return;
+      return false;
     }
 
     isResolvingLocation = true;
@@ -139,9 +141,9 @@ class LocationViewModel extends ChangeNotifier {
         storageMessage =
             'Не удалось сохранить состояние разрешения геолокации.';
       }
-      if (generation != _locationGeneration) return;
+      if (generation != _locationGeneration) return false;
       permission = await _geolocation.requestPermission();
-      if (generation != _locationGeneration) return;
+      if (generation != _locationGeneration) return false;
       if (permission != GeoPermissionState.granted) {
         permissionMessage = switch (permission) {
           GeoPermissionState.permanentlyDenied => _permissionDeniedMessage,
@@ -150,18 +152,19 @@ class LocationViewModel extends ChangeNotifier {
             'Нет доступа к геолокации. Можно выбрать место вручную.',
           _ => 'Не удалось получить доступ к геолокации. Попробуйте ещё раз.',
         };
-        return;
+        return false;
       }
 
       final coordinates = await _geolocation.currentCoordinates();
-      if (generation != _locationGeneration) return;
+      if (generation != _locationGeneration) return false;
       final place = await _resolvePlace(coordinates);
-      if (generation != _locationGeneration) return;
-      await _commit((state) => state.select(place));
+      if (generation != _locationGeneration) return false;
+      return await _commit((state) => state.select(place));
     } catch (_) {
       if (generation == _locationGeneration) {
         permissionMessage = 'Не удалось определить местоположение. Проверьте доступ и попробуйте ещё раз.';
       }
+      return false;
     } finally {
       if (generation == _locationGeneration) {
         isResolvingLocation = false;
@@ -351,10 +354,10 @@ class LocationViewModel extends ChangeNotifier {
         );
   }
 
-  Future<void> _commit(
+  Future<bool> _commit(
     SavedLocationState Function(SavedLocationState current) transition,
   ) {
-    final completer = Completer<void>();
+    final completer = Completer<bool>();
     _activeWrites++;
     isSaving = true;
     notifyListeners();
@@ -364,10 +367,10 @@ class LocationViewModel extends ChangeNotifier {
         await _repository.save(next);
         _saved = next;
         storageMessage = null;
-        completer.complete();
+        completer.complete(true);
       } catch (_) {
         storageMessage = 'Не удалось сохранить изменения. Попробуйте ещё раз.';
-        completer.complete();
+        completer.complete(false);
       } finally {
         _activeWrites--;
         isSaving = _activeWrites > 0;

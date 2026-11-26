@@ -404,7 +404,7 @@ void main() {
     expect(viewModel.searchResults.single.name, 'Казань');
     expect(find.byType(m.ListTile), findsOneWidget);
 
-    await tester.tap(find.byType(m.IconButton).last);
+    await tester.tap(find.byTooltip('Добавить в избранное'));
     await tester.pumpAndSettle();
     expect(viewModel.favorites.single.name, 'Казань');
     expect(viewModel.selected, isNull);

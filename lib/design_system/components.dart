@@ -57,6 +57,34 @@ class AppButton extends StatelessWidget {
   }
 }
 
+class AppIconButton extends StatelessWidget {
+  const AppIconButton({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.isLoading = false,
+  });
+
+  final String tooltip;
+  final Widget icon;
+  final VoidCallback? onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) => m.IconButton(
+    tooltip: tooltip,
+    onPressed: isLoading ? null : onPressed,
+    icon: isLoading
+        ? const SizedBox(
+            width: 20,
+            height: 20,
+            child: m.CircularProgressIndicator(strokeWidth: 2),
+          )
+        : icon,
+  );
+}
+
 class AppTextField extends StatelessWidget {
   const AppTextField({
     super.key,

@@ -84,9 +84,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _locationTitle(BuildContext context, PrayerLocation location) {
     final offset = viewModel.timezoneDifferenceLabel();
-    return m.TextButton(
+    return m.FilledButton.tonal(
       onPressed: _openLocationPicker,
-      style: m.TextButton.styleFrom(
+      style: m.FilledButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: AppTokens.space8),
         minimumSize: const Size(48, 48),
       ),
@@ -104,8 +104,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(width: AppTokens.space8),
             Text(offset, style: m.Theme.of(context).textTheme.labelMedium),
           ],
-          const SizedBox(width: AppTokens.space4),
-          const m.Icon(m.Icons.arrow_drop_down),
         ],
       ),
     );
@@ -211,6 +209,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Navigator.of(context).pop();
           }
         },
+        onDetectLocation: () async {
+          final saved = await viewModel.determineLocation();
+          if (saved && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        },
       ),
     );
   }
@@ -220,10 +224,12 @@ class _LocationPickerSheet extends StatefulWidget {
   const _LocationPickerSheet({
     required this.viewModel,
     required this.onSelected,
+    required this.onDetectLocation,
   });
 
   final LocationViewModel viewModel;
   final ValueChanged<PrayerLocation> onSelected;
+  final Future<void> Function() onDetectLocation;
 
   @override
   State<_LocationPickerSheet> createState() => _LocationPickerSheetState();
@@ -312,9 +318,26 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
                     AppTokens.space16,
                     AppTokens.space12,
                   ),
-                  child: Text(
-                    'Данные мест: GeoNames · CC BY 4.0',
-                    style: m.Theme.of(context).textTheme.bodySmall,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Данные мест: GeoNames · CC BY 4.0',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: m.Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      ListenableBuilder(
+                        listenable: viewModel,
+                        builder: (context, _) => AppIconButton(
+                          tooltip: 'Определить местоположение',
+                          icon: const m.Icon(m.Icons.my_location),
+                          isLoading: viewModel.isResolvingLocation,
+                          onPressed: () => unawaited(widget.onDetectLocation()),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
