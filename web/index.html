@@ -18,7 +18,7 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Времена намаза с выбором местоположения.">
 
   <!--
     Uncomment the tag below to lay the app out underneath the parts of the
@@ -41,7 +41,7 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>vaqtpro</title>
+  <title>Vaqtpro — времена намаза</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
@@ -53,6 +53,22 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    async function loadFlutter() {
+      const bootstrap = document.createElement('script');
+      bootstrap.src = 'flutter_bootstrap.js';
+      bootstrap.async = true;
+      document.body.append(bootstrap);
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('offline-worker.js')
+        .then(() => navigator.serviceWorker.ready)
+        .catch(() => null)
+        .finally(loadFlutter);
+    } else {
+      loadFlutter();
+    }
+  </script>
 </body>
 </html>

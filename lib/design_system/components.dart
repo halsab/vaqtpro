@@ -9,10 +9,12 @@ class AppPage extends StatelessWidget {
     super.key,
     required this.title,
     required this.child,
+    this.titleContent,
     this.trailing,
   });
   final String title;
   final Widget child;
+  final Widget? titleContent;
   final Widget? trailing;
 
   @override
@@ -27,7 +29,10 @@ class AppPage extends StatelessWidget {
       ),
     );
     return m.Scaffold(
-      appBar: m.AppBar(title: Text(title), actions: [?trailing]),
+      appBar: m.AppBar(
+        title: titleContent ?? Text(title),
+        actions: [?trailing],
+      ),
       body: body,
     );
   }

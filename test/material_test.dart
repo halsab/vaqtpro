@@ -3,7 +3,15 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart' as m;
 import 'package:vaqtpro/design_system/design_system.dart';
-import 'package:vaqtpro/features/prayer_times/screens/prayer_times_screen.dart';
+import 'package:vaqtpro/app/home_screen.dart';
+import 'package:vaqtpro/features/location/models/prayer_location.dart';
+import 'package:vaqtpro/features/location/models/geolocation_state.dart';
+import 'package:vaqtpro/features/location/repositories/geolocation_repository.dart';
+import 'package:vaqtpro/features/location/repositories/geonames_repository.dart';
+import 'package:vaqtpro/features/location/repositories/location_repository.dart';
+import 'package:vaqtpro/features/location/repositories/offline_place_catalog_repository.dart';
+import 'package:vaqtpro/features/location/view_models/location_view_model.dart';
+import 'package:vaqtpro/features/prayer_times/widgets/prayer_times_card.dart';
 
 void main() {
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
@@ -161,10 +169,15 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      const AppRoot(title: 'Vaqtpro', home: PrayerTimesScreen()),
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: _selectedLocationViewModel()),
+      ),
     );
+    await tester.pumpAndSettle();
 
     const names = ['Фаджр', 'Шурук', 'Истива', 'Зухр', 'Аср', 'Магриб', 'Иша'];
+    expect(find.byType(PrayerTimesCard), findsOneWidget);
     final namePositions = [
       for (final name in names) tester.getTopLeft(find.text(name)).dy,
     ];
@@ -182,8 +195,12 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
-      const AppRoot(title: 'Vaqtpro', home: PrayerTimesScreen()),
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: _selectedLocationViewModel()),
+      ),
     );
+    await tester.pumpAndSettle();
 
     for (final size in [
       const Size(360, 800),
@@ -269,4 +286,72 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+}
+
+LocationViewModel _selectedLocationViewModel() => LocationViewModel(
+  repository: _MemoryLocationRepository(
+    SavedLocationState(
+      selected: const PrayerLocation(
+        geonameId: '551487',
+        name: 'Казань',
+        country: 'Россия',
+        region: 'Республика Татарстан',
+        latitude: 55.78874,
+        longitude: 49.12214,
+        timeZoneId: 'Europe/Moscow',
+      ),
+    ),
+  ),
+  geolocation: _FakeGeolocation(),
+  catalog: OfflinePlaceCatalogRepository(places: const []),
+  geonames: _FakeGeoNames(),
+);
+
+class _MemoryLocationRepository implements LocationRepository {
+  _MemoryLocationRepository(this.state);
+
+  SavedLocationState state;
+
+  @override
+  Future<SavedLocationState> load() async => state;
+
+  @override
+  Future<void> save(SavedLocationState value) async => state = value;
+}
+
+class _FakeGeolocation implements GeolocationRepository {
+  @override
+  bool get supportsSettingsNavigation => true;
+
+  @override
+  Future<GeoPermissionState> checkPermission() async =>
+      GeoPermissionState.granted;
+
+  @override
+  Future<DeviceCoordinates> currentCoordinates() async =>
+      const DeviceCoordinates(55.78874, 49.12214);
+
+  @override
+  Future<bool> openApplicationSettings() async => true;
+
+  @override
+  Future<bool> openLocationSettings() async => true;
+
+  @override
+  Future<GeoPermissionState> requestPermission() async =>
+      GeoPermissionState.granted;
+}
+
+class _FakeGeoNames implements GeoNamesRepository {
+  @override
+  bool get isConfigured => false;
+
+  @override
+  Future<PrayerLocation?> reverseGeocode(
+    double latitude,
+    double longitude,
+  ) async => null;
+
+  @override
+  Future<List<PrayerLocation>> search(String query) async => const [];
 }

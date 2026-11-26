@@ -1,11 +1,11 @@
 {
-    "name": "vaqtpro",
-    "short_name": "vaqtpro",
+    "name": "Vaqtpro — времена намаза",
+    "short_name": "Vaqtpro",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#2563EB",
+    "description": "Времена намаза с выбором местоположения.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -14,11 +14,16 @@ dependencies:
       url: https://github.com/halsab/adhan-dart.git
       ref: 18530749f77863caf6dc6355b46aa0e539f67324
   material_ui: ^1.1.0
+  geolocator: ^14.1.2
+  shared_preferences: ^2.5.6
+  timezone: ^0.11.2
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  shared_preferences_platform_interface: ^2.4.2
 
 flutter:
   uses-material-design: true
@@ -26,3 +31,5 @@ flutter:
     - family: PTMono
       fonts:
         - asset: assets/fonts/PTMono-Regular.ttf
+  assets:
+    - assets/geonames/places.json

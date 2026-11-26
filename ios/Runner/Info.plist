@@ -16,6 +16,8 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>vaqtpro</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Местоположение нужно, чтобы определить ближайший населённый пункт.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
