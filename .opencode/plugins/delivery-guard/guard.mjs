@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
+import { access } from "node:fs/promises";
 
 const exec = promisify(execFile);
 async function command(root, bin, args) {
@@ -58,7 +59,8 @@ export async function inspect(root, base, before, intent) {
   const pr = [base, "app", "main", "master", "develop", ""].includes(current.branch)
     ? {ok:false, message:"Finish local work and run canonical deliver"}
     : await command(root, "python3", [script, "completion"]);
-  return { ...decide(before, current, intent, pr.ok, pr.message, base), current, deliveryError:pr.deliveryError };
+  const publicationStarted = await access(join(root,".flutter-harness/work/delivery-state.json")).then(()=>true,()=>false);
+  return { ...decide(before, current, intent, pr.ok, pr.message, base), current, publicationStarted, deliveryError:pr.deliveryError };
 }
 
 // A repeated idle with identical source/check/delivery state is not progress.
@@ -67,7 +69,7 @@ export function recovery(state, result, quality) {
   const deliveryError = quality.check === "passed" && quality.phase === "work" ? result.deliveryError : undefined;
   const reasons = [...result.reasons, quality.issue].filter(Boolean);
   if (deliveryError) reasons.push(deliveryError.code + " at " + deliveryError.stage + ": " + deliveryError.message);
-  const missingCommittedManifest = quality.phase === "manifest" && result.current.status === "";
+  const missingCommittedManifest = quality.phase === "manifest" && result.current.status === "" && result.publicationStarted !== false;
   if (missingCommittedManifest) reasons.push("Committed candidate has no valid delivery manifest; restore the original manifest, do not regenerate acceptance flags.");
   const fingerprint = JSON.stringify([result.current, quality.digest, quality.visualDigest, quality.check, quality.phase, reasons]);
   const reason = reasons.join("; ");
@@ -80,11 +82,11 @@ export function recovery(state, result, quality) {
   const step = quality.phase === "begin"
     ? "Start the new task with canonical begin on a fresh feature branch from the current integration base. Preserve previous delivered work; do not reuse its acceptance evidence."
     : quality.phase === "check"
-    ? "Diagnose the earliest failed or missing required check. Inspect its actual error, make a focused fix, run the affected check then standard once. Do not ask for push approval before checks pass."
+    ? "Diagnose the earliest failed or missing required check. If a large pending task slice blocks verification, inspect scope, run focused tests and checkpoint locally first. Otherwise inspect the actual error, make a focused fix, run the affected check then standard once. Do not ask for push approval before checks pass."
     : quality.phase === "manifest"
       ? "Prepare valid delivery manifest with CLI prepare-delivery; preserve risk flags and use explicit --e2e only for required platforms. Reuse current checks and evidence."
     : quality.phase === "visual"
-      ? "Complete the missing planned runtime evidence on the chosen working platform. Reuse current standard checks. Do not dispatch a reviewer until visual-evidence passes."
+      ? "Run visual-evidence first to reuse unaffected captures. If missing, automate states with project-local Maestro/Playwright and capture-plan on the affected platform. Never ask the owner to operate ordinary UI. Reuse current standard checks. Do not dispatch a reviewer until visual-evidence passes."
     : quality.phase === "review"
       ? "Reuse the successful standard evidence for the unchanged candidate. Inspect the actual prior reviewer findings; fix confirmed defects. If a finding contradicts exact diff/evidence, one unchanged-input adjudication is allowed. Do not change source merely to obtain a new review key; do not retry an exhausted budget."
       : quality.check === "passed"

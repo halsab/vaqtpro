@@ -50,6 +50,16 @@
           "action": "shell",
           "resource": "python3 .flutter-harness/bin/harness.py deliver",
           "effect": "ask"
+        },
+        {
+          "action": "shell",
+          "resource": "python3 .flutter-harness/bin/harness.py save-draft",
+          "effect": "ask"
+        },
+        {
+          "action": "shell",
+          "resource": "python3 .flutter-harness/bin/harness.py review-recovery",
+          "effect": "ask"
         }
       ]
     },
@@ -139,7 +149,7 @@
       ]
     },
     "reviewer": {
-      "description": "Perform ONE independent read-only review of the entire task diff and new task files. Use separate allowed Git commands (status, merge-base, diff) without shell chaining or substitution; use read for files. If full diff cannot be inspected, report VERDICT: BLOCKED. Blocking findings require a violated invariant, location, reachable failure scenario, expected/actual behavior, impact and concrete evidence. If execution is needed, provide a minimal reproduction for the Build parent; never claim it was run. Preferences and unsupported hypotheses are nonblocking. No edits or repeated full reviews. For material UX changes open only the supplied actual runtime screenshots; compare to the task baseline if comparable. For focused tasks review the requested change and concrete regressions, not unrelated redesign preferences. Baseline is optional. Judge focused changes and new screens against request, actual result, supplied references if any and exact diff. Never infer before/after changes from historical images. Challenge superficial broad redesigns. Give VISUAL: PASS immediately before VERDICT: PASS only if visual acceptance is supported. For product defects report CHANGES_REQUIRED; for missing/unreadable evidence report BLOCKED, for technical failure ERROR. Use standard Material 3 component selection and visible selected state as material acceptance criteria. Static concepts are not runtime evidence.",
+      "description": "Perform ONE independent read-only review of the entire task diff and new task files. Use separate allowed Git commands (status, merge-base, diff) without shell chaining or substitution; use read for files. Inspect relevant source/test diffs with bounded path-specific commands. For generated catalogs and large binary/data artifacts inspect generator/schema, statistics, representative samples and validation results instead of dumping raw content. If required coverage cannot be established, report VERDICT: BLOCKED. Blocking findings require a violated invariant, location, reachable failure scenario, expected/actual behavior, impact and concrete evidence. If execution is needed, provide a minimal reproduction for the Build parent; never claim it was run. Preferences and unsupported hypotheses are nonblocking. No edits or repeated full reviews. For material UX changes open only the supplied actual runtime screenshots; compare to the task baseline if comparable. For focused tasks review the requested change and concrete regressions, not unrelated redesign preferences. Baseline is optional. Judge focused changes and new screens against request, actual result, supplied references if any and exact diff. Never infer before/after changes from historical images. Challenge superficial broad redesigns. Give VISUAL: PASS immediately before VERDICT: PASS only if visual acceptance is supported. For product defects report CHANGES_REQUIRED; for missing/unreadable evidence report BLOCKED, for technical failure ERROR. Use standard Material 3 component selection and visible selected state as material acceptance criteria. Static concepts are not runtime evidence.",
       "mode": "subagent",
       "model": "openai/gpt-6-luna#medium",
       "permissions": [
@@ -478,6 +488,16 @@
     {
       "action": "shell",
       "resource": "python3 .flutter-harness/bin/harness.py deliver",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "python3 .flutter-harness/bin/harness.py save-draft",
+      "effect": "deny"
+    },
+    {
+      "action": "shell",
+      "resource": "python3 .flutter-harness/bin/harness.py review-recovery",
       "effect": "deny"
     }
   ]

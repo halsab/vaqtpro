@@ -3,6 +3,7 @@
 import argparse
 import csv
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -65,6 +66,7 @@ def main():
     p.add_argument("project",type=Path)
     p.add_argument("level",nargs="?",choices=("quick","standard","full"),default="standard")
     p.add_argument("profile",choices=("mobile","mobile-web"))
+    p.add_argument("--scope",type=Path,help="Canonical local impact plan; CI omits this")
     a = p.parse_args()
     project = a.project.resolve()
     if not (project/"pubspec.yaml").is_file():
@@ -90,6 +92,22 @@ def main():
     steps.append(("analyze",["flutter","analyze"],120))
     if a.level!="quick":
         steps.append(("flutter-tests",["flutter","test","--fail-fast","--timeout","45s","--reporter","expanded"],suite_timeout))
+    if a.scope:
+        if a.level != "standard":
+            p.error("--scope applies only to canonical local standard checks")
+        scope = json.loads(a.scope.read_text())
+        if scope["mode"] not in ("full", "selected", "none"):
+            p.error("Invalid scope mode")
+        if scope["mode"] == "selected" and not scope["tests"]:
+            p.error("Selected scope has no tests")
+        # Empty command denotes an intentional skip, never a successful run.
+        test = ["flutter","test","--no-pub","--fail-fast","--timeout","45s","--reporter","expanded"]
+        steps = [
+            ("format", ["dart","format","--output=none","--set-exit-if-changed",*scope["format"]] if scope["format"] else [],60),
+            ("product",[sys.executable,".flutter-harness/bin/check-product.py","."] if scope["product"] else [],60),
+            ("analyze",["flutter","analyze","--no-pub"] if scope["analyze"] else [],120),
+            ("flutter-tests",test + (scope["tests"] if scope["mode"] == "selected" else []) if scope["mode"] != "none" else [],suite_timeout),
+        ]
     if a.level=="full":
         steps.append(("android-build",["flutter","build","apk","--debug"],600))
         # Keep the existing testable platform contract.
@@ -109,7 +127,7 @@ def main():
         stream.flush()
         for label,command,timeout in steps:
             print("RUN  "+label,flush=True)
-            status,code = execute(project,command,timeout,log) if command else ("BLOCKED",3)
+            status,code = ("SKIP",0) if command == [] else execute(project,command,timeout,log) if command else ("BLOCKED",3)
             writer.writerow([label,status,code])
             stream.flush()
             print(f"{status} {label}"+(f" (exit {code})" if code else ""),flush=True)

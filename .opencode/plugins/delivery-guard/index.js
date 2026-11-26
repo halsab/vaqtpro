@@ -73,7 +73,7 @@ export default Plugin.define({
     async function archive(task) {
       const target=join(directory,"history",task.id);
       await mkdir(target,{recursive:true});
-      for (const name of ["task.json","check.json","check-attempt.json","delivery.json","delivery-state.json","delivery-result.json","sessions.json","visual-plan.json","visual-preflight.json","runtime.json","runtime-selection.json","baseline.json","e2e-ios.json","e2e-android.json","e2e-web.json"]) {
+      for (const name of ["task.json","check.json","check-attempt.json","check-progress.json","delivery.json","delivery-state.json","delivery-result.json","sessions.json","visual-plan.json","visual-preflight.json","runtime.json","runtime-selection.json","baseline.json","e2e-ios.json","e2e-android.json","e2e-web.json"]) {
         try { await copyFile(join(directory,name),join(target,name)); }
         catch (err) { if (err.code!=="ENOENT") throw err; }
       }
