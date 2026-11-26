@@ -350,10 +350,10 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
 
   Widget _buildResults(BuildContext context) {
     final viewModel = widget.viewModel;
-    final message = viewModel.storageMessage;
+    final messages = [?viewModel.permissionMessage, ?viewModel.storageMessage];
     return Column(
       children: [
-        if (message != null)
+        for (final message in messages)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppTokens.space16,
