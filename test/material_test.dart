@@ -14,6 +14,35 @@ import 'package:vaqtpro/features/location/view_models/location_view_model.dart';
 import 'package:vaqtpro/features/prayer_times/widgets/prayer_times_card.dart';
 
 void main() {
+  testWidgets(
+    'internal notifications suppress duplicates and expire after four seconds',
+    (tester) async {
+      late BuildContext context;
+      await tester.pumpWidget(
+        AppRoot(
+          title: 'Notification',
+          home: Builder(
+            builder: (value) {
+              context = value;
+              return const Text('Home');
+            },
+          ),
+        ),
+      );
+      InternalNotification.show(context, 'Saved');
+      await tester.pump(const Duration(milliseconds: 240));
+      InternalNotification.show(context, 'Saved');
+      expect(find.text('Saved'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 3999));
+      expect(find.text('Saved'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 201));
+      expect(find.text('Saved'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('filled location icon button keeps its shape while loading', (
     tester,
   ) async {
