@@ -8,6 +8,6 @@ appId: com.tatar.vaqtpro
     permissions:
       location: allow
 - tapOn: "Определить местоположение"
-- assertVisible:
-    text: "Казань"
+- extendedWaitUntil:
+    visible: "Казань"
     timeout: 45000
