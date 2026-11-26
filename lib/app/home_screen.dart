@@ -141,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       primary: !manualPrimary,
       onPressed: viewModel.isResolvingLocation
           ? null
-          : () => unawaited(viewModel.determineLocation()),
+          : () => unawaited(_determineLocation()),
     );
 
     return Center(
@@ -210,7 +210,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }
         },
         onDetectLocation: () async {
-          final saved = await viewModel.determineLocation();
+          final saved = await _determineLocation();
           if (saved && context.mounted) {
             Navigator.of(context).pop();
           }
@@ -218,6 +218,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
     if (mounted) viewModel.cancelLocationDetection();
+  }
+
+  Future<bool> _determineLocation() async {
+    final saved = await viewModel.determineLocation();
+    if (saved && mounted && viewModel.selected?.name == null) {
+      InternalNotification.show(context, 'Место сохранено по координатам');
+    }
+    return saved;
   }
 }
 
@@ -461,13 +469,28 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
       onTap: () => widget.onSelected(place),
       trailing: m.IconButton(
         tooltip: favorite ? 'Убрать из избранного' : 'Добавить в избранное',
-        onPressed: () => unawaited(widget.viewModel.toggleFavorite(place)),
+        onPressed: () => unawaited(_toggleFavorite(context, place)),
         icon: m.Icon(
           favorite ? m.Icons.star : m.Icons.star_border,
           color: favorite ? m.Theme.of(context).colorScheme.primary : null,
         ),
       ),
     );
+  }
+
+  Future<void> _toggleFavorite(
+    BuildContext context,
+    PrayerLocation place,
+  ) async {
+    final result = await widget.viewModel.toggleFavorite(place);
+    if (!context.mounted) return;
+    final message = switch (result) {
+      FavoriteChangeResult.added => '${place.displayName} — в избранном',
+      FavoriteChangeResult.removed =>
+        '${place.displayName} — удалено из избранного',
+      FavoriteChangeResult.failed => 'Не удалось обновить избранное',
+    };
+    InternalNotification.show(context, message);
   }
 }
 
