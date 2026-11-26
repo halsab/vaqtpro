@@ -74,109 +74,120 @@ class _ProfileEditorState extends State<_ProfileEditor> {
   @override
   Widget build(BuildContext context) {
     final height = MediaQuery.sizeOf(context).height;
-    return SizedBox(
-      height: height * 0.88,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppTokens.space24,
-              AppTokens.space16,
-              AppTokens.space16,
-              AppTokens.space8,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Профиль расчёта',
-                    style: m.Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                m.IconButton(
-                  tooltip: 'Закрыть',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const m.Icon(m.Icons.close),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTokens.space16,
+    return SafeArea(
+      top: false,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: height * 0.88),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppTokens.space24,
+                AppTokens.space16,
+                AppTokens.space16,
+                AppTokens.space8,
               ),
-              children: [
-                _dropdown<CalculationMethod>(
-                  label: 'Метод расчёта',
-                  value: _method,
-                  items: CalculationMethod.values
-                      .where((method) => method != CalculationMethod.other)
-                      .map(
-                        (method) => m.DropdownMenuItem(
-                          value: method,
-                          child: Text(calculationMethodLabel(method)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _method = value);
-                  },
-                ),
-                const SizedBox(height: AppTokens.space16),
-                _dropdown<Madhab>(
-                  label: 'Правило расчёта Асра',
-                  value: _madhab,
-                  items: Madhab.values
-                      .map(
-                        (value) => m.DropdownMenuItem(
-                          value: value,
-                          child: Text(madhabLabel(value)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) setState(() => _madhab = value);
-                  },
-                ),
-                const SizedBox(height: AppTokens.space16),
-                _dropdown<HighLatitudeRule>(
-                  label: 'Правило для высоких широт',
-                  value: _highLatitudeRule,
-                  items: HighLatitudeRule.values
-                      .map(
-                        (value) => m.DropdownMenuItem(
-                          value: value,
-                          child: Text(highLatitudeRuleLabel(value)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _highLatitudeRule = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppTokens.space16),
-            child: SizedBox(
-              width: double.infinity,
-              child: m.FilledButton(
-                onPressed: () => Navigator.of(context).pop(
-                  CalculationProfile(
-                    method: _method,
-                    madhab: _madhab,
-                    highLatitudeRule: _highLatitudeRule,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Профиль расчёта',
+                      style: m.Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
-                ),
-                child: const Text('Сохранить'),
+                  m.IconButton(
+                    tooltip: 'Закрыть',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const m.Icon(m.Icons.close),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+            Flexible(
+              fit: FlexFit.loose,
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppTokens.space16,
+                ),
+                children: [
+                  _dropdown<CalculationMethod>(
+                    label: 'Метод расчёта',
+                    value: _method,
+                    items: CalculationMethod.values
+                        .where((method) => method != CalculationMethod.other)
+                        .map(
+                          (method) => m.DropdownMenuItem(
+                            value: method,
+                            child: Text(calculationMethodLabel(method)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) setState(() => _method = value);
+                    },
+                  ),
+                  const SizedBox(height: AppTokens.space16),
+                  _dropdown<Madhab>(
+                    label: 'Правило расчёта Асра',
+                    value: _madhab,
+                    items: Madhab.values
+                        .map(
+                          (value) => m.DropdownMenuItem(
+                            value: value,
+                            child: Text(madhabLabel(value)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) setState(() => _madhab = value);
+                    },
+                  ),
+                  const SizedBox(height: AppTokens.space16),
+                  _dropdown<HighLatitudeRule>(
+                    label: 'Правило для высоких широт',
+                    value: _highLatitudeRule,
+                    items: HighLatitudeRule.values
+                        .map(
+                          (value) => m.DropdownMenuItem(
+                            value: value,
+                            child: Text(highLatitudeRuleLabel(value)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() => _highLatitudeRule = value);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppTokens.space16,
+                AppTokens.space16,
+                AppTokens.space16,
+                AppTokens.space16,
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: m.FilledButton(
+                  onPressed: () => Navigator.of(context).pop(
+                    CalculationProfile(
+                      method: _method,
+                      madhab: _madhab,
+                      highLatitudeRule: _highLatitudeRule,
+                    ),
+                  ),
+                  child: const Text('Сохранить'),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

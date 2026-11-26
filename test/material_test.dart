@@ -150,7 +150,7 @@ void main() {
     await tester.pumpWidget(
       AppRoot(
         title: 'Harness',
-        home: const AppIconButton(
+        home: const AppActionButton(
           tooltip: 'Определить местоположение',
           icon: m.Icon(m.Icons.my_location),
           onPressed: null,

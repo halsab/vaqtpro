@@ -64,46 +64,80 @@ class AppButton extends StatelessWidget {
   }
 }
 
-class AppIconButton extends StatelessWidget {
-  const AppIconButton({
+/// A single action style for icon-only, title-only, and combined actions.
+class AppActionButton extends StatelessWidget {
+  const AppActionButton({
     super.key,
-    required this.tooltip,
-    required this.icon,
+    this.label,
+    this.icon,
+    this.detail,
     required this.onPressed,
+    this.tooltip,
     this.isLoading = false,
-  });
+  }) : assert(label != null || icon != null);
 
-  final String tooltip;
-  final Widget icon;
+  final String? label;
+  final Widget? icon;
+  final String? detail;
   final VoidCallback? onPressed;
+  final String? tooltip;
   final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     final colors = m.Theme.of(context).colorScheme;
-    return m.IconButton.filled(
-      tooltip: tooltip,
+    final child = isLoading
+        ? SizedBox(
+            width: 24,
+            height: 24,
+            child: m.CircularProgressIndicator(
+              color: colors.onPrimary,
+              strokeWidth: 2,
+            ),
+          )
+        : icon;
+    if (label == null) {
+      return m.IconButton.filled(
+        tooltip: tooltip,
+        onPressed: isLoading ? null : onPressed,
+        style: m.IconButton.styleFrom(
+          backgroundColor: colors.primary,
+          foregroundColor: colors.onPrimary,
+          disabledBackgroundColor: colors.primary,
+          disabledForegroundColor: colors.onPrimary,
+          minimumSize: const Size(48, 48),
+          fixedSize: const Size(48, 48),
+          shape: const m.CircleBorder(),
+        ),
+        icon: child!,
+      );
+    }
+    return m.FilledButton(
       onPressed: isLoading ? null : onPressed,
-      style: m.IconButton.styleFrom(
-        backgroundColor: colors.primary,
-        foregroundColor: colors.onPrimary,
-        disabledBackgroundColor: colors.primary,
-        disabledForegroundColor: colors.onPrimary,
-        minimumSize: const Size(48, 48),
-        fixedSize: const Size(48, 48),
-        iconSize: 24,
-        shape: const m.CircleBorder(),
-      ),
-      icon: isLoading
-          ? SizedBox(
-              width: 24,
-              height: 24,
-              child: m.CircularProgressIndicator(
-                color: colors.onPrimary,
-                strokeWidth: 2,
-              ),
-            )
-          : icon,
+      child: icon == null
+          ? Text(label!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                child!,
+                const SizedBox(width: AppTokens.space8),
+                Flexible(
+                  child: Text(
+                    label!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(width: AppTokens.space8),
+                  Text(
+                    detail!,
+                    style: m.Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(color: colors.onPrimary),
+                  ),
+                ],
+              ],
+            ),
     );
   }
 }
