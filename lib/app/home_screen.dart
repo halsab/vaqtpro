@@ -68,15 +68,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         titleContent: selected == null
             ? _defaultTitle(context)
             : _locationTitle(context, selected),
-        floatingActionButton: m.FloatingActionButton(
+        floatingActionButton: AppActionButton(
           tooltip: 'Настройки',
+          icon: const m.Icon(m.Icons.settings),
           onPressed: () => Navigator.of(context).push(
             m.MaterialPageRoute<void>(
               builder: (_) =>
                   SettingsScreen(viewModel: calculationProfileViewModel),
             ),
           ),
-          child: const m.Icon(m.Icons.settings),
         ),
         child: _buildBody(context),
       );
@@ -108,28 +108,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _locationTitle(BuildContext context, PrayerLocation location) {
     final offset = viewModel.timezoneDifferenceLabel();
-    return m.FilledButton.tonal(
+    return AppActionButton(
       onPressed: _openLocationPicker,
-      style: m.FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: AppTokens.space8),
-        minimumSize: const Size(48, 48),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              location.displayName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (offset != null) ...[
-            const SizedBox(width: AppTokens.space8),
-            Text(offset, style: m.Theme.of(context).textTheme.labelMedium),
-          ],
-        ],
-      ),
+      label: offset == null
+          ? location.displayName
+          : '${location.displayName} · $offset',
+      icon: const m.Icon(m.Icons.location_on),
     );
   }
 
@@ -155,14 +139,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _unknownLocationBody(BuildContext context) {
     final manualPrimary = viewModel.manualSelectionIsPrimary;
-    final manualButton = AppButton(
+    final manualButton = AppActionButton(
       label: 'Выбрать вручную',
-      primary: manualPrimary,
       onPressed: _openLocationPicker,
     );
-    final detectButton = AppButton(
+    final detectButton = AppActionButton(
       label: 'Определить местоположение',
-      primary: !manualPrimary,
       onPressed: viewModel.isResolvingLocation
           ? null
           : () => unawaited(_determineLocation()),
@@ -398,7 +380,7 @@ class _LocationPickerSheetState extends State<_LocationPickerSheet> {
                       ),
                       ListenableBuilder(
                         listenable: viewModel,
-                        builder: (context, _) => AppIconButton(
+                        builder: (context, _) => AppActionButton(
                           tooltip: 'Определить местоположение',
                           icon: const m.Icon(m.Icons.my_location),
                           isLoading: viewModel.isResolvingLocation,
