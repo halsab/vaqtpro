@@ -98,7 +98,11 @@ def validate(filename, profile):
     ensure(not any(effect == "allow" for _, _, effect in advisor_rules), "advisor must not override restrictions")
     ensure(all(name == "advisor" or agent.get("model", "").startswith(LUNA + "#")
                for name, agent in agents.items()), "only advisor may route outside Luna in supplied profile")
-    ensure("OPEN" in agents["reviewer"].get("description", ""), "reviewer must report incomplete coverage as OPEN")
+    reviewer_description = agents["reviewer"].get("description", "")
+    ensure("VERDICT: BLOCKED" in reviewer_description,
+           "reviewer must report incomplete coverage as VERDICT: BLOCKED")
+    for criterion in ("violated invariant", "expected/actual behavior", "concrete evidence"):
+        ensure(criterion in reviewer_description, f"reviewer missing evidence criterion: {criterion}")
 
     global_rules = data.get("permissions")
     build_rules = agents["build"].get("permissions")

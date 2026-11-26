@@ -23,7 +23,9 @@ choice; document genuine architectural exceptions rather than bypass checks.
   patterns; no feature dependencies.
 - Tests mirror meaningful logic. Inject fakes at repository/service boundaries.
   Preserve real persistence tests; every new material write operation considers
-  rejected-write and reload behavior before the first review.
+  rejected-write and reload behavior before the first review. Follow the
+  state and repository boundary guidance in BEHAVIOR.md for material changes;
+  use the simplest representation that enforces the actual invariants.
 - No global service locator, blanket interfaces, code generation, new state
   manager or router just to satisfy the folder tree. Use Navigator by default,
   go_router when actual deep links/nested routes warrant it.

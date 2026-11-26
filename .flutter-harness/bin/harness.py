@@ -17,6 +17,10 @@ import sys
 import tempfile
 import time
 
+# Installed modules must not create untracked artifacts or alter the candidate.
+sys.dont_write_bytecode = True
+import reporter
+
 HERE = Path(__file__).resolve().parent
 PNG = b"\x89PNG\r\n\x1a\n"
 
@@ -247,20 +251,21 @@ def begin(root, c, name):
     current = text(git(root, "symbolic-ref", "--short", "HEAD"))
     task_path = work(root)/"task.json"
     base_head = text(git(root,"rev-parse","origin/"+base))
-    if current == name and task_path.is_file():
-        task = read_json(task_path)
+    task = read_json(task_path) if task_path.is_file() else {}
+    if current == name and task:
         if all(task.get(k)==v for k,v in {"branch":name,"base_head":base_head,"revision":c["revision"]}.items()):
             output(status="PASS",branch=name,base=base,reused=True)
             return
     if current != name:
         git(root, "switch", "-c", name, "origin/" + base)
+    if current != name or task.get("branch") != name:
         for filename in ("check.json","delivery.json","delivery-result.json","delivery-state.json","runtime.json","visual-plan.json","visual-preflight.json","runtime-selection.json","sessions.json","baseline.json","check-attempt.json","e2e-android.json","e2e-ios.json","e2e-web.json"):
             (work(root)/filename).unlink(missing_ok=True)
     require(text(git(root, "merge-base", "HEAD", "origin/" + base)) ==
             text(git(root, "rev-parse", "origin/" + base)),
             "Feature branch does not contain current integration base")
     installed_revision(root,c)
-    atomic_json(task_path,{"branch":name,"base_head":base_head,"revision":c["revision"],"baseline_digest":fingerprint(root)})
+    atomic_json(task_path,{"branch":name,"base_head":base_head,"revision":c["revision"],"baseline_digest":fingerprint(root),"started_at":int(time.time()*1000)})
     event(root, "begin", branch=name, base=base)
     output(status="PASS", branch=name, base=base)
 
@@ -562,6 +567,8 @@ def deliver(root, c):
         if state:
             if isinstance(exc, DeliveryBlocked):
                 failure = exc
+                if failure.stage is None:
+                    failure.stage = state["stage"]
             elif isinstance(exc, Blocked) and "\n" not in str(exc) and "exit=" not in str(exc):
                 failure = DeliveryBlocked("DELIVERY_INVARIANT", str(exc)[:240])
             else:
@@ -1170,7 +1177,7 @@ def diagnostics(root, sessions, *, local_only=False):
     """Always retain local evidence; usage export is best effort."""
     directory = work(root)
     errors = []
-    data = {"harness":None,"usage":None,"artifacts":{}}
+    data = {"harness":None,"usage":None,"usage_scope":"session-cumulative","artifacts":{}}
     try:
         data["harness"]=installed_revision(root,config(root))
     except (OSError,ValueError,KeyError,Blocked,subprocess.TimeoutExpired) as exc:
@@ -1195,9 +1202,9 @@ def diagnostics(root, sessions, *, local_only=False):
         else:
             events=events[-100:]
     else:
-        start=next((i for i,x in enumerate(events) if x.get("stage")=="task-start" and x.get("session") in sessions),None)
+        start=next((i for i in range(len(events)-1,-1,-1) if events[i].get("stage")=="task-start" and events[i].get("session") in sessions),None)
         if start is not None:
-            end=next((i for i in range(start+1,len(events)) if events[i].get("stage")=="task-start" and events[i].get("session") not in sessions),len(events))
+            end=next((i for i in range(start+1,len(events)) if events[i].get("stage")=="task-start"),len(events))
             events=events[start:end]
         else:
             events=events[-100:]
@@ -1258,6 +1265,8 @@ def main():
     p.add_argument("--expect")
     p = sub.add_parser("begin")
     p.add_argument("branch")
+    p = sub.add_parser("lesson", help="Record a confirmed reusable Harness failure, never app details")
+    p.add_argument("code", choices=sorted(reporter.SEMANTIC_CODES))
     for cmd in ("check","ci","deliver","verify","completion","status","fingerprint","stop-preview","adopt"):
         sub.add_parser(cmd)
     p = sub.add_parser("capture-plan")
@@ -1322,7 +1331,11 @@ def main():
         if a.command == "doctor":
             doctor(root, c, a.operation, a.only)
         elif a.command == "begin":
+            reporter.retry(root)
             begin(root, c, a.branch)
+        elif a.command == "lesson":
+            installed_revision(root,c)
+            output(status=reporter.report(root,c.get("revision"),a.code))
         elif a.command == "check":
             check(root, c)
         elif a.command == "ci":
@@ -1383,6 +1396,8 @@ def main():
                       reason=str(exc)[:240] if isinstance(exc, Blocked) and "\n" not in str(exc) and "exit=" not in str(exc) else "See local command log/terminal")
             except OSError:
                 pass
+        if a.command == "deliver" and isinstance(exc, DeliveryBlocked):
+            reporter.report(root, locals().get("c", {}).get("revision"), exc.code, automatic=True, stage=exc.stage)
         if a.command == "completion" and isinstance(exc, DeliveryBlocked):
             output(status="BLOCKED", stage=exc.stage, error=exc.details())
         if a.command == "deliver" and isinstance(exc, DeliveryBlocked) and isinstance(exc.__cause__, Blocked):

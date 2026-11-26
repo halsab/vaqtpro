@@ -95,6 +95,14 @@ A test expecting All to become a flat list on A–Z would violate this contract,
 even if the code and test agree. Other products may legitimately link grouping
 to order; make that relationship an explicit product decision.
 
+## Make invalid states difficult to express
+
+For material stateful behavior, distinguish mutually exclusive phases from independent facts. Use an enum or a sealed Dart hierarchy with exhaustive switches when variants carry different data; keep simple independent booleans when they are genuinely independent. For example, initial loading, loaded data and failed initial load can be exclusive, while a refresh or save may coexist with loaded data. Do not add a generic state-machine framework or rewrite unrelated working code.
+
+Make repository boundaries explicit: absent records, successful empty results, invalid/corrupt persisted data and failed reads/writes are not interchangeable. Only the documented absence case may become an empty result. Preserve saved records and recoverable input on failure; do not silently reset or overwrite unreadable data. Test the concrete failure with seeded storage and verify the persisted result after reload. Test consequential transitions and overlapping operations where the contract allows them, not just independent happy paths.
+
+For a bug, demonstrate the original failing scenario (or a precise static proof if execution is unavailable), fix the root cause with the smallest suitable change, then verify the original outcome. Add a focused regression test for material executable behavior. Prefer durable guarantees in an existing type, API or test over a new instruction; don't add global checks for app-specific rules.
+
 ## Acceptance
 
 Compare original request, contract, actual behavior and evidence. A required

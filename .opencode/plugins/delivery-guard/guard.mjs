@@ -77,7 +77,9 @@ export function recovery(state, result, quality) {
   if (state.attempts >= 2 || (state.attempts > 0 && state.lastRecovery === fingerprint)) {
     return { stop: true, reason, fingerprint };
   }
-  const step = quality.phase === "check"
+  const step = quality.phase === "begin"
+    ? "Start the new task with canonical begin on a fresh feature branch from the current integration base. Preserve previous delivered work; do not reuse its acceptance evidence."
+    : quality.phase === "check"
     ? "Diagnose the earliest failed or missing required check. Inspect its actual error, make a focused fix, run the affected check then standard once. Do not ask for push approval before checks pass."
     : quality.phase === "manifest"
       ? "Prepare valid delivery manifest with CLI prepare-delivery; preserve risk flags and use explicit --e2e only for required platforms. Reuse current checks and evidence."

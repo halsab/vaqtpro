@@ -3,7 +3,8 @@ import { reviewVerdict } from "./quality.mjs";
 // Bound actual child dispatches, not model tokens. Use OpenCode session
 // outcome as execution evidence; a worker's text is not completion.
 export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareReview, record = async()=>{}) {
-  const key = id => "resources/" + id;
+  const key = (id,task) => "resources/" + id + "/" + task.id;
+  const currentTask = id => ctx.storage.get(taskKey(id));
   const queues = new Map();
   async function locked(id, fn) {
     const prior = queues.get(id) || Promise.resolve();
@@ -12,8 +13,9 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
     try { return await next; }
     finally { if (queues.get(id) === next) queues.delete(id); }
   }
-  async function read(id) {
-    return (await ctx.storage.get(key(id))) || { children: [], pending: [] };
+  async function read(id,task) {
+    task ||= await currentTask(id);
+    return (task?.id && await ctx.storage.get(key(id,task))) || { children: [], pending: [] };
   }
   async function running(id, state) {
     const active = [];
@@ -68,12 +70,13 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
     const id = event.sessionID;
     const session = await ctx.session.get({ sessionID:id });
     if (session.parentID) throw Error("Harness: only the task parent may delegate.");
-    const task = await ctx.storage.get(taskKey(id));
-    if (!task?.active) throw Error("No active root task for delegation");
+
     const explicitSol = typeof event.input?.model === "string" && /^openai\/gpt-6\.2-sol(?:#|$)/.test(event.input.model);
     if (explicitSol && role !== "advisor") throw Error("Harness: Sol is reserved for the focused advisor.");
     await locked(id, async () => {
-      const state = await read(id);
+      const task = await currentTask(id);
+      if (!task?.active || !task.id) throw Error("No active root task for delegation");
+      const state = await read(id,task);
       const active = await running(id,state);
       const pending = state.pending || [];
       if (!["reviewer","architect","advisor"].includes(role)) throw Error("Harness: one implementation agent; only read-only consultations allowed.");
@@ -105,14 +108,16 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
       }
       if (role === "advisor") event.input = {...event.input, model:"openai/gpt-6.2-sol#medium"};
       state.pending = [...pending,{call:event.id,role}];
-      await ctx.storage.set(key(id),state);
+      await ctx.storage.set(key(id,task),state);
     });
   });
   await ctx.tool.hook("execute.after", async event => {
     if (event.tool !== "subagent") return;
     const id = event.sessionID;
     await locked(id, async()=>{
-      const state = await read(id);
+      const task=await currentTask(id);
+      if (!task?.active || !task.id) return;
+      const state = await read(id,task);
       const pending = (state.pending || []).find(x=>x.call===event.id);
       if (!pending) return;
       const childID = event.result?.output?.sessionID || event.result?.metadata?.sessionID;
@@ -123,13 +128,13 @@ export async function registerResourceGuard(ctx, taskKey, reviewInputs, prepareR
       if (typeof childID === "string" && childID && !(state.children || []).some(x=>x.id===childID)) {
         state.children = [...(state.children || []),{id:childID,role:pending.role}];
       }
-      await ctx.storage.set(key(id),state);
+      await ctx.storage.set(key(id,task),state);
       if (pending.role==="reviewer") await record(id,"review-returned",{call:event.id,child:childID || null,status:event.status});
     });
   });
   return {
     status, reviewAvailability,
-    sessions: async id => [id,...(await read(id)).children.map(x=>x.id)],
-    clear: id => locked(id, () => ctx.storage.remove(key(id)))
+    sessions: async (id,task) => [id,...(await read(id,task)).children.map(x=>x.id)],
+    clear: (id,task) => locked(id, async()=>{task ||= await currentTask(id);if(task?.id)await ctx.storage.remove(key(id,task));})
   };
 }
