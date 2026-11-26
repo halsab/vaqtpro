@@ -1,0 +1,12 @@
+appId: com.tatar.vaqtpro
+---
+- clearState
+- launchApp
+- tapOn: "Выбрать вручную"
+- inputText: "Казань"
+- hideKeyboard
+- tapOn:
+    text: "Казань"
+    index: 1
+- assertVisible: "Казань"
+- assertNotVisible: "Выбрать местоположение"
