@@ -12,6 +12,7 @@ import '../features/location/repositories/offline_place_catalog_repository.dart'
 import '../features/location/services/geolocation_service.dart';
 import '../features/location/services/geonames_service.dart';
 import '../features/location/view_models/location_view_model.dart';
+import '../features/prayer_times/view_models/calculation_profile_view_model.dart';
 
 class App extends StatelessWidget {
   App({super.key})
@@ -32,9 +33,13 @@ class App extends StatelessWidget {
             ),
           ),
         ),
+      ),
+      _calculationProfileViewModel = CalculationProfileViewModel(
+        SharedPreferencesAsync(),
       );
 
   final LocationViewModel _locationViewModel;
+  final CalculationProfileViewModel _calculationProfileViewModel;
 
   @override
   Widget build(BuildContext context) => AppRoot(
@@ -42,6 +47,9 @@ class App extends StatelessWidget {
     locale: Locale('ru'),
     supportedLocales: [Locale('ru')],
     localizationsDelegates: m.GlobalMaterialLocalizations.delegates,
-    home: HomeScreen(viewModel: _locationViewModel),
+    home: HomeScreen(
+      viewModel: _locationViewModel,
+      calculationProfileViewModel: _calculationProfileViewModel,
+    ),
   );
 }

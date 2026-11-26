@@ -12,11 +12,17 @@ import '../features/location/view_models/location_view_model.dart';
 import '../features/prayer_times/widgets/prayer_times_card.dart';
 import '../features/prayer_times/screens/settings_screen.dart';
 import '../features/prayer_times/services/prayer_times_calculator.dart';
+import '../features/prayer_times/view_models/calculation_profile_view_model.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.viewModel});
+  const HomeScreen({
+    super.key,
+    required this.viewModel,
+    this.calculationProfileViewModel,
+  });
 
   final LocationViewModel viewModel;
+  final CalculationProfileViewModel? calculationProfileViewModel;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,12 +31,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   LocationViewModel get viewModel => widget.viewModel;
   final _prayerTimesCalculator = PrayerTimesCalculator();
+  late final CalculationProfileViewModel _profileViewModel =
+      widget.calculationProfileViewModel ?? CalculationProfileViewModel();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(viewModel.initialize());
+    unawaited(_profileViewModel.initialize());
   }
 
   @override
@@ -44,12 +53,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     viewModel.dispose();
+    _profileViewModel.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: viewModel,
+    listenable: Listenable.merge([viewModel, _profileViewModel]),
     builder: (context, _) {
       final selected = viewModel.selected;
       return AppPage(
@@ -63,6 +73,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           onPressed: () => Navigator.of(context).push(
             m.MaterialPageRoute<void>(
               builder: (_) => SettingsScreen(
+                viewModel: _profileViewModel,
+                locationKey: selected?.identityKey,
                 countryCode: selected?.countryCode,
                 regionCode: selected?.regionCode,
               ),
@@ -134,10 +146,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       countryCode: location.countryCode,
       regionCode: location.regionCode,
       timeZoneId: location.timeZoneId,
+      selection: _profileViewModel.selectionFor(location.identityKey),
     );
     return PrayerTimesCard(
       times: schedule?.entries.map((entry) => entry.time).toList(),
       isApproximate: schedule?.isApproximate ?? false,
+      notice: schedule?.notice,
     );
   }
 

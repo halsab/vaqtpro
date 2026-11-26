@@ -83,7 +83,17 @@ class LocationViewModel extends ChangeNotifier {
     storageMessage = null;
     notifyListeners();
     try {
-      _saved = await _repository.load();
+      final restored = await _repository.load();
+      _saved = await _enrichSavedLocations(restored);
+      if (!identical(restored.selected, _saved.selected) ||
+          !_sameLocationReferences(restored.favorites, _saved.favorites) ||
+          !_sameLocationReferences(restored.recents, _saved.recents)) {
+        try {
+          await _repository.save(_saved);
+        } on Object {
+          // Keep the restored selection usable if best-effort migration fails.
+        }
+      }
       if (_saved.selected == null) {
         try {
           final currentPermission = await _geolocation.checkPermission();
@@ -104,6 +114,65 @@ class LocationViewModel extends ChangeNotifier {
       storageMessage = 'Не удалось загрузить сохранённые места.';
     }
     notifyListeners();
+  }
+
+  Future<SavedLocationState> _enrichSavedLocations(
+    SavedLocationState state,
+  ) async {
+    final selected = state.selected == null
+        ? null
+        : await _enrichLocation(state.selected!);
+    final favorites = await Future.wait(state.favorites.map(_enrichLocation));
+    final recents = await Future.wait(state.recents.map(_enrichLocation));
+    return SavedLocationState(
+      selected: selected,
+      favorites: favorites,
+      recents: recents,
+      hasAskedLocationPermission: state.hasAskedLocationPermission,
+    );
+  }
+
+  Future<PrayerLocation> _enrichLocation(PrayerLocation location) async {
+    if (location.geonameId == null ||
+        (location.countryCode != null &&
+            location.regionCode != null &&
+            location.timeZoneId != null)) {
+      return location;
+    }
+    try {
+      final canonical = await _catalog.findByGeoNameId(location.geonameId!);
+      if (canonical == null) return location;
+      return PrayerLocation(
+        geonameId: location.geonameId,
+        name: location.name ?? canonical.name,
+        region: location.region ?? canonical.region,
+        countryCode: location.countryCode ?? canonical.countryCode,
+        regionCode: location.regionCode ?? canonical.regionCode,
+        country: location.country ?? canonical.country,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timeZoneId: location.timeZoneId ?? canonical.timeZoneId,
+        population: location.population == 0
+            ? canonical.population
+            : location.population,
+        alternateNames: location.alternateNames.isEmpty
+            ? canonical.alternateNames
+            : location.alternateNames,
+      );
+    } on Object {
+      return location;
+    }
+  }
+
+  bool _sameLocationReferences(
+    List<PrayerLocation> before,
+    List<PrayerLocation> after,
+  ) {
+    if (before.length != after.length) return false;
+    for (var index = 0; index < before.length; index++) {
+      if (!identical(before[index], after[index])) return false;
+    }
+    return true;
   }
 
   Future<void> refreshPermission() async {

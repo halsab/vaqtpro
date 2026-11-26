@@ -24,6 +24,10 @@ calculation.
   and timezone, not the device's raw coordinates. A coordinate-only selection
   retains its original coordinates and an optional known timezone. Retain the
   GeoNames country and first-level region codes with each place.
+- When restoring an older saved place with a GeoNames ID and missing regional
+  metadata, enrich it from the bundled catalog and persist the result. If its
+  timezone is still unknown, use the device's current offset and label the
+  schedule as approximate.
 - Show the short place name in the app bar. Show the difference from the
   device's current timezone offset only when both offsets are known and differ.
   Tapping the place opens the selection sheet.
@@ -56,24 +60,28 @@ calculation.
   calculated by Adhan Dart, and Dhuhr at the later of local 12:00 or solar noon
   +1 minute rounded up. If the 18° twilight is unavailable for a night, use
   sunset +90 minutes for Isha and sunrise −120 minutes for the following Fajr.
-- Russia follows the Moscow DUM RF calendar parameters: Fajr/Isha 18°/15°,
-  standard Asr, sunrise −5 minutes, Dhuhr +5 minutes, and sunset +5 minutes.
-  For each selected night and prayer independently, if its angle is unreachable,
-  estimate Fajr at 30% of the night before sunrise or Isha at 25% after sunset.
-  Apply this in either hemisphere only on affected nights; do not use a fixed
-  latitude cutoff.
+- Russia uses Fajr/Isha 18°/15°, standard Asr, sunrise −5 minutes, Dhuhr
+  +5 minutes, and sunset +5 minutes. Preserve each astronomical angle whenever
+  it is reachable. Only when 18° Fajr is unreachable, estimate Fajr at 30% of
+  the preceding raw solar night; only when 15° Isha is unreachable, estimate
+  Isha at 25% of the current raw solar night. Apply this in either hemisphere
+  only on affected nights; do not use a fixed latitude cutoff.
 - If sunrise or sunset does not occur, use Adhan Dart's nearest-latitude polar
   resolution and treat the resulting times as approximate. Use solar events
   without regional minute offsets to determine night length.
-- The settings page reports which location-based profile is active. The
-  existing centered seven-row Material 3 prayer card shows calculated times
-  for the selected location; without a selected place it remains uncalculated.
+- Settings offer “По месту”, “Татарстан”, “Россия”, and MWL. A manual choice
+  applies only to that saved place; choosing another place uses that place's
+  saved choice or its automatic profile. Choosing “По месту” clears the
+  override. The Russia label is simply “Россия”.
+- The centered seven-row Material 3 prayer card shows calculated times for the
+  selected location without a scroll container. Without a selected place it
+  remains uncalculated.
 
 ## Layout and acceptance
 
-Keep the existing centered seven-row Material 3 prayer card. With no place,
-center the two location actions and any permission explanation in the available
-body. The app-bar place
+Keep the existing centered seven-row Material 3 prayer card without
+unnecessary scrolling. With no place, center the two location actions and any
+permission explanation in the available body. The app-bar place
 name is a clearly actionable control. The bottom sheet uses a persistent search
 field, favorite stars, and an empty-query quick list; auto-focus search only
 when there are no favorites or recent places. Support keyboard insets, large
@@ -96,5 +104,8 @@ text, narrow widths, and scrollable results.
 - With a selected place, show seven ordered rows of calculated local times.
 - GeoNames `RU.73` selects Tatarstan; other `RU` places select Russia; unknown
   and non-RU countries select MWL.
-- The prayer card and settings page use the same effective profile; changing the
-  selected place recalculates the times without requiring a profile toggle.
+- Settings show the active automatic profile, profile overrides update times
+  immediately, persist across launches for the same place, and do not transfer
+  to a different place. “По месту” clears an override.
+- A previously saved Kazan without `regionCode` is migrated from its GeoNames ID
+  and selects the Tatarstan profile automatically.

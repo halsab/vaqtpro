@@ -26,6 +26,14 @@ class OfflinePlaceCatalogRepository {
 
   Future<void> load() => _loading ??= _readCatalog();
 
+  Future<PrayerLocation?> findByGeoNameId(String geonameId) async {
+    await load();
+    for (final entry in _entries) {
+      if (entry.place.geonameId == geonameId) return entry.place;
+    }
+    return null;
+  }
+
   Future<void> _readCatalog() async {
     final text = await _loadAsset!();
     final data = jsonDecode(text) as Map<String, dynamic>;

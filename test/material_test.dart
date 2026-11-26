@@ -339,6 +339,7 @@ void main() {
 
     const names = ['Фаджр', 'Шурук', 'Истива', 'Зухр', 'Аср', 'Магриб', 'Иша'];
     expect(find.byType(PrayerTimesCard), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsNothing);
     final namePositions = [
       for (final name in names) tester.getTopLeft(find.text(name)).dy,
     ];
