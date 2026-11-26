@@ -30,6 +30,7 @@ class AppPage extends StatelessWidget {
     );
     return m.Scaffold(
       appBar: m.AppBar(
+        centerTitle: false,
         title: titleContent ?? Text(title),
         actions: [?trailing],
       ),
@@ -54,6 +55,50 @@ class AppButton extends StatelessWidget {
     return primary
         ? m.FilledButton(onPressed: onPressed, child: Text(label))
         : m.TextButton(onPressed: onPressed, child: Text(label));
+  }
+}
+
+class AppIconButton extends StatelessWidget {
+  const AppIconButton({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    this.isLoading = false,
+  });
+
+  final String tooltip;
+  final Widget icon;
+  final VoidCallback? onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = m.Theme.of(context).colorScheme;
+    return m.IconButton.filled(
+      tooltip: tooltip,
+      onPressed: isLoading ? null : onPressed,
+      style: m.IconButton.styleFrom(
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
+        disabledBackgroundColor: colors.primary,
+        disabledForegroundColor: colors.onPrimary,
+        minimumSize: const Size(48, 48),
+        fixedSize: const Size(48, 48),
+        iconSize: 24,
+        shape: const m.CircleBorder(),
+      ),
+      icon: isLoading
+          ? SizedBox(
+              width: 24,
+              height: 24,
+              child: m.CircularProgressIndicator(
+                color: colors.onPrimary,
+                strokeWidth: 2,
+              ),
+            )
+          : icon,
+    );
   }
 }
 

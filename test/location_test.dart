@@ -152,6 +152,155 @@ void main() {
     },
   );
 
+  test(
+    'location detection replaces an already saved city after success',
+    () async {
+      final initial = _place('old', 'Старое место');
+      final repository = _MemoryLocationRepository(
+        SavedLocationState(selected: initial),
+      );
+      final viewModel = _viewModel(
+        repository: repository,
+        geolocation: _FakeGeolocation()
+          ..coordinates = const DeviceCoordinates(0.18, 0),
+        catalog: OfflinePlaceCatalogRepository(
+          places: [_place('kazan', 'Казань')],
+        ),
+      );
+      addTearDown(viewModel.dispose);
+      await viewModel.initialize();
+
+      expect(await viewModel.determineLocation(), isTrue);
+      expect(viewModel.selected?.geonameId, 'kazan');
+      expect(repository.state.selected?.geonameId, 'kazan');
+    },
+  );
+
+  test(
+    'location denial preserves the saved city and exposes its reason',
+    () async {
+      final initial = _place('saved', 'Сохранённое место');
+      final viewModel = _viewModel(
+        repository: _MemoryLocationRepository(
+          SavedLocationState(selected: initial),
+        ),
+        geolocation: _FakeGeolocation()..permission = GeoPermissionState.denied,
+      );
+      addTearDown(viewModel.dispose);
+      await viewModel.initialize();
+
+      expect(await viewModel.determineLocation(), isFalse);
+      expect(viewModel.selected?.geonameId, 'saved');
+      expect(viewModel.permissionMessage, contains('Нет доступа'));
+    },
+  );
+
+  test('failed geolocation save preserves the current city', () async {
+    final initial = _place('saved', 'Сохранённое место');
+    final repository = _MemoryLocationRepository(
+      SavedLocationState(selected: initial),
+    );
+    final viewModel = _viewModel(
+      repository: repository,
+      geolocation: _FakeGeolocation()
+        ..coordinates = const DeviceCoordinates(0.18, 0),
+      catalog: OfflinePlaceCatalogRepository(
+        places: [_place('kazan', 'Казань')],
+      ),
+    );
+    addTearDown(viewModel.dispose);
+    await viewModel.initialize();
+    repository.rejectWrites = true;
+
+    expect(await viewModel.determineLocation(), isFalse);
+    expect(viewModel.selected?.geonameId, 'saved');
+    expect(repository.state.selected?.geonameId, 'saved');
+    expect(viewModel.storageMessage, contains('Не удалось сохранить'));
+  });
+
+  test('manual selection wins over a pending geolocation response', () async {
+    final geo = _FakeGeolocation()
+      ..pendingPermission = Completer<GeoPermissionState>();
+    final repository = _MemoryLocationRepository();
+    final viewModel = _viewModel(repository: repository, geolocation: geo);
+    addTearDown(viewModel.dispose);
+    await viewModel.initialize();
+
+    final detection = viewModel.determineLocation();
+    await Future<void>.delayed(Duration.zero);
+    await viewModel.selectLocation(_place('manual', 'Выбранный вручную'));
+    geo.pendingPermission!.complete(GeoPermissionState.granted);
+
+    expect(await detection, isFalse);
+    expect(viewModel.selected?.geonameId, 'manual');
+    expect(repository.state.selected?.geonameId, 'manual');
+  });
+
+  test('permission timeout ends loading and ignores a late response', () async {
+    final geo = _FakeGeolocation()
+      ..pendingPermission = Completer<GeoPermissionState>();
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: geo,
+      locationOperationTimeout: const Duration(milliseconds: 10),
+    );
+    addTearDown(viewModel.dispose);
+    await viewModel.initialize();
+
+    expect(await viewModel.determineLocation(), isFalse);
+    expect(viewModel.isResolvingLocation, isFalse);
+    expect(viewModel.permissionMessage, contains('запрос разрешения'));
+
+    geo.pendingPermission!.complete(GeoPermissionState.granted);
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.selected, isNull);
+    expect(viewModel.isResolvingLocation, isFalse);
+  });
+
+  test(
+    'coordinate timeout ends loading and reports the failing step',
+    () async {
+      final geo = _FakeGeolocation()
+        ..pendingCoordinates = Completer<DeviceCoordinates>();
+      final viewModel = _viewModel(
+        repository: _MemoryLocationRepository(),
+        geolocation: geo,
+        locationOperationTimeout: const Duration(milliseconds: 10),
+      );
+      addTearDown(viewModel.dispose);
+      await viewModel.initialize();
+
+      expect(await viewModel.determineLocation(), isFalse);
+      expect(viewModel.isResolvingLocation, isFalse);
+      expect(viewModel.permissionMessage, contains('получение координат'));
+
+      geo.pendingCoordinates!.complete(const DeviceCoordinates(51.5, -0.12));
+      await Future<void>.delayed(Duration.zero);
+      expect(viewModel.selected, isNull);
+    },
+  );
+
+  test('closing picker cancels its pending location result', () async {
+    final geo = _FakeGeolocation()
+      ..pendingPermission = Completer<GeoPermissionState>();
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: geo,
+    );
+    addTearDown(viewModel.dispose);
+    await viewModel.initialize();
+
+    final detection = viewModel.determineLocation();
+    await Future<void>.delayed(Duration.zero);
+    expect(viewModel.isResolvingLocation, isTrue);
+    viewModel.cancelLocationDetection();
+
+    expect(viewModel.isResolvingLocation, isFalse);
+    geo.pendingPermission!.complete(GeoPermissionState.granted);
+    expect(await detection, isFalse);
+    expect(viewModel.selected, isNull);
+  });
+
   test('failed location write preserves persisted selection, favorites and recents', () async {
     final previousPlatform = SharedPreferencesAsyncPlatform.instance;
     final preferences = _InMemoryPreferences();
@@ -346,6 +495,34 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('selected location button stays left-aligned in the app bar', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(
+        SavedLocationState(selected: _place('551487', 'Казань')),
+      ),
+    );
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: viewModel),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<m.AppBar>(find.byType(m.AppBar)).centerTitle, isFalse);
+    final locationButton = find.ancestor(
+      of: find.text('Казань'),
+      matching: find.byType(m.FilledButton),
+    );
+    expect(locationButton, findsOneWidget);
+    expect(
+      tester.getTopLeft(locationButton).dx,
+      lessThan(tester.getSize(find.byType(m.AppBar)).width / 2),
+    );
+  });
+
   testWidgets(
     'permanent denial promotes manual selection and explains settings',
     (tester) async {
@@ -404,7 +581,7 @@ void main() {
     expect(viewModel.searchResults.single.name, 'Казань');
     expect(find.byType(m.ListTile), findsOneWidget);
 
-    await tester.tap(find.byType(m.IconButton).last);
+    await tester.tap(find.byTooltip('Добавить в избранное'));
     await tester.pumpAndSettle();
     expect(viewModel.favorites.single.name, 'Казань');
     expect(viewModel.selected, isNull);
@@ -414,6 +591,34 @@ void main() {
     expect(viewModel.selected?.geonameId, '551487');
     expect(find.text('Выбрать местоположение'), findsNothing);
     expect(find.text('—'), findsNWidgets(7));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('location denial reason stays visible in the picker', (
+    tester,
+  ) async {
+    final viewModel = _viewModel(
+      repository: _MemoryLocationRepository(),
+      geolocation: _FakeGeolocation()..permission = GeoPermissionState.denied,
+    );
+    await tester.pumpWidget(
+      AppRoot(
+        title: 'Vaqtpro',
+        home: HomeScreen(viewModel: viewModel),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Выбрать вручную'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Определить местоположение'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Нет доступа к геолокации').last,
+      findsOneWidget,
+    );
+    expect(find.byType(m.TextField), findsOneWidget);
+    expect(find.byTooltip('Определить местоположение'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
@@ -434,11 +639,13 @@ LocationViewModel _viewModel({
   GeolocationRepository? geolocation,
   OfflinePlaceCatalogRepository? catalog,
   GeoNamesRepository? geonames,
+  Duration locationOperationTimeout = const Duration(seconds: 35),
 }) => LocationViewModel(
   repository: repository,
   geolocation: geolocation ?? _FakeGeolocation(),
   catalog: catalog ?? OfflinePlaceCatalogRepository(places: const []),
   geonames: geonames ?? _FakeGeoNames(),
+  locationOperationTimeout: locationOperationTimeout,
 );
 
 class _MemoryLocationRepository implements LocationRepository {
@@ -461,6 +668,8 @@ class _FakeGeolocation implements GeolocationRepository {
   GeoPermissionState permission = GeoPermissionState.granted;
   DeviceCoordinates coordinates = const DeviceCoordinates(0.18, 0);
   int requestCount = 0;
+  Completer<GeoPermissionState>? pendingPermission;
+  Completer<DeviceCoordinates>? pendingCoordinates;
 
   @override
   bool get supportsSettingsNavigation => true;
@@ -469,7 +678,8 @@ class _FakeGeolocation implements GeolocationRepository {
   Future<GeoPermissionState> checkPermission() async => permission;
 
   @override
-  Future<DeviceCoordinates> currentCoordinates() async => coordinates;
+  Future<DeviceCoordinates> currentCoordinates() =>
+      pendingCoordinates?.future ?? Future.value(coordinates);
 
   @override
   Future<bool> openApplicationSettings() async => true;
@@ -480,6 +690,7 @@ class _FakeGeolocation implements GeolocationRepository {
   @override
   Future<GeoPermissionState> requestPermission() async {
     requestCount++;
+    if (pendingPermission case final pending?) return pending.future;
     return permission;
   }
 }
