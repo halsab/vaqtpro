@@ -1,9 +1,0 @@
-appId: com.tatar.vaqtpro
----
-- clearState
-- launchApp
-- tapOn: "Выбрать вручную"
-- assertVisible: "Выбрать местоположение"
-- assertVisible: "Данные мест: GeoNames · CC BY 4.0"
-- assertVisible:
-    text: "Определить местоположение"

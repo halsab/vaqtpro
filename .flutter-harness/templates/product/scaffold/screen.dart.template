@@ -1,8 +1,0 @@
-import 'package:flutter/widgets.dart';
-
-class @CLASS@Screen extends StatelessWidget {
-  const @CLASS@Screen({super.key});
-
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}

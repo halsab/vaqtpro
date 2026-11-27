@@ -1,3 +1,0 @@
-# Sequential engineering
-
-One root Luna Medium Build agent, one ordinary branch per task. Define the original outcome and a minimal plan; implement, source-review, verify affected behavior, then deliver. Checkpoint coherent work independently of acceptance. Optional read-only consultation only for a difficult decision. Independent code review for material risk, with targeted follow-up only; final runtime inspection is separate and only when needed. No routine worker agents, repeated screenshots or automatic merge.
